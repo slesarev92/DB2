@@ -1,8 +1,8 @@
 # Расхождения: ТЗ vs Excel-модель (GORJI+)
 
 **Источники:**
-- ТЗ: `ТЗ Цифровой паспорт проекта V3.docx` + `Predikt-k-TZ-V3.xlsx`
-- Эталонная модель: `ПАСПОРТ МОДЕЛЬ GORJI+ 05-09-25.xlsx`, листы: DATA, DASH, VOLUME, NET REVENUE, LOGISTIC COST, OPEX, Profitability
+- ТЗ: `TZ_Digital_Passport_V3.docx` + `Predikt-k-TZ-V3.xlsx`
+- Эталонная модель: `PASSPORT_MODEL_GORJI_2025-09-05.xlsx`, листы: DATA, DASH, VOLUME, NET REVENUE, LOGISTIC COST, OPEX, Profitability
 - Дата верификации: 2026-04-08
 
 **Правило реализации:** при любом расхождении — реализовывать строго по Excel-модели.
