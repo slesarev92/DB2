@@ -1,0 +1,67 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+ENV/
+
+# --- Node / Next.js ---
+node_modules/
+.next/
+.turbo/
+out/
+dist/
+build/
+*.tsbuildinfo
+.npm/
+.pnp.*
+.yarn/
+
+# --- Environment files (secrets) ---
+.env
+.env.*
+!.env.example
+
+# --- IDE / editors ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Docker volumes (local dev) ---
+docker-volumes/
+postgres-data/
+redis-data/
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Temporary export outputs ---
+backend/exports/
+/tmp/
+
+# --- Local SQLite (не для этого проекта, но на всякий случай) ---
+*.sqlite
+*.db
