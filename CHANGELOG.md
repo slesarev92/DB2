@@ -9,6 +9,58 @@
 
 ## [Unreleased]
 
+### Added (задача 3.3 — Frontend: SKU и BOM)
+**Полный CRUD flow для SKU и BOM в карточке проекта:**
+
+- `types/api.ts` расширен типами SKU/ProjectSKU/ProjectSKUDetail/BOMItem
+  + Create/Update варианты. Decimal как `string` (Pydantic v2 → JSON Numeric).
+- `lib/skus.ts` (новый файл) — типизированные обёртки над всеми SKU/PSK/BOM
+  endpoints: listSkus/createSku/listProjectSkus/getProjectSku/addSkuToProject/
+  updateProjectSku/deleteProjectSku/listBomItems/createBomItem/updateBomItem/
+  deleteBomItem.
+- `components/projects/add-sku-dialog.tsx` (новый файл) — модальный диалог
+  с двумя режимами:
+  - **"Из каталога"**: Select из глобального справочника `/api/skus`
+  - **"Создать новый"**: форма brand/name/format/volume_l/package_type
+  После создания SKU автоматически вызывает `addSkuToProject` чтобы
+  пользователь не делал двух кликов.
+- `components/projects/sku-panel.tsx` (новый файл) — список ProjectSKU как
+  кликабельные карточки. Auto-select первого SKU при загрузке если ничего
+  не выбрано (для удобства). Active state через `border-primary ring-1`.
+  Удаление с `window.confirm` (BOM удаляется каскадно через FK ON DELETE
+  CASCADE из задачи 1.3). Кнопка "+ Добавить" → AddSkuDialog.
+- `components/projects/bom-panel.tsx` (новый файл) — основная панель работы
+  с одним ProjectSKU:
+  - **Editor rates**: 3 числовых поля (production_cost_rate, ca_m_rate,
+    marketing_rate) с PATCH on blur — каждое поле сохраняется отдельно
+    при потере фокуса. Простое решение без debounce.
+  - **Таблица BOM** (shadcn Table): ingredient, qty/unit, % loss, price/unit,
+    item cost (вычисляется), кнопка `×` удаления per row.
+  - **Inline форма добавления** (12-column grid): name (4) + qty (2) +
+    loss (2) + price (2) + button (2). HTML5 валидация.
+  - **Live COGS_PER_UNIT preview** в правом верхнем углу — `Σ(qty × price
+    × (1+loss))` по всем BOM items текущего PSK. Пересчитывается на
+    клиенте через `computeCogsPreview()` без round-trip к backend.
+- `components/projects/skus-tab.tsx` (новый файл) — комбинирующий компонент
+  для таба, поднимает selectedPskId state. Layout: 2-column grid (1/3 + 2/3
+  на md+, стек на mobile). Когда нет выбранного SKU справа — placeholder.
+- `app/(app)/projects/[id]/page.tsx` обновлён — таб "SKU и BOM" больше не
+  disabled, использует `<SkusTab projectId={projectId} />`. Табы Каналы и
+  Результаты остаются disabled placeholder для задач 3.4 и Phase 4.
+
+**Shadcn компоненты добавлены:** Dialog, Table.
+
+**Критерий готовности (E2E проверка через curl):**
+- Создать SKU `Gorji / Test 3.3 SKU / 0.5L PET` → 201
+- Привязать к проекту → 201, sku вложен в response
+- Добавить 3 BOM ингредиента (Sugar/Concentrate/Water)
+- GET project-sku detail → `cogs_per_unit_estimated: "12.1800000000000000"`
+- Math: `0.05×80×1.02 + 0.005×1500×1.05 + 0.45×0.5×1.0 = 4.08 + 7.875 + 0.225 = 12.18 ✓`
+- Все frontend маршруты компилируются (200), backend pytest **189/189** зелёные
+
+**Архитектурное замечание:** В этой задаче backend не менялся — API уже был
+готов в задаче 1.3. Фокус только на UI и интеграции.
+
 ### Added (задача 3.2 — Frontend: список и создание проектов)
 **Frontend MVP первый CRUD-flow + backend extensions:**
 
