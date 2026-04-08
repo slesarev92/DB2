@@ -106,7 +106,7 @@ MVP считается готовым когда:
 
 ---
 
-#### Задача 0.2 — Docker Compose (dev)
+#### ✅ Задача 0.2 — Docker Compose (dev)
 
 **Что делаем:** `infra/docker-compose.dev.yml` с сервисами: postgres:16, redis:7, backend (FastAPI), frontend (Next.js), celery-worker.
 
@@ -695,7 +695,7 @@ ref_seasonality    (id, profile_name, month_coefficients jsonb)
 
 ### Фаза 0 — Фундамент
 - [x] 0.1 Инициализация структуры и Git ✅ (commit b10aef8, 2026-04-08)
-- [ ] 0.2 Docker Compose (dev)
+- [x] 0.2 Docker Compose (dev) ✅ (2026-04-08, все 5 сервисов healthy, /health + localhost:3000 зелёные)
 - [ ] 0.3 Схема базы данных
 - [ ] 0.4 Справочные данные (seed)
 

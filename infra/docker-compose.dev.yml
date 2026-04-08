@@ -1,0 +1,110 @@
+# Dev-окружение цифрового паспорта проекта.
+#
+# Поднять:    docker compose -f infra/docker-compose.dev.yml up --build
+# Остановить: docker compose -f infra/docker-compose.dev.yml down
+# Сбросить БД: docker compose -f infra/docker-compose.dev.yml down -v
+#
+# Порты:
+#   postgres → 5432
+#   redis    → 6379
+#   backend  → 8000  (/health)
+#   frontend → 3000
+
+name: dbpassport-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: dbuser
+      POSTGRES_PASSWORD: dbpassword
+      POSTGRES_DB: dbpassport
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbuser -d dbpassport"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../backend:/app
+    environment:
+      DATABASE_URL: postgresql+asyncpg://dbuser:dbpassword@postgres:5432/dbpassport
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      SECRET_KEY: dev-secret-change-in-prod-min-32-chars
+      ENVIRONMENT: development
+      LOG_LEVEL: INFO
+      CORS_ORIGINS: http://localhost:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+
+  celery-worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    volumes:
+      - ../backend:/app
+    environment:
+      DATABASE_URL: postgresql+asyncpg://dbuser:dbpassword@postgres:5432/dbpassport
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      SECRET_KEY: dev-secret-change-in-prod-min-32-chars
+      ENVIRONMENT: development
+      LOG_LEVEL: INFO
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: celery -A app.worker worker --loglevel=info
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NODE_ENV: development
+    depends_on:
+      - backend
+
+volumes:
+  postgres-data:
+  redis-data:

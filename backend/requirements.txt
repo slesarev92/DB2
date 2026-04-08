@@ -1,0 +1,15 @@
+# Python-зависимости backend'а.
+#
+# Минимальный набор для задачи 0.2 (Docker Compose dev environment):
+# FastAPI + Uvicorn + Celery. Остальное добавляется пакетами по мере
+# продвижения по IMPLEMENTATION_PLAN:
+#   - SQLAlchemy, asyncpg, Alembic      → задача 0.3
+#   - python-jose, passlib, bcrypt      → задача 1.1 (JWT auth)
+#   - openpyxl, python-pptx, WeasyPrint → задача 5.x (экспорт)
+#   - pytest, pytest-asyncio, httpx     → первая задача с тестами
+
+fastapi>=0.115.0,<0.116.0
+uvicorn[standard]>=0.32.0,<0.33.0
+pydantic>=2.9.0,<3.0.0
+pydantic-settings>=2.6.0,<3.0.0
+celery[redis]>=5.4.0,<6.0.0
