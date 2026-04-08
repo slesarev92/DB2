@@ -24,6 +24,7 @@ from app.models import (
     PeriodValue,
     PeriodType,
     Project,
+    ProjectFinancialPlan,
     ProjectSKU,
     ProjectSKUChannel,
     Scenario,
@@ -66,6 +67,41 @@ async def _load_period_catalog(
         await session.scalars(select(Period).order_by(Period.period_number))
     ).all()
     return list(rows), {p.id: p for p in rows}
+
+
+async def _load_project_financial_plan(
+    session: AsyncSession,
+    project_id: int,
+    sorted_periods: list[Period],
+) -> tuple[tuple[float, ...], tuple[float, ...]]:
+    """Загружает project-level CAPEX/OPEX из таблицы project_financial_plans.
+
+    Возвращает кортеж (capex_tuple, opex_tuple) длины len(sorted_periods).
+    Если для какого-то period_id записи нет — соответствующий элемент = 0.0.
+    Если в таблице вообще нет записей для проекта — возвращает пустые
+    кортежи (`run_project_pipeline` трактует это как "без project-level
+    оттоков", FCF = OCF).
+    """
+    rows = (
+        await session.scalars(
+            select(ProjectFinancialPlan).where(
+                ProjectFinancialPlan.project_id == project_id
+            )
+        )
+    ).all()
+    if not rows:
+        return (), ()
+
+    by_period: dict[int, ProjectFinancialPlan] = {r.period_id: r for r in rows}
+
+    capex_arr: list[float] = []
+    opex_arr: list[float] = []
+    for period in sorted_periods:
+        plan = by_period.get(period.id)
+        capex_arr.append(float(plan.capex) if plan else 0.0)
+        opex_arr.append(float(plan.opex) if plan else 0.0)
+
+    return tuple(capex_arr), tuple(opex_arr)
 
 
 # ============================================================
@@ -342,15 +378,28 @@ async def calculate_and_save_scenario(
     """Полный расчёт одного сценария + сохранение 3 ScenarioResult'ов.
 
     Алгоритм:
-    1. build_line_inputs из БД
-    2. run_project_pipeline (per-line s01..s09 + aggregate + s10..s12)
-    3. Старые ScenarioResult'ы сценария удаляются (полный пересчёт)
-    4. Создаются 3 новых ScenarioResult — один на скоуп
+    1. build_line_inputs из БД (per-line PipelineInput'ы)
+    2. _load_project_financial_plan (project-level CAPEX/OPEX)
+    3. run_project_pipeline (per-line s01..s09 + aggregate + project-level
+       capex/opex applied + s10..s12)
+    4. Старые ScenarioResult'ы сценария удаляются (полный пересчёт)
+    5. Создаются 3 новых ScenarioResult — один на скоуп
 
     Returns: список из 3 свежих ScenarioResult.
     """
     line_inputs = await build_line_inputs(session, project_id, scenario_id)
-    agg = run_project_pipeline(line_inputs)
+
+    # Project-level CAPEX/OPEX независимы от scenario — общие для всех 3.
+    sorted_periods, _ = await _load_period_catalog(session)
+    project_capex, project_opex = await _load_project_financial_plan(
+        session, project_id, sorted_periods
+    )
+
+    agg = run_project_pipeline(
+        line_inputs,
+        project_capex=project_capex,
+        project_opex=project_opex,
+    )
 
     # Удаляем старые результаты сценария
     from sqlalchemy import delete as sql_delete

@@ -387,6 +387,50 @@ class PeriodValue(Base, TimestampMixin):
     )
 
 
+class ProjectFinancialPlan(Base, TimestampMixin):
+    """Project-level CAPEX и periodic OPEX по периодам.
+
+    Хранит инвестиционные затраты (CAPEX) и дискретные операционные
+    затраты проекта (project_opex — листинги, запускной маркетинг и т.п.,
+    Excel DATA row 26/33) на уровне всего проекта, привязанные к
+    конкретному period_id.
+
+    Эти величины не зависят от ProjectSKU/Channel — это затраты
+    проекта целиком. В оркестраторе (`engine/pipeline.run_project_pipeline`)
+    они применяются на уровне агрегата по линиям, не суммируются с
+    per-line capex/opex.
+
+    Если для какого-то period_id записи нет — capex и opex трактуются
+    как 0. UNIQUE(project_id, period_id) гарантирует не более одной
+    записи на (проект × период).
+    """
+
+    __tablename__ = "project_financial_plans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    period_id: Mapped[int] = mapped_column(
+        ForeignKey("periods.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    capex: Mapped[Decimal] = mapped_column(
+        Numeric(20, 2), nullable=False, default=Decimal("0")
+    )
+    opex: Mapped[Decimal] = mapped_column(
+        Numeric(20, 2), nullable=False, default=Decimal("0")
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id", "period_id",
+            name="uq_project_financial_plans_project_period",
+        ),
+    )
+
+
 class ScenarioResult(Base):
     """Финансовые KPI последнего расчёта сценария на заданном горизонте."""
 

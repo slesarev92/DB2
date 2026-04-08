@@ -33,6 +33,7 @@ from app.models import (
     PeriodValue,
     PeriodType,
     Project,
+    ProjectFinancialPlan,
     ProjectSKU,
     ProjectSKUChannel,
     SKU,
@@ -310,6 +311,181 @@ class TestCalculateScenario:
         assert y10.roi is not None
         assert y10.contribution_margin is not None
         assert y10.go_no_go is not None  # bool, не None
+
+    async def test_no_financial_plan_means_zero_capex(
+        self, db_session: AsyncSession
+    ):
+        """Без записей в project_financial_plans → FCF == OCF (без оттока).
+
+        Это базовое поведение MVP — сейчас тесты не создают plan,
+        и FCF строго равен OCF.
+        """
+        from app.engine.pipeline import run_project_pipeline
+        from app.services.calculation_service import (
+            _load_period_catalog,
+            _load_project_financial_plan,
+            build_line_inputs,
+        )
+
+        project_id, scenario_id, _, _ = await _seed_minimal_project(db_session)
+
+        # Plan пустой → пустые tuples
+        sorted_periods, _ = await _load_period_catalog(db_session)
+        capex, opex = await _load_project_financial_plan(
+            db_session, project_id, sorted_periods
+        )
+        assert capex == ()
+        assert opex == ()
+
+        line_inputs = await build_line_inputs(db_session, project_id, scenario_id)
+        agg = run_project_pipeline(
+            line_inputs, project_capex=capex, project_opex=opex
+        )
+
+        # FCF = OCF в каждом периоде (capex/opex не применены)
+        for t in range(len(agg.free_cash_flow)):
+            assert agg.free_cash_flow[t] == pytest.approx(
+                agg.operating_cash_flow[t]
+            )
+
+    async def test_financial_plan_capex_reduces_fcf(
+        self, db_session: AsyncSession
+    ):
+        """С записью CAPEX в plan → FCF на этот период уменьшается на capex."""
+        from app.engine.pipeline import run_project_pipeline
+        from app.services.calculation_service import (
+            _load_period_catalog,
+            _load_project_financial_plan,
+            build_line_inputs,
+        )
+
+        project_id, scenario_id, _, _ = await _seed_minimal_project(db_session)
+
+        # Создаём plan: 5000₽ capex на period_number=1 (M1)
+        m1 = await db_session.scalar(
+            select(Period).where(Period.period_number == 1)
+        )
+        db_session.add(
+            ProjectFinancialPlan(
+                project_id=project_id,
+                period_id=m1.id,
+                capex=Decimal("5000"),
+                opex=Decimal("0"),
+            )
+        )
+        await db_session.flush()
+
+        # Загрузка plan
+        sorted_periods, _ = await _load_period_catalog(db_session)
+        capex, opex = await _load_project_financial_plan(
+            db_session, project_id, sorted_periods
+        )
+        assert len(capex) == 43
+        assert capex[0] == 5000.0  # M1 = первый в sorted_periods
+        assert all(c == 0.0 for c in capex[1:])
+        assert opex == tuple([0.0] * 43)
+
+        # Сравним FCF с и без plan
+        line_inputs = await build_line_inputs(db_session, project_id, scenario_id)
+
+        agg_with = run_project_pipeline(
+            line_inputs, project_capex=capex, project_opex=opex
+        )
+        agg_without = run_project_pipeline(line_inputs)
+
+        # FCF[0] меньше на 5000 при plan
+        assert agg_with.free_cash_flow[0] == pytest.approx(
+            agg_without.free_cash_flow[0] - 5000.0
+        )
+        # ICF[0] = -5000 при plan, 0 без
+        assert agg_with.investing_cash_flow[0] == pytest.approx(-5000.0)
+        assert agg_without.investing_cash_flow[0] == pytest.approx(0.0)
+
+    async def test_financial_plan_opex_reduces_contribution(
+        self, db_session: AsyncSession
+    ):
+        """С записью OPEX в plan → contribution и OCF на этот период уменьшаются."""
+        from app.engine.pipeline import run_project_pipeline
+        from app.services.calculation_service import (
+            _load_period_catalog,
+            _load_project_financial_plan,
+            build_line_inputs,
+        )
+
+        project_id, scenario_id, _, _ = await _seed_minimal_project(db_session)
+
+        m1 = await db_session.scalar(
+            select(Period).where(Period.period_number == 1)
+        )
+        db_session.add(
+            ProjectFinancialPlan(
+                project_id=project_id,
+                period_id=m1.id,
+                capex=Decimal("0"),
+                opex=Decimal("100"),
+            )
+        )
+        await db_session.flush()
+
+        sorted_periods, _ = await _load_period_catalog(db_session)
+        capex, opex = await _load_project_financial_plan(
+            db_session, project_id, sorted_periods
+        )
+        assert opex[0] == 100.0
+
+        line_inputs = await build_line_inputs(db_session, project_id, scenario_id)
+        agg_with = run_project_pipeline(
+            line_inputs, project_capex=capex, project_opex=opex
+        )
+        agg_without = run_project_pipeline(line_inputs)
+
+        # contribution[0] меньше на 100
+        assert agg_with.contribution[0] == pytest.approx(
+            agg_without.contribution[0] - 100.0
+        )
+        # OCF[0] меньше на 100 (через cm в OCF = cm + ΔWC + tax)
+        assert agg_with.operating_cash_flow[0] == pytest.approx(
+            agg_without.operating_cash_flow[0] - 100.0
+        )
+
+    async def test_load_plan_with_partial_periods(
+        self, db_session: AsyncSession
+    ):
+        """Plan с записями только для части периодов → tuples длины 43,
+        отсутствующие = 0."""
+        from app.services.calculation_service import (
+            _load_period_catalog,
+            _load_project_financial_plan,
+        )
+
+        project_id, _, _, _ = await _seed_minimal_project(db_session)
+
+        # Записи для period_number = 1, 5, 10
+        for pn in [1, 5, 10]:
+            p = await db_session.scalar(
+                select(Period).where(Period.period_number == pn)
+            )
+            db_session.add(
+                ProjectFinancialPlan(
+                    project_id=project_id,
+                    period_id=p.id,
+                    capex=Decimal(str(pn * 1000)),
+                    opex=Decimal("0"),
+                )
+            )
+        await db_session.flush()
+
+        sorted_periods, _ = await _load_period_catalog(db_session)
+        capex, _ = await _load_project_financial_plan(
+            db_session, project_id, sorted_periods
+        )
+
+        assert len(capex) == 43
+        assert capex[0] == 1000.0   # period_number=1
+        assert capex[4] == 5000.0   # period_number=5 → index 4
+        assert capex[9] == 10000.0  # period_number=10 → index 9
+        # Остальные нули
+        assert sum(1 for c in capex if c != 0.0) == 3
 
     async def test_recalculate_replaces_old_results(
         self, db_session: AsyncSession
