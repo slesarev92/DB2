@@ -250,6 +250,93 @@ LOGISTICS_COST = LOGISTICS_COST_PER_KG × (VOLUME_LITERS × PRODUCT_DENSITY)
 
 ---
 
+### D-13 — Launch lag per SKU: Excel хранит ND/offtake относительно launch month каждого SKU, не относительно project start
+
+**Статус:** ✅ Подтверждено через openpyxl анализ NET REVENUE / DASH в
+2026-04-08, фикс реализован в коммите *(этот коммит)*.
+
+**Контекст:** Discovery V1 для SKU_1/HM показал что наш pipeline на
+**per-unit** уровне совпадает с DASH (GP/unit = 14.43 ₽ M1-M3, 13.74
+₽ M4-M6 после инфляции), но при попытке пройти полный recalculate
+обнаружилось что **total volume / NR / FCF** будут завышены. Причина
+ниже.
+
+**Excel поведение:**
+- DASH SKU_1 row 25 col D = ND 0.0384 (это **первый месяц жизни SKU**,
+  не M1 проекта). Cols D..AT — 43 значения ND ramp **относительно
+  launch month** SKU.
+- DASH row 8/9 каждого SKU блока = launch_year + launch_month
+  (например, SKU_1: launch Y2 Feb = M14 проекта).
+- NET REVENUE/RETAIL/VOLUME/etc применяют absolute lag — обнуляют
+  периоды M1..M(launch_month−1) и сдвигают DASH cols в правильные
+  absolute periods.
+
+**Было в нашей модели до фикса:**
+- `ProjectSKU` не имел launch_year/launch_month полей
+- `_build_line_input` принимал nd[t]/offtake[t] напрямую из PeriodValue
+  без обнуления
+- Все SKU считались активными с M1 проекта
+- Если SKU реально launches в Y2 Feb, наш pipeline считал бы выручку
+  за M1..M13 на основании ramp values из DASH cols D-O, тогда как
+  Excel в эти периоды имеет ноль.
+
+**Pipeline-уровневое последствие:** для multi-SKU GORJI reference
+(SKU 1-8, launches в Y2 Feb..Y3+), наши NPV/IRR/ROI получились бы
+**завышенными** на сумму "выручки до launch периодов".
+
+**Решение:**
+
+1. **Schema:** добавлены два поля в `project_skus`:
+   - `launch_year: int 1..10` (server_default 1)
+   - `launch_month: int 1..12` (server_default 1)
+   - Миграция `a5aeae3eb4bb_add_project_sku_launch_year_month`
+   - Default Y1 Jan = "с самого начала проекта", existing rows не
+     меняют поведение.
+
+2. **Service layer (`calculation_service._build_line_input`):**
+   ```python
+   if psk.launch_year > 3:
+       launch_period_number = 36 + (psk.launch_year - 3)
+   else:
+       launch_period_number = (psk.launch_year - 1) * 12 + psk.launch_month
+   for i, period in enumerate(sorted_periods):
+       if period.period_number < launch_period_number:
+           nd_arr[i] = 0.0
+           offtake_arr[i] = 0.0
+   ```
+   Для launch_year ≥ 4 (yearly periods Y4..Y10) launch_month
+   игнорируется — yearly periods не имеют месяцев.
+
+3. **Pipeline:** **не изменён**. Pure functions s01..s12 не знают про
+   launch lag. Обнуление nd/offtake в service layer достаточно: при
+   `volume = active × offtake × seasonality`, если `offtake[t] = 0`
+   → `volume[t] = 0` → весь downstream автоматически = 0 на этих
+   периодах. Чистое разделение pipeline ↔ business logic.
+
+4. **API/UI:** ProjectSKURead/Update схемы расширены, форма в табе
+   "SKU и BOM" `bom-panel.tsx` получила 2 input'а (launch_year/month)
+   рядом с rates editor.
+
+**Тесты** (3 новых в test_calculation.py):
+- `test_launch_lag_zeros_periods_before_launch` — Y2/Feb (M14):
+  ND/offtake[0..12] = 0, [13]+ = original predict ramp values
+- `test_launch_lag_default_y1m1_no_offset` — Y1/Jan: нет обнуления,
+  M1 = original (backward-compat для существующих проектов)
+- `test_launch_lag_yearly_y4` — Y4 (period_number=37): M1..M36 = 0,
+  Y4 = первый non-zero
+
+**Обратная совместимость:** Все существующие 204 теста продолжают
+проходить. Existing проекты в БД получают launch_year=1 launch_month=1
+через server_default → behavior не меняется.
+
+**Что это означает для GORJI reference (4.2.1):**
+Импорт-скрипт сможет читать DASH row 8/9 launch_year/launch_month
+для каждого SKU блока и сохранять в `ProjectSKU.launch_year/month`.
+Discovery V2 (полный 8 SKU × 6 каналов) даст реалистичные NPV/IRR/ROI
+которые можно сравнить с эталоном из DATA sheet.
+
+---
+
 ### D-12 — Excel typo: NPV/ROI/IRR scope "Y1-Y5" формула включает 6 столбцов
 
 **Статус:** ✅ Подтверждено повторной проверкой через openpyxl 2026-04-08

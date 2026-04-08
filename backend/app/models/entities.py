@@ -234,6 +234,21 @@ class ProjectSKU(Base, TimestampMixin):
     )
     include: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+    # Launch lag (D-13): SKU может быть запущен не в M1 проекта, а позже.
+    # Excel хранит ND/offtake в DASH относительно launch month каждого SKU,
+    # а в NET REVENUE/etc применяет absolute lag (нули до launch). Наша
+    # модель: launch_year (1..10) + launch_month (1..12) — относительно
+    # project.start_date. По умолчанию SKU активен с M1 (Y1 Jan).
+    # Сервис `_build_line_input` обнуляет nd[t] и offtake[t] для periods
+    # до launch, downstream pipeline автоматически даёт ноль на этих
+    # периодах.
+    launch_year: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="1", default=1
+    )
+    launch_month: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="1", default=1
+    )
+
     # Rate-параметры SKU как % от выручки (D-04 в TZ_VS_EXCEL_DISCREPANCIES).
     production_cost_rate: Mapped[Decimal] = mapped_column(
         Numeric(8, 6), nullable=False, default=Decimal("0")

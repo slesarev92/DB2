@@ -221,6 +221,65 @@ class TestBuildLineInputs:
         with pytest.raises(ProjectNotFoundError):
             await build_line_inputs(db_session, 999999, 1)
 
+    async def test_launch_lag_zeros_periods_before_launch(
+        self, db_session: AsyncSession
+    ):
+        """Launch year=2 month=2 → ND/offtake[0..12]=0, [13]+=non-zero.
+
+        Проверяет launch lag (D-13): SKU launches в Y2 Feb = M14 проекта.
+        Periods 1..13 (Y1 Jan..Y2 Jan) должны быть обнулены, period 14
+        (Y2 Feb) и далее — оригинальные значения из PeriodValue.
+        """
+        from app.models import ProjectSKU
+
+        project_id, scenario_id, psk_id, _ = await _seed_minimal_project(db_session)
+
+        psk = await db_session.get(ProjectSKU, psk_id)
+        psk.launch_year = 2
+        psk.launch_month = 2
+        await db_session.flush()
+
+        inputs = await build_line_inputs(db_session, project_id, scenario_id)
+        inp = inputs[0]
+
+        # Periods 1..13 (indices 0..12) обнулены
+        for i in range(13):
+            assert inp.nd[i] == 0.0, f"Period {i + 1} ND should be 0"
+            assert inp.offtake[i] == 0.0, f"Period {i + 1} offtake should be 0"
+
+        # Period 14 (index 13) — Y2 Feb — non-zero (predict ramp value)
+        assert inp.nd[13] > 0.0
+        assert inp.offtake[13] > 0.0
+
+    async def test_launch_lag_default_y1m1_no_offset(
+        self, db_session: AsyncSession
+    ):
+        """По умолчанию launch_year=1 month=1 → period 1 не обнулён."""
+        project_id, scenario_id, _, _ = await _seed_minimal_project(db_session)
+        inputs = await build_line_inputs(db_session, project_id, scenario_id)
+        inp = inputs[0]
+        assert inp.nd[0] > 0.0
+        assert inp.offtake[0] > 0.0
+
+    async def test_launch_lag_yearly_y4(
+        self, db_session: AsyncSession
+    ):
+        """launch_year=4 → period_number < 37 обнулён, Y4 (37) активен."""
+        from app.models import ProjectSKU
+
+        project_id, scenario_id, psk_id, _ = await _seed_minimal_project(db_session)
+        psk = await db_session.get(ProjectSKU, psk_id)
+        psk.launch_year = 4
+        psk.launch_month = 1
+        await db_session.flush()
+
+        inputs = await build_line_inputs(db_session, project_id, scenario_id)
+        inp = inputs[0]
+        for i in range(36):
+            assert inp.nd[i] == 0.0
+            assert inp.offtake[i] == 0.0
+        assert inp.nd[36] > 0.0  # Y4 = period_number 37 = index 36
+
     async def test_no_lines_error(self, db_session: AsyncSession):
         """Проект без ProjectSKU → NoLinesError."""
         from app.schemas.project import ProjectCreate

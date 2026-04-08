@@ -262,6 +262,28 @@ async def _build_line_input(
     if delta_offtake != 0.0:
         offtake_arr = [v * (1.0 + delta_offtake) for v in offtake_arr]
 
+    # Launch lag (D-13): обнуляем nd/offtake для periods до launch month.
+    # Pipeline считает volume = active × offtake × seasonality, поэтому
+    # nd=0 ИЛИ offtake=0 → volume=0 → весь downstream автоматически = 0.
+    # Не нужно трогать pipeline шаги.
+    #
+    # absolute_period_number вычисляется так:
+    # - Y1 Jan → 1, Y1 Dec → 12, Y2 Jan → 13, Y2 Dec → 24, Y3 Dec → 36
+    # - Y4..Y10 (yearly periods) → period_number 37..43
+    # Для launch_year >= 4 month игнорируется (yearly periods нет months).
+    if psk.launch_year > 3:
+        # Yearly launch: M1..M36 + Y4..Y(launch_year-1) обнуляем
+        launch_period_number = 36 + (psk.launch_year - 3)
+    else:
+        launch_period_number = (psk.launch_year - 1) * 12 + psk.launch_month
+    # Все periods c period_number < launch_period_number → 0
+    # sorted_periods отсортирован по period_number, поэтому индекс
+    # совпадает с (period.period_number - 1)
+    for i, period in enumerate(sorted_periods):
+        if period.period_number < launch_period_number:
+            nd_arr[i] = 0.0
+            offtake_arr[i] = 0.0
+
     return PipelineInput(
         project_sku_channel_id=psc.id,
         scenario_id=scenario.id,
