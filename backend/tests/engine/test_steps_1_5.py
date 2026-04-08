@@ -56,6 +56,7 @@ def make_input(**overrides) -> PipelineInput:
         "marketing_rate": 0.0,
         "wc_rate": 0.12,
         "tax_rate": 0.20,
+        "wacc": 0.19,
         "product_density": 1.0,
         "project_opex": (),
         "capex": (),
@@ -416,4 +417,5 @@ class TestPipelineSmoke:
                 marketing_rate=0.0,
                 wc_rate=0.12,
                 tax_rate=0.20,
+                wacc=0.19,
             )

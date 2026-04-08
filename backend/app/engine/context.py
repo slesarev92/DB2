@@ -77,6 +77,7 @@ class PipelineInput:
     # --- Project-level финансовые параметры (Project model) ---
     wc_rate: float                  # Working Capital ratio (default 0.12). D-01.
     tax_rate: float                 # Profit tax rate (default 0.20). D-03.
+    wacc: float                     # Discount rate / WACC (default 0.19). Excel DASH C3.
 
     product_density: float = 1.0    # кг/л. Для напитков ≈ 1.0 (D-09).
 
@@ -175,3 +176,31 @@ class PipelineContext:
     operating_cash_flow: list[float] = field(default_factory=list)    # CM + ΔWC + tax
     investing_cash_flow: list[float] = field(default_factory=list)    # -capex
     free_cash_flow: list[float] = field(default_factory=list)         # OCF + ICF
+
+    # --- После s10_discount (аннуализация + дисконтирование) ---
+    # Аннуализированные значения: 10 элементов (model_year 1..10), независимо
+    # от того что period_count может быть 43 (M1-M36 агрегируются по году).
+    annual_free_cash_flow: list[float] = field(default_factory=list)
+    annual_discounted_cash_flow: list[float] = field(default_factory=list)
+    cumulative_fcf: list[float] = field(default_factory=list)
+    cumulative_dcf: list[float] = field(default_factory=list)
+    # Также аннуализированные NR и CM — нужны для contribution_margin ratio
+    # на уровне всего проекта (не per-year, а overall sum/sum).
+    annual_net_revenue: list[float] = field(default_factory=list)
+    annual_contribution: list[float] = field(default_factory=list)
+    # Terminal Value (Гордон) — справочный показатель, НЕ входит в NPV (D-07).
+    terminal_value: float | None = None
+
+    # --- После s11_kpi (по 3 скоупа: y1y3, y1y5, y1y10) ---
+    # Ключи словарей — строковые значения PeriodScope: "y1y3", "y1y5", "y1y10".
+    npv: dict[str, float] = field(default_factory=dict)
+    irr: dict[str, float | None] = field(default_factory=dict)
+    roi: dict[str, float] = field(default_factory=dict)
+    payback_simple: dict[str, int | None] = field(default_factory=dict)
+    payback_discounted: dict[str, int | None] = field(default_factory=dict)
+    # Overall ratios (одинаковые для всех скоупов в текущей реализации)
+    contribution_margin_ratio: float | None = None
+
+    # --- После s12_gonogo ---
+    # Для каждого скоупа отдельно. GREEN = NPV ≥ 0 AND CM ratio ≥ 0.25.
+    go_no_go: dict[str, bool] = field(default_factory=dict)

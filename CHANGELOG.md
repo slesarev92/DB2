@@ -9,6 +9,64 @@
 
 ## [Unreleased]
 
+### Added (задача 2.3 — Pipeline steps 10–12 + IRR solver)
+**Расчётное ядро — финансовые KPI и Go/No-Go:**
+
+- `backend/app/engine/irr.py` — **собственный IRR solver** (Newton-Raphson +
+  bisection fallback). Без внешних зависимостей. 50 строк. Покрытие — GORJI
+  Y1-Y3/Y1-Y5/Y1-Y10 до rel 1e-6.
+  - Newton-Raphson из 5 начальных guess'ов (-0.5, 0.0, 0.1, 0.5, 1.0)
+  - Bisection в `[-0.999, 10.0]` если NR расходится / производная = 0
+  - `None` если решения нет (все cashflows одного знака) или ни один метод не сошёлся
+- `backend/app/engine/steps/s10_discount.py` — аннуализация per-period в годовые
+  бакеты по `model_year`, `DCF[t] = ANNUAL_FCF[t] / (1+WACC)^t`,
+  cumulative_fcf/cumulative_dcf для payback, Terminal Value (Гордон) как
+  справочный показатель (D-07 — НЕ входит в NPV).
+- `backend/app/engine/steps/s11_kpi.py` — NPV/IRR/ROI/Payback по 3 скоупам:
+  - NPV: `SUM(annual_dcf[0:end])` где end ∈ {3, 6, 10}
+  - **D-12 Excel quirk**: scope "Y1-Y5" в Excel формуле использует 6 элементов,
+    не 5 (`=SUM(B44:G44)`). Реализуем как в Excel, документировано в
+    TZ_VS_EXCEL_DISCREPANCIES.md.
+  - IRR: собственный solver
+  - ROI: Excel D-06 формула `(−SUM/(SUMIF<0 − 1))/COUNT` (НЕ ТЗ-формула)
+  - Payback simple/discounted: count лет где cumulative < 0; `None` если > threshold
+  - Contribution Margin overall ratio: `SUM(CM)/SUM(NR)` для всего проекта
+- `backend/app/engine/steps/s12_gonogo.py` — `GREEN if NPV[scope] >= 0 AND CM_ratio >= 0.25`
+  для каждого скоупа отдельно.
+
+**PipelineInput** расширен полем `wacc` (Project.wacc, default 0.19).
+
+**PipelineContext** дополнен 13 новыми полями: `annual_free_cash_flow`,
+`annual_discounted_cash_flow`, `cumulative_fcf`, `cumulative_dcf`,
+`annual_net_revenue`, `annual_contribution`, `terminal_value`, `npv`, `irr`,
+`roi`, `payback_simple`, `payback_discounted`, `contribution_margin_ratio`,
+`go_no_go`. KPI — словари по скоупам ("y1y3" / "y1y5" / "y1y10").
+
+**Тесты** — 34 новых, 144 total в 12.74 сек:
+
+*`test_irr.py`* (16 тестов):
+- TestNPV (3): zero_rate, simple, neg-one защита
+- TestIRR (13): two_period 10%, three_period 23.4%, zero, negative,
+  no_sign_change → None, all_negative → None, empty → None, single → None,
+  npv_at_irr ≈ 0, high_irr через bisection,
+  **GORJI Y1-Y10 = 78.6%, Y1-Y3 = -60.97%, Y1-Y5 = 64.12% (6 элементов)**
+
+*`test_steps_10_12.py`* (18 тестов):
+- TestDiscount (6): annualization passthrough yearly, **DCF ↔ DATA row 44**,
+  **cumulative_fcf ↔ DATA row 56**, **cumulative_dcf ↔ DATA row 57**, monthly
+  → yearly aggregation (M1..M12 → 1 элемент), **Terminal Value ↔ DATA row 47 col 4**
+- TestKpi (6): **NPV три скоупа ↔ DATA row 48** (rel 1e-9), **IRR три скоупа
+  ↔ DATA row 50** (rel 1e-6), **ROI три скоупа ↔ DATA row 49** (rel 1e-9),
+  **payback simple = {3,3,3}**, **payback discounted = {None, 4, 4}**,
+  CM ratio ≈ 25.1%
+- TestGoNoGo (6): GORJI Y1-Y10 GREEN, Y1-Y3 RED (NPV<0), Y1-Y5 GREEN,
+  low CM ratio blocks all, NPV=0 threshold (≥), CM=0.25 threshold (≥)
+
+**TZ_VS_EXCEL_DISCREPANCIES.md** — добавлено D-12 (Excel quirk Y1-Y5 = 6 элементов).
+
+Запуск: `docker compose -f infra/docker-compose.dev.yml exec backend pytest -v`
+→ **144 passed in 12.74s** (66 CRUD + 78 engine, 0 warnings).
+
 ### Added (задача 2.2 — Pipeline steps 6–9)
 **Расчётное ядро — вторая половина без KPI/discount:**
 

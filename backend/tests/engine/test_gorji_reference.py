@@ -121,6 +121,7 @@ GORJI_MARKETING_RATE = 0.020322841010825807
 # Project-level financial parameters (defaults в Project model)
 GORJI_WC_RATE = 0.12
 GORJI_TAX_RATE = 0.20
+GORJI_WACC = 0.19   # Excel DASH C3, DATA row 36
 
 # Ожидаемый EBITDA per unit (DASH row 48 col D-I)
 EXPECTED_EBITDA_PER_UNIT = [
@@ -214,6 +215,7 @@ def _build_input_for_range(
         marketing_rate=GORJI_MARKETING_RATE,
         wc_rate=GORJI_WC_RATE,
         tax_rate=GORJI_TAX_RATE,
+        wacc=GORJI_WACC,
         product_density=1.0,
         project_opex=tuple([0.0] * n),
     )

@@ -18,4 +18,7 @@ from app.engine.steps import (  # noqa: F401
     s07_working_capital,
     s08_tax,
     s09_cash_flow,
+    s10_discount,
+    s11_kpi,
+    s12_gonogo,
 )
