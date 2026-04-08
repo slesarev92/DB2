@@ -132,6 +132,45 @@ async def test_list_projects_returns_kpi_null_until_calculated(
     assert item["go_no_go"] is None
 
 
+async def test_list_projects_returns_kpi_after_calculation(
+    auth_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """После сохранения ScenarioResult (Base, Y1Y10) — KPI попадают в list.
+
+    Имитируем запись результатов через прямой INSERT, не через recalculate
+    Celery task — этот тест проверяет JOIN в list_projects, не оркестратор.
+    """
+    from app.models import PeriodScope, ScenarioResult
+
+    create_resp = await auth_client.post("/api/projects", json=VALID_BODY)
+    project_id = create_resp.json()["id"]
+
+    base = await db_session.scalar(
+        select(Scenario).where(
+            Scenario.project_id == project_id,
+            Scenario.type == ScenarioType.BASE,
+        )
+    )
+    db_session.add(
+        ScenarioResult(
+            scenario_id=base.id,
+            period_scope=PeriodScope.Y1Y10,
+            npv=Decimal("79983058.92"),
+            irr=Decimal("0.786343"),
+            go_no_go=True,
+        )
+    )
+    await db_session.flush()
+
+    resp = await auth_client.get("/api/projects")
+    assert resp.status_code == 200
+    items = resp.json()
+    assert len(items) == 1
+    assert Decimal(items[0]["npv_y1y10"]) == Decimal("79983058.92")
+    assert Decimal(items[0]["irr_y1y10"]) == Decimal("0.786343")
+    assert items[0]["go_no_go"] is True
+
+
 # ============================================================
 # 6. GET /api/projects/{id} → 200 + detail
 # ============================================================

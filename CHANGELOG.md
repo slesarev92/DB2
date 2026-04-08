@@ -9,6 +9,73 @@
 
 ## [Unreleased]
 
+### Added (задача 3.2 — Frontend: список и создание проектов)
+**Frontend MVP первый CRUD-flow + backend extensions:**
+
+**Backend extensions:**
+- `services/project_service.py:list_projects` — теперь возвращает
+  `list[ProjectListRow]` (dataclass с проектом + npv/irr/go_no_go из
+  Base/Y1Y10 ScenarioResult). LEFT JOIN в одном запросе вместо N+1.
+- `api/projects.py:list_projects_endpoint` обновлён под новую сигнатуру.
+- `schemas/reference.py` (новый файл) — `RefInflationRead` Pydantic схема.
+- `api/reference.py` (новый файл) — `GET /api/ref-inflation` для dropdown
+  в форме создания проекта. Read-only, защищён JWT, отсортирован по
+  profile_name.
+- `main.py` подключает `reference_router`.
+
+**Frontend:**
+- `types/api.ts` (новый файл) — TypeScript типы синхронизированные с
+  Pydantic схемами: Project*, RefInflation, UserMe. Decimal как `string`
+  (приходит с backend как Pydantic v2 → JSON Numeric).
+- `lib/projects.ts` (новый файл) — типизированные обёртки над apiGet/Post:
+  `listProjects/getProject/createProject/updateProject/deleteProject/
+  listRefInflation`.
+- `lib/format.ts` (новый файл) — `formatMoney` (₽ + ru-RU разделители),
+  `formatPercent`, `formatDate` (Intl.DateTimeFormat).
+- `components/go-no-go-badge.tsx` (новый файл) — цветной badge:
+  - `true` → GREEN "GO" (bg-green-600)
+  - `false` → RED "NO GO" (bg-red-600)
+  - `null` → серый outline "не рассчитан" (расчёт не запускался)
+- `app/(app)/projects/page.tsx` обновлён — список карточек:
+  название, GoNoGo badge, "Старт: дата · N лет", NPV Y1-Y10, WACC.
+  Loading/empty/error состояния. Кнопка "Создать проект" → `/projects/new`.
+  Grid responsive (1/2/3 колонки в зависимости от ширины).
+- `app/(app)/projects/new/page.tsx` (новый файл) — форма создания:
+  Card с CardHeader/Content/Footer, Input для name/start_date/horizon_years
+  и 4 финансовых параметров (wacc/tax_rate/wc_rate/vat_rate с дефолтами
+  0.19/0.20/0.12/0.20), Select для inflation_profile_id (загружается
+  через `/api/ref-inflation`, опция "Без инфляции"). HTML5 валидация.
+  После create → `router.push("/projects/{id}")`. Кнопка "Отмена"
+  возвращает на `/projects`.
+- `app/(app)/projects/[id]/page.tsx` (новый файл) — карточка проекта:
+  `<` назад → /projects, заголовок с названием и метаданными.
+  Tabs ("Параметры" активная, "SKU и BOM" / "Каналы" / "Результаты"
+  disabled placeholder для задач 3.3-3.4). Tab Параметры показывает
+  WACC/Tax/WC/VAT в %, валюту, профиль инфляции. 404 → понятное
+  сообщение с кнопкой "К списку".
+
+**Shadcn компоненты добавлены:** Badge, Select, Tabs (через `shadcn add`).
+
+**Тесты** (4 новых, 189 total за 15.26 сек):
+- `tests/api/test_reference.py` (новый файл, 3 теста):
+  - `test_list_ref_inflation_returns_seeded_profiles` — 16 профилей,
+    "No_Inflation" + "Апрель/Октябрь +7%" присутствуют, структура
+    с `month_coefficients` dict
+  - `test_list_ref_inflation_unauthorized` — 401 без JWT
+  - `test_list_ref_inflation_sorted_by_name` — алфавитная сортировка
+- `tests/api/test_projects.py:test_list_projects_returns_kpi_after_calculation` —
+  после прямого INSERT в ScenarioResult (Base + Y1Y10) GET /api/projects
+  возвращает npv/irr/go_no_go из расчёта. Проверяет JOIN.
+
+**E2E проверка:**
+- POST /api/projects 201 → проект создан, id=1
+- GET /api/projects → список с npv_y1y10=null (расчёт не выполнен)
+- GET /api/ref-inflation → 16 профилей
+- Frontend: /projects, /projects/new, /projects/1 → все 200
+
+Запуск backend: `pytest -q` → **189 passed in 15.26s** (66+4 CRUD +
+90 engine + 13 predict + 16 calculation, 0 warnings).
+
 ### Added (задача 3.1 — Frontend: routing, layout, auth)
 **Первая задача Фазы 3 — фронтенд авторизация и защищённые маршруты:**
 

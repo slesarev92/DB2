@@ -29,17 +29,21 @@ async def list_projects_endpoint(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[ProjectListItem]:
-    """Список проектов с базовыми KPI.
+    """Список проектов с базовыми KPI (Base scenario, Y1Y10 scope).
 
-    KPI (npv_y1y10, irr_y1y10, go_no_go) = None пока расчёт не выполнен
-    (Фаза 2). Эти поля будут заполняться join'ом на ScenarioResult после
-    реализации pipeline в задаче 2.4.
+    KPI (npv_y1y10, irr_y1y10, go_no_go) = None пока расчёт не выполнен.
+    После POST /api/projects/{id}/recalculate появляются значения из
+    ScenarioResult (LEFT JOIN в project_service.list_projects).
     """
-    projects = await project_service.list_projects(session)
-    return [
-        ProjectListItem.model_validate(p)
-        for p in projects
-    ]
+    rows = await project_service.list_projects(session)
+    items: list[ProjectListItem] = []
+    for row in rows:
+        item = ProjectListItem.model_validate(row.project)
+        item.npv_y1y10 = row.npv_y1y10
+        item.irr_y1y10 = row.irr_y1y10
+        item.go_no_go = row.go_no_go
+        items.append(item)
+    return items
 
 
 @router.post("", response_model=ProjectRead, status_code=status.HTTP_201_CREATED)

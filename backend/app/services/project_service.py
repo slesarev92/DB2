@@ -1,22 +1,73 @@
 """Project CRUD + soft delete + auto-creation сценариев."""
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Project, Scenario, ScenarioType
+from app.models import (
+    PeriodScope,
+    Project,
+    Scenario,
+    ScenarioResult,
+    ScenarioType,
+)
 from app.schemas.project import ProjectCreate, ProjectUpdate
 
 
-async def list_projects(session: AsyncSession) -> list[Project]:
-    """Все проекты, не помеченные удалёнными."""
+@dataclass
+class ProjectListRow:
+    """Строка результата list_projects: проект + KPI из расчёта (если есть).
+
+    KPI берутся из ScenarioResult по сценарию Base, scope Y1Y10. None
+    если расчёт не выполнен (LEFT JOIN не нашёл связанной строки).
+    """
+
+    project: Project
+    npv_y1y10: Decimal | None
+    irr_y1y10: Decimal | None
+    go_no_go: bool | None
+
+
+async def list_projects(session: AsyncSession) -> list[ProjectListRow]:
+    """Все проекты, не помеченные удалёнными, + KPI Base/Y1Y10.
+
+    LEFT JOIN на Scenario (Base) → ScenarioResult (Y1Y10). Если расчёт
+    не выполнен — KPI поля None. Один SQL запрос вместо N+1.
+    """
     stmt = (
-        select(Project)
+        select(
+            Project,
+            ScenarioResult.npv,
+            ScenarioResult.irr,
+            ScenarioResult.go_no_go,
+        )
+        .join(
+            Scenario,
+            (Scenario.project_id == Project.id)
+            & (Scenario.type == ScenarioType.BASE),
+            isouter=True,
+        )
+        .join(
+            ScenarioResult,
+            (ScenarioResult.scenario_id == Scenario.id)
+            & (ScenarioResult.period_scope == PeriodScope.Y1Y10),
+            isouter=True,
+        )
         .where(Project.deleted_at.is_(None))
         .order_by(Project.created_at.desc())
     )
-    result = await session.scalars(stmt)
-    return list(result.all())
+    result = await session.execute(stmt)
+    return [
+        ProjectListRow(
+            project=row[0],
+            npv_y1y10=row[1],
+            irr_y1y10=row[2],
+            go_no_go=row[3],
+        )
+        for row in result.all()
+    ]
 
 
 async def get_project(
