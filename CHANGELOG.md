@@ -9,6 +9,37 @@
 
 ## [Unreleased]
 
+### Added (задача 1.6 — Scenarios API)
+**Endpoints:**
+- `GET    /api/projects/{project_id}/scenarios` — 3 сценария проекта в порядке Base → Conservative → Aggressive
+- `GET    /api/scenarios/{id}` — один сценарий по id (для удобства frontend перед PATCH)
+- `PATCH  /api/scenarios/{id}` — обновить дельты (`delta_nd`, `delta_offtake`, `delta_opex`) и `notes`. Поля `type` и `project_id` отсутствуют в `ScenarioUpdate` — Pydantic v2 ignores unknown fields, попытка передать `type` молча игнорируется (тест 6 подтверждает)
+- `GET    /api/scenarios/{id}/results` — список `ScenarioResult` в порядке Y1Y3 → Y1Y5 → Y1Y10. **404 с actionable message** если расчёт не выполнен: `"Scenario has not been calculated yet. Run POST /api/projects/{project_id}/recalculate first (available after task 2.4)."`
+
+**Service** (`backend/app/services/scenario_service.py`):
+- Сортировка через explicit order maps `SCENARIO_ORDER` и `SCOPE_ORDER` — алфавит даёт неправильный порядок (`aggressive < base < conservative`, `y1y10 < y1y3 < y1y5`). Сортировка в Python после fetch
+- `list_scenarios_for_project`, `get_scenario`, `update_scenario`, `list_results_for_scenario`
+
+**Pydantic схемы** (`backend/app/schemas/scenario.py`):
+- `ScenarioRead` (полная)
+- `ScenarioUpdate` — только дельты + notes. Дельты могут быть отрицательными: `Field(ge=-1, le=1)` — диапазон от -100% до +100%, потому что Conservative обычно `delta_nd<0`
+- `ScenarioResultRead` — все KPI поля nullable (npv, irr, roi, payback, margins, go_no_go), заполняются расчётным ядром в задаче 2.4
+
+**Тесты** (`backend/tests/api/test_scenarios.py`) — 9 кейсов:
+1. GET project scenarios → 3 сценария в порядке `["base", "conservative", "aggressive"]`
+2. GET без auth → 401
+3. GET для несуществующего проекта → 404
+4. GET single scenario by id → 200 с правильным type и default дельтами
+5. PATCH delta_nd/delta_offtake/notes → 200, поля обновлены, type не менялся
+6. PATCH с body `{type: aggressive, delta_nd: 0.15}` → type проигнорирован (Pydantic ignore), delta_nd обновлён
+7. PATCH с delta_nd > 1 → 422 (Field validation)
+8. GET results без расчёта → 404 с детальным actionable сообщением (содержит "not been calculated", "recalculate", "task 2.4")
+9. GET results после insert 3 ScenarioResult напрямую → 200, порядок `["y1y3", "y1y5", "y1y10"]`. Эталонные NPV из задачи 2.3 GORJI+: -11.6M / 27.3M / 80.0M, go_no_go=False/True/True
+
+Запуск: `docker compose -f infra/docker-compose.dev.yml exec backend pytest -v` → **66 passed in 12.40s** (8 auth + 12 projects + 14 skus + 11 channels + 12 period_values + 9 scenarios, 0 warnings).
+
+**Фаза 1 (Backend CRUD API) закрыта полностью.**
+
 ### Added (задача 1.5 — PeriodValues API + трёхслойная модель данных)
 Материализация ADR-05 (трёхслойная модель `predict / finetuned / actual` с приоритетом `actual > finetuned > predict`) и версионирование fine-tuned значений.
 

@@ -6,6 +6,7 @@ from app.services import (
     project_service,
     project_sku_channel_service,
     project_sku_service,
+    scenario_service,
     sku_service,
     user_service,
 )
@@ -17,6 +18,7 @@ __all__ = [
     "project_service",
     "project_sku_channel_service",
     "project_sku_service",
+    "scenario_service",
     "sku_service",
     "user_service",
 ]

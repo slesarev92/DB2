@@ -286,7 +286,7 @@ ref_seasonality    (id, profile_name, month_coefficients jsonb)
 
 ---
 
-#### Задача 1.6 — Scenarios API
+#### ✅ Задача 1.6 — Scenarios API
 
 **Что делаем:**
 - `GET /api/projects/{id}/scenarios` — три сценария проекта
@@ -708,7 +708,7 @@ ref_seasonality    (id, profile_name, month_coefficients jsonb)
 - [x] 1.3 SKU и BOM API ✅ (2026-04-08, 14/14 pytest зелёные, COGS preview, savepoint pattern)
 - [x] 1.4 Channels API ✅ (2026-04-08, 11/11 pytest зелёные, read-only справочник + ProjectSKUChannel CRUD)
 - [x] 1.5 PeriodValues API ✅ (2026-04-08, 12/12 pytest зелёные, трёхслойная модель + 4 view modes + append-only versioning)
-- [ ] 1.6 Scenarios API
+- [x] 1.6 Scenarios API ✅ (2026-04-08, 9/9 pytest зелёные, GET/PATCH дельт + results с actionable 404)
 
 ### Фаза 2 — Расчётное ядро
 - [ ] 2.1 Pipeline steps 1–5
