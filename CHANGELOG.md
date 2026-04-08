@@ -9,6 +9,69 @@
 
 ## [Unreleased]
 
+### Added (задача 2.5 — Predict-слой автогенерации)
+**Автоматическое заполнение PeriodValue при создании ProjectSKUChannel:**
+
+- `backend/app/services/predict_service.py` — новый сервис:
+  - `_ramp_values(target, ramp_months, start_pct, n_monthly)` — pure function
+    линейного рамп-апа от target × start_pct (default 20%) до target за
+    ramp_months месяцев. После рамп-апа — плато target.
+  - `_shelf_price_series(base, sorted_periods, profile)` — pure function
+    применения инфляционного профиля по месяцам:
+    - Monthly периоды: `shelf[t] = shelf[t-1] × (1 + monthly_deltas[month_num−1])`
+    - Yearly периоды (Y4-Y10): `shelf[Yk] = shelf[предыдущего] × (1 + yearly_growth[k−4])`
+  - `fill_predict_for_psk_channel(session, psc)` — async, создаёт 43 × 3 = 129
+    PeriodValue с predict-слоем (43 периода × 3 сценария: Base/Conservative/Aggressive).
+    Идемпотентно: при повторном вызове удаляет старые predict перед созданием новых.
+    Finetuned/actual слои не трогаются.
+- `backend/app/services/project_sku_channel_service.py`:
+  - `create_psk_channel` принимает `auto_fill_predict: bool = True` (default).
+    После успешного create вызывает `fill_predict_for_psk_channel`.
+    Параметр `auto_fill_predict=False` нужен тестам `test_period_values`,
+    которые управляют PeriodValue слоями вручную.
+
+**Архитектурные решения:**
+- Predict значения **одинаковы для всех 3 сценариев** (Base/Conservative/Aggressive).
+  Сценарные дельты (`delta_nd`, `delta_offtake`) применяются runtime в
+  `calculation_service.build_line_inputs`. Это упрощает predict_service
+  и позволяет менять scenario delta без перегенерации predict.
+- Сезонность хранится в `ref_seasonality` profile (PSC.seasonality_profile_id),
+  применяется в `s01_volume`, **не** записывается в JSONB PeriodValue.
+- ND_START_PCT и OFFTAKE_START_PCT захардкожены = 0.20 (D-10/D-11). Если
+  бизнесу нужно сделать их параметром PSC — отдельная задача.
+
+**Тесты** (13 новых, 185 total за 14.47 сек):
+
+*`tests/api/test_predict_service.py`*:
+- `TestRampValues` (4): target=0 → all zeros, ramp_months=0 → start at target,
+  linear interpolation first/last/plato, ramp longer than horizon
+- `TestShelfPriceSeries` (3): no profile → constant, **Апрель/Октябрь +7%
+  профиль** (M1-M3 = база, M4 = база × 1.07, M10 = M4 × 1.07), **yearly_growth
+  для Y4-Y10**
+- `TestAutoFill` (6): 129 строк, **3 сценария × 43 периода**, **ND ramp pattern**
+  (M1=0.10, M12=0.467, M13+=0.50), Offtake ramp pattern с ramp=6 месяцев,
+  **идемпотентность** (повторный вызов → 129 строк не 258), **finetuned
+  слой не трогается** при пересоздании predict
+
+**Обновления существующих тестов:**
+- `tests/api/test_period_values.py`: `_setup_psk_channel` теперь использует
+  сервис `create_psk_channel(auto_fill_predict=False)` вместо API endpoint —
+  тестам нужно вручную управлять слоями PeriodValue.
+- `tests/api/test_calculation.py`: `_seed_minimal_project` упрощён —
+  ручное создание 43 PeriodValue убрано, auto-fill через сервис делает
+  всё сам. Параметры `nd_target=0.001, offtake_target=1.0, shelf_price=10.0`
+  выбраны малыми чтобы итоговый ROI помещался в `Numeric(10, 6)` (Excel quirk
+  D-06: при всех положительных FCF формула вырождается в среднее).
+- Helper `_clone_period_values_to_other_scenarios` удалён — больше не нужен,
+  auto-fill сразу создаёт записи для всех 3 сценариев.
+
+Запуск: **185 passed in 14.47s** (66 CRUD + 90 engine + 13 predict + 16 calculation, 0 warnings).
+
+**Фаза 2 закрыта.** Расчётное ядро готово end-to-end: пользователь создаёт
+проект → SKU → канал, predict значения генерируются автоматически,
+`POST /api/projects/{id}/recalculate` запускает Celery task, `ScenarioResult`
+сохраняется по 3 сценария × 3 скоупа = 9 строк. Следующая фаза — Frontend.
+
 ### Added (post-2.4: ProjectFinancialPlan — project-level CAPEX/OPEX в БД)
 **Изменение схемы (новая таблица + миграция):**
 

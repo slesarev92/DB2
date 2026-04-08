@@ -87,19 +87,29 @@ def celery_eager_mode():
 async def _seed_minimal_project(
     db_session: AsyncSession,
     *,
-    nd: float = 0.001,
-    offtake: float = 1.0,
+    nd_target: float = 0.001,
+    offtake_target: float = 1.0,
     shelf_price: float = 10.0,
 ) -> tuple[int, int, int, int]:
-    """Создаёт project + sku + project_sku + bom + project_sku_channel +
-    43 PeriodValue (predict-слой) для base сценария.
+    """Создаёт project + sku + project_sku + bom + project_sku_channel.
+
+    PeriodValue с predict-слоем создаются **автоматически** через
+    auto_fill в `create_psk_channel` (задача 2.5). Тестам не нужно
+    ничего добавлять руками.
+
+    Дефолтные nd_target/offtake_target/shelf_price умышленно низкие чтобы
+    итоговый ROI помещался в `Numeric(10, 6)` Excel quirk D-06: при всех
+    положительных FCF формула ROI вырождается в среднее, и большие
+    абсолютные значения не помещаются в БД scale.
 
     Возвращает (project_id, base_scenario_id, psk_id, psk_channel_id).
     """
-    # 1. Project (создаст 3 сценария автоматически через create_project)
     from app.schemas.project import ProjectCreate
+    from app.schemas.project_sku_channel import ProjectSKUChannelCreate
     from app.services.project_service import create_project
+    from app.services.project_sku_channel_service import create_psk_channel
 
+    # 1. Project (создаст 3 сценария автоматически)
     project = await create_project(
         db_session,
         ProjectCreate(name="Calc test project", start_date="2025-01-01"),
@@ -107,12 +117,11 @@ async def _seed_minimal_project(
     )
     await db_session.flush()
 
-    # 2. SKU
+    # 2. SKU + 3. ProjectSKU + 4. BOM
     sku = SKU(brand="Gorji", name="Calc test SKU", volume_l=Decimal("0.5"))
     db_session.add(sku)
     await db_session.flush()
 
-    # 3. ProjectSKU
     psk = ProjectSKU(
         project_id=project.id,
         sku_id=sku.id,
@@ -123,7 +132,6 @@ async def _seed_minimal_project(
     db_session.add(psk)
     await db_session.flush()
 
-    # 4. BOM (один компонент)
     bom = BOMItem(
         project_sku_id=psk.id,
         ingredient_name="Test material",
@@ -134,24 +142,28 @@ async def _seed_minimal_project(
     db_session.add(bom)
     await db_session.flush()
 
-    # 5. PSC (HM канал из засеянных)
+    # 5. PSC через сервис → auto_fill_predict=True (default) создаст 129 PeriodValue
     hm = await db_session.scalar(select(Channel).where(Channel.code == "HM"))
     assert hm is not None
-    psc = ProjectSKUChannel(
-        project_sku_id=psk.id,
-        channel_id=hm.id,
-        nd_target=Decimal("0.5"),
-        offtake_target=Decimal("10.0"),
-        channel_margin=Decimal("0.4"),
-        promo_discount=Decimal("0.3"),
-        promo_share=Decimal("1.0"),
-        shelf_price_reg=Decimal(str(shelf_price)),
-        logistics_cost_per_kg=Decimal("8.0"),
-    )
-    db_session.add(psc)
-    await db_session.flush()
 
-    # 6. Base scenario id
+    psc = await create_psk_channel(
+        db_session,
+        psk.id,
+        ProjectSKUChannelCreate(
+            channel_id=hm.id,
+            nd_target=Decimal(str(nd_target)),
+            offtake_target=Decimal(str(offtake_target)),
+            channel_margin=Decimal("0.4"),
+            promo_discount=Decimal("0.3"),
+            promo_share=Decimal("1.0"),
+            shelf_price_reg=Decimal(str(shelf_price)),
+            logistics_cost_per_kg=Decimal("8.0"),
+            nd_ramp_months=12,
+        ),
+        # auto_fill_predict=True (default) — predict_service автоматически
+        # создаёт 43 PeriodValue × 3 сценария = 129 строк
+    )
+
     base = await db_session.scalar(
         select(Scenario).where(
             Scenario.project_id == project.id,
@@ -159,29 +171,6 @@ async def _seed_minimal_project(
         )
     )
     assert base is not None
-
-    # 7. Все 43 PeriodValue с predict-слоем
-    periods = (
-        await db_session.scalars(select(Period).order_by(Period.period_number))
-    ).all()
-    assert len(periods) == 43
-
-    for p in periods:
-        db_session.add(
-            PeriodValue(
-                psk_channel_id=psc.id,
-                scenario_id=base.id,
-                period_id=p.id,
-                source_type=SourceType.PREDICT,
-                version_id=1,
-                values={
-                    "nd": nd,
-                    "offtake": offtake,
-                    "shelf_price": shelf_price,
-                },
-            )
-        )
-    await db_session.flush()
 
     return project.id, base.id, psk.id, psc.id
 
@@ -213,9 +202,15 @@ class TestBuildLineInputs:
         assert inp.wacc == pytest.approx(0.19)
         assert inp.wc_rate == pytest.approx(0.12)
         assert inp.bom_unit_cost == pytest.approx(10.0)  # 1 × 10 × (1+0)
-        # Effective values из PeriodValue (default низкие — см. _seed_minimal_project)
-        assert all(v == pytest.approx(0.001) for v in inp.nd)
-        assert all(v == pytest.approx(1.0) for v in inp.offtake)
+        # Effective values из PeriodValue (auto-fill после задачи 2.5):
+        # ND рамп-ап от 0.001 × 0.20 = 0.0002 за 12 месяцев до 0.001
+        # Y4..Y10 = 0.001 (плато)
+        assert inp.nd[0] == pytest.approx(0.0002)        # M1 = nd_target × 0.20
+        assert inp.nd[12] == pytest.approx(0.001)        # M13 = плато
+        assert inp.nd[42] == pytest.approx(0.001)        # Y10 = плато
+        # Offtake аналогично, target=1.0
+        assert inp.offtake[0] == pytest.approx(0.20)     # M1 = 1.0 × 0.20
+        assert inp.offtake[42] == pytest.approx(1.0)     # Y10
 
     async def test_project_not_found(self, db_session: AsyncSession):
         with pytest.raises(ProjectNotFoundError):
@@ -242,9 +237,13 @@ class TestBuildLineInputs:
             await build_line_inputs(db_session, project.id, base.id)
 
     async def test_scenario_delta_applied(self, db_session: AsyncSession):
-        """Conservative scenario с delta_nd = -0.10 → ND × 0.90."""
+        """Conservative scenario с delta_nd = -0.10 → ND × 0.90.
+
+        После задачи 2.5 auto-fill создаёт PeriodValue для всех 3 сценариев
+        одинаковыми predict значениями. Delta применяется runtime в
+        build_line_inputs.
+        """
         project_id, _, _, _ = await _seed_minimal_project(db_session)
-        # Берём conservative и проставляем delta
         cons = await db_session.scalar(
             select(Scenario).where(
                 Scenario.project_id == project_id,
@@ -254,31 +253,11 @@ class TestBuildLineInputs:
         cons.delta_nd = Decimal("-0.10")
         await db_session.flush()
 
-        # Создаём те же PeriodValue для conservative scenario, иначе
-        # build_line_inputs увидит пустые ND.
-        periods = (
-            await db_session.scalars(select(Period).order_by(Period.period_number))
-        ).all()
-        # Берём psk_channel_id из base scenario PeriodValue
-        psv = await db_session.scalar(select(PeriodValue).limit(1))
-        assert psv is not None
-        for p in periods:
-            db_session.add(
-                PeriodValue(
-                    psk_channel_id=psv.psk_channel_id,
-                    scenario_id=cons.id,
-                    period_id=p.id,
-                    source_type=SourceType.PREDICT,
-                    version_id=1,
-                    values={"nd": 0.001, "offtake": 1.0, "shelf_price": 10.0},
-                )
-            )
-        await db_session.flush()
-
         inputs = await build_line_inputs(db_session, project_id, cons.id)
-        # Все ND × 0.90 = 0.001 × 0.9 = 0.0009
-        for v in inputs[0].nd:
-            assert v == pytest.approx(0.0009, rel=1e-9)
+        # ND[Y10] = nd_target × 0.90 = 0.001 × 0.9 = 0.0009
+        assert inputs[0].nd[42] == pytest.approx(0.0009, rel=1e-9)
+        # ND[M1] (start of ramp) = nd_target × 0.20 × 0.90 = 0.00018
+        assert inputs[0].nd[0] == pytest.approx(0.00018, rel=1e-9)
 
 
 # ============================================================
@@ -591,46 +570,3 @@ class TestGetTaskStatus:
         assert resp.status_code == 401
 
 
-# ============================================================
-# Helper: клонирование PeriodValue из base в conservative/aggressive
-# ============================================================
-
-
-async def _clone_period_values_to_other_scenarios(
-    db_session: AsyncSession, project_id: int
-) -> None:
-    """Без этого calculate_all_scenarios упадёт на conservative/aggressive."""
-    base = await db_session.scalar(
-        select(Scenario).where(
-            Scenario.project_id == project_id,
-            Scenario.type == ScenarioType.BASE,
-        )
-    )
-    base_pvs = (
-        await db_session.scalars(
-            select(PeriodValue).where(PeriodValue.scenario_id == base.id)
-        )
-    ).all()
-
-    other_scenarios = (
-        await db_session.scalars(
-            select(Scenario).where(
-                Scenario.project_id == project_id,
-                Scenario.type != ScenarioType.BASE,
-            )
-        )
-    ).all()
-
-    for sc in other_scenarios:
-        for pv in base_pvs:
-            db_session.add(
-                PeriodValue(
-                    psk_channel_id=pv.psk_channel_id,
-                    scenario_id=sc.id,
-                    period_id=pv.period_id,
-                    source_type=pv.source_type,
-                    version_id=1,
-                    values=dict(pv.values),
-                )
-            )
-    await db_session.flush()

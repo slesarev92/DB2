@@ -39,8 +39,18 @@ async def _setup_psk_channel(
 ) -> tuple[int, int, int]:
     """Создаёт project + sku + project_sku + project_sku_channel.
 
+    PSC создаётся через сервис **с `auto_fill_predict=False`** — этим тестам
+    нужно вручную управлять PeriodValue слоями (predict/finetuned/actual),
+    auto-fill из задачи 2.5 (predict_service) бы конфликтовал по
+    UNIQUE(psk_channel_id, scenario_id, period_id, source_type, version_id).
+
+    Тесты для самой автогенерации predict — в `test_predict_service.py`.
+
     Возвращает (project_id, base_scenario_id, psk_channel_id).
     """
+    from app.schemas.project_sku_channel import ProjectSKUChannelCreate
+    from app.services.project_sku_channel_service import create_psk_channel
+
     project_id = (await auth_client.post("/api/projects", json=PROJECT_BODY)).json()["id"]
     sku_id = (await auth_client.post("/api/skus", json=SKU_BODY)).json()["id"]
     psk_id = (
@@ -55,11 +65,14 @@ async def _setup_psk_channel(
     hm = await db_session.scalar(select(Channel).where(Channel.code == "HM"))
     assert hm is not None
 
-    psk_channel_id = (
-        await auth_client.post(
-            f"/api/project-skus/{psk_id}/channels", json={"channel_id": hm.id}
-        )
-    ).json()["id"]
+    # PSC через сервис без auto_fill — тесты управляют слоями вручную
+    psc = await create_psk_channel(
+        db_session,
+        psk_id,
+        ProjectSKUChannelCreate(channel_id=hm.id),
+        auto_fill_predict=False,
+    )
+    psk_channel_id = psc.id
 
     base_scenario = await db_session.scalar(
         select(Scenario).where(

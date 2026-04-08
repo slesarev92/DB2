@@ -52,11 +52,23 @@ async def create_psk_channel(
     session: AsyncSession,
     project_sku_id: int,
     data: ProjectSKUChannelCreate,
+    *,
+    auto_fill_predict: bool = True,
 ) -> ProjectSKUChannel:
-    """Создаёт ProjectSKUChannel.
+    """Создаёт ProjectSKUChannel + (опционально) генерирует predict-слой.
 
     Поднимает ChannelNotFoundError / ProjectSKUChannelDuplicateError.
     Использует savepoint pattern для async-safe обработки IntegrityError.
+
+    Если `auto_fill_predict=True` (дефолт), после успешного create вызывает
+    `predict_service.fill_predict_for_psk_channel` — заполняет 43×3=129
+    PeriodValue с predict-слоем (ND/Offtake рамп-ап + shelf price с
+    инфляцией) для всех 3 сценариев проекта. Это позволяет сразу запускать
+    /recalculate без предварительного ручного ввода значений.
+
+    `auto_fill_predict=False` нужен для тестов test_period_values, которые
+    управляют слоями PeriodValue вручную и не должны конфликтовать с
+    автогенерацией.
     """
     channel = await session.get(Channel, data.channel_id)
     if channel is None:
@@ -72,6 +84,13 @@ async def create_psk_channel(
             await session.flush()
     except IntegrityError as exc:
         raise ProjectSKUChannelDuplicateError() from exc
+
+    if auto_fill_predict:
+        # Импорт внутри функции — predict_service импортирует много моделей,
+        # держим граф зависимостей сервисов плоским.
+        from app.services.predict_service import fill_predict_for_psk_channel
+
+        await fill_predict_for_psk_channel(session, psk_channel)
 
     # Перезагружаем с selectinload для корректной сериализации nested
     return await get_psk_channel(session, psk_channel.id)  # type: ignore[return-value]
