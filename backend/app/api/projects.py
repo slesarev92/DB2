@@ -99,3 +99,34 @@ async def delete_project_endpoint(
         raise _not_found
     await project_service.soft_delete_project(session, project)
     await session.commit()
+
+
+@router.post(
+    "/{project_id}/recalculate",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def recalculate_project_endpoint(
+    project_id: int,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> dict[str, str | int]:
+    """Запускает Celery task на пересчёт всех 3 сценариев проекта.
+
+    Возвращает task_id для опроса статуса через GET /api/tasks/{task_id}.
+    Сам расчёт выполняется асинхронно в celery-worker, не блокирует HTTP-запрос.
+
+    Импорт task'а внутри функции, чтобы при загрузке модуля projects.py
+    не подтягивать celery_app (упрощает unit-тестирование api без worker).
+    """
+    project = await project_service.get_project(session, project_id)
+    if project is None:
+        raise _not_found
+
+    from app.tasks.calculate_project import calculate_project_task
+
+    async_result = calculate_project_task.delay(project_id)
+    return {
+        "task_id": async_result.id,
+        "project_id": project_id,
+        "status": "PENDING",
+    }

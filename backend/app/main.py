@@ -14,6 +14,7 @@ from app.api import project_skus as project_skus_router
 from app.api import projects as projects_router
 from app.api import scenarios as scenarios_router
 from app.api import skus as skus_router
+from app.api import tasks as tasks_router
 from app.core.config import settings
 
 app = FastAPI(
@@ -42,6 +43,7 @@ app.include_router(channels_router.router)
 app.include_router(project_sku_channels_router.router)
 app.include_router(period_values_router.router)
 app.include_router(scenarios_router.router)
+app.include_router(tasks_router.router)
 
 
 @app.get("/health", tags=["system"])

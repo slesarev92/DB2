@@ -9,6 +9,82 @@
 
 ## [Unreleased]
 
+### Added (задача 2.4 — Celery pipeline orchestration)
+**End-to-end оркестратор расчёта от БД до ScenarioResult:**
+
+- `backend/app/engine/aggregator.py` — `aggregate_lines(line_contexts)` складывает
+  per-line PipelineContext'ы в один проектный агрегат element-wise по всем
+  per-period полям (NR, COGS, GP, CM, FCF и т.д.). Метаданные временной оси
+  и project-level параметры (wacc, wc_rate, tax_rate) берутся из первой линии.
+  Опциональные `project_capex` и `project_opex` для применения на уровне
+  агрегата.
+- `backend/app/engine/pipeline.py` — оркестратор:
+  - `run_line_pipeline(input)` — прогон s01..s09 для одной линии
+  - `run_project_pipeline(line_inputs, project_capex=, project_opex=)` —
+    per-line + aggregate + s10..s12 → готовый PipelineContext с KPI словарями
+- `backend/app/services/calculation_service.py` — точка интеграции pipeline ↔ БД:
+  - `build_line_inputs(session, project_id, scenario_id)` — грузит ProjectSKU/PSC
+    с selectinload, эффективные PeriodValue (priority actual > finetuned > predict),
+    BOM unit cost, channel.universe_outlets, seasonality профиль; применяет
+    scenario delta_nd / delta_offtake; формирует list[PipelineInput]
+  - `calculate_and_save_scenario` — pipeline + удаление старых ScenarioResult +
+    сохранение 3 новых per scope (Y1Y3/Y1Y5/Y1Y10)
+  - `calculate_all_scenarios(session, project_id)` — для всех 3 сценариев проекта
+- `backend/app/tasks/calculate_project.py` — Celery task `calculate_project_task`
+  с `asyncio.run(_calculate_project_async)` wrapper'ом. Сессия БД создаётся
+  внутри async-функции через `async_session_maker`. Domain-исключения
+  (`ProjectNotFoundError`, `NoLinesError`) возвращаются как error-result,
+  остальные пробрасываются для Celery FAILED state.
+- `backend/app/api/projects.py` — `POST /api/projects/{id}/recalculate` →
+  202 Accepted + `{task_id, project_id, status: "PENDING"}`. Импорт задачи
+  внутри функции чтобы избежать загрузки celery_app на import-time API модуля.
+- `backend/app/api/tasks.py` (новый файл) — `GET /api/tasks/{task_id}` →
+  опрос Celery AsyncResult. Возвращает status (PENDING/STARTED/SUCCESS/FAILURE)
+  + result или error/traceback.
+- `backend/app/worker.py` — добавлен `import app.tasks` после создания
+  `celery_app` для регистрации тасков.
+- `backend/app/main.py` — подключён `tasks_router`.
+
+**Архитектурные решения 2.4:**
+- Pipeline = pure functions, БД только в `calculation_service`
+- Aggregator складывает per-period values; KPI считаются на агрегате (не суммируются
+  per-line) — это математически корректно для NPV/IRR/Payback
+- Async ↔ Celery через `asyncio.run` per-task — чисто, изолированно, без
+  пулинга event loop'ов
+- `project_capex` / `project_opex` пока пустые tuples (TODO: добавить поля
+  в Project model в Phase 3 когда появится UI для редактирования). MVP
+  даёт FCF = OCF (без инвестиционного оттока на уровне проекта).
+
+**Тесты** (24 новых, 168 total за 13.95 сек):
+
+*`tests/engine/test_aggregator.py`* (6 тестов): empty list raises, single
+line passthrough, two identical lines doubles values, period_count mismatch
+raises, metadata from first line, project_capex passed to input.
+
+*`tests/engine/test_pipeline.py`* (6 тестов): run_line single/multi period,
+run_project empty raises, single line project, two lines aggregated,
+project_capex reduces FCF.
+
+*`tests/api/test_calculation.py`* (12 тестов, integration с реальной БД):
+- `TestBuildLineInputs` (4): builds 1 input for 1 PSC (universe_outlets=822 из HM seed,
+  bom_unit_cost из BOMItem, vat/wacc/wc_rate из Project), project_not_found,
+  no_lines_error, scenario delta_nd applied (×0.90 для Conservative)
+- `TestCalculateScenario` (3): создаёт 3 ScenarioResult per scope, results имеют
+  KPI значения (NPV, ROI, CM, go_no_go non-None), recalculate replaces old
+  results (старые удаляются)
+- `TestRecalculateEndpoint` (3): возвращает 202 + task_id (с monkeypatch на
+  task.delay чтобы не дёргать реальную async session), 404 для unknown project,
+  401 unauthorized
+- `TestGetTaskStatus` (2): PENDING для unknown task_id (Celery дизайн), 401
+  unauthorized
+
+Eager Celery mode через autouse fixture: `task_always_eager=True`,
+`task_eager_propagates=True`, `task_store_eager_result=True` (последнее —
+подавляет RuntimeWarning о хранении результатов в eager mode).
+
+Запуск: `docker compose -f infra/docker-compose.dev.yml exec backend pytest -v`
+→ **168 passed in 13.95s** (66 CRUD + 90 engine + 12 calculation, 0 warnings).
+
 ### Added (задача 2.3 — Pipeline steps 10–12 + IRR solver)
 **Расчётное ядро — финансовые KPI и Go/No-Go:**
 

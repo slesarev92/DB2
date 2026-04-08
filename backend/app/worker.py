@@ -31,3 +31,8 @@ celery_app.conf.update(
 def ping() -> str:
     """Liveness probe для worker. Вызывается руками для проверки связи с broker."""
     return "pong"
+
+
+# Регистрация tasks. Импорт после создания celery_app, чтобы избежать
+# circular import (calculate_project импортирует celery_app отсюда).
+import app.tasks  # noqa: E402, F401
