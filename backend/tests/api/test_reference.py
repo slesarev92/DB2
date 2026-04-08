@@ -74,3 +74,53 @@ async def test_list_ref_seasonality_sorted_by_name(
     data = resp.json()
     names = [p["profile_name"] for p in data]
     assert names == sorted(names)
+
+
+# ============================================================
+# GET /api/periods (для frontend AG Grid таблицы периодов, задача 4.1)
+# ============================================================
+
+
+async def test_list_periods_returns_43_rows(auth_client: AsyncClient) -> None:
+    """Conftest сидирует 43 периода (36 monthly M1..M36 + 7 yearly Y4..Y10)."""
+    resp = await auth_client.get("/api/periods")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) == 43
+
+    # Структура одной записи
+    sample = data[0]
+    assert "id" in sample
+    assert "type" in sample
+    assert "period_number" in sample
+    assert "model_year" in sample
+    assert "month_num" in sample
+
+
+async def test_list_periods_split_by_type(auth_client: AsyncClient) -> None:
+    """36 monthly (M1..M36) и 7 yearly (Y4..Y10)."""
+    resp = await auth_client.get("/api/periods")
+    data = resp.json()
+
+    monthly = [p for p in data if p["type"] == "monthly"]
+    yearly = [p for p in data if p["type"] == "annual"]
+    assert len(monthly) == 36
+    assert len(yearly) == 7
+
+    assert all(p["month_num"] is not None for p in monthly)
+    assert all(p["month_num"] is None for p in yearly)
+
+
+async def test_list_periods_sorted_by_period_number(
+    auth_client: AsyncClient,
+) -> None:
+    resp = await auth_client.get("/api/periods")
+    data = resp.json()
+    numbers = [p["period_number"] for p in data]
+    assert numbers == list(range(1, 44))  # 1..43
+
+
+async def test_list_periods_unauthorized(client: AsyncClient) -> None:
+    resp = await client.get("/api/periods")
+    assert resp.status_code == 401

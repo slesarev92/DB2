@@ -99,6 +99,7 @@ export default function ProjectDetailPage() {
           <TabsTrigger value="overview">Параметры</TabsTrigger>
           <TabsTrigger value="skus">SKU и BOM</TabsTrigger>
           <TabsTrigger value="channels">Каналы</TabsTrigger>
+          <TabsTrigger value="periods">Периоды</TabsTrigger>
           <TabsTrigger value="results" disabled>
             Результаты
           </TabsTrigger>
@@ -160,6 +161,10 @@ export default function ProjectDetailPage() {
 
         <TabsContent value="channels" className="mt-4">
           <ChannelsTab projectId={projectId} />
+        </TabsContent>
+
+        <TabsContent value="periods" className="mt-4">
+          <PeriodsTab projectId={projectId} />
         </TabsContent>
       </Tabs>
     </div>

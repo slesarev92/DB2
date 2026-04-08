@@ -9,6 +9,74 @@
 
 ## [Unreleased]
 
+### Added (задача 4.1 — AG Grid таблица периодов)
+**Inline-редактируемая таблица периодов с трёхслойной подсветкой
+(старт Фазы 4):**
+
+**Backend extension:**
+- `schemas/reference.py` — `PeriodRead` Pydantic схема
+- `api/reference.py` — `GET /api/periods` (read-only, JWT, sorted)
+- 4 новых теста в `test_reference.py` (43 rows, split monthly/yearly,
+  sorted, unauthorized)
+
+**Frontend новые зависимости:**
+- **AG Grid Community v35.2.1** + **AG Grid React** установлены через
+  npm. Зависимость из стека CLAUDE.md, согласована заранее. Регистрация
+  через `ModuleRegistry.registerModules([AllCommunityModule])` для v33+
+  (модули больше не auto-register).
+
+**Frontend:**
+- `types/api.ts` расширен типами `Period`, `PeriodType`, `SourceType`,
+  `ViewMode`, `PeriodHybridItem`, `PeriodCompareItem`,
+  `PatchPeriodValueResponse`, `ResetOverrideResponse`, `ScenarioRead`,
+  `ScenarioUpdate`, `ScenarioResultRead`, `PeriodScope`
+- `lib/period-values.ts` (новый) — `listPeriodValuesHybrid`,
+  `listPeriodValues` (4 view modes), `patchPeriodValue` (создаёт
+  finetuned версию append-only), `resetPeriodOverride` (DELETE override)
+- `lib/reference.ts` (новый) — `listPeriods()`
+- `lib/scenarios.ts` (новый) — `listProjectScenarios`, `getScenario`,
+  `updateScenario`, `listScenarioResults`
+- `components/projects/periods-grid.tsx` (новый) — AG Grid pivot:
+  - **Rows = метрики** (ND, Off-take, Shelf price) из массива
+    `METRICS` константы
+  - **Columns = периоды** с pinned левой колонкой "Показатель",
+    monthly/yearly заголовки (M1..M36 / Y4..Y10)
+  - **Подсветка по source_type** через `cellClassRules`:
+    - `bg-blue-100` для finetuned overrides
+    - `bg-green-100` для actual
+    - без подсветки = predict
+  - **Inline edit** через `editable: true` + `singleClickEdit` +
+    `stopEditingWhenCellsLoseFocus` → `onCellValueChanged` →
+    `patchPeriodValue` → `reload()` (без optimistic update)
+  - **"Сбросить overrides"** кнопка в шапке: `Promise.all` DELETE
+    всех записей с `is_overridden=true`
+  - Numeric formatting через `valueFormatter` с локалью ru-RU
+  - Loading/error состояния
+- `components/projects/periods-tab.tsx` (новый) — главный компонент:
+  переиспользует `SkuPanel` слева (1/3), правая колонка с 3 селекторами
+  (Канал / Сценарий / Период) + `PeriodsGrid` с
+  `key={pscId-scenarioId}` для пересоздания при смене.
+  Авто-выбор первого канала и Base сценария при загрузке.
+- `app/(app)/projects/[id]/page.tsx` — добавлен новый таб **«Периоды»**
+  между «Каналы» и «Результаты». Список табов: Параметры / SKU и BOM /
+  Каналы / Периоды / Результаты (последний disabled до 4.2).
+
+**E2E проверка:**
+- `GET /api/periods` → 43 (M1..M36 monthly + Y4..Y10 annual)
+- `GET /api/projects/1/scenarios` → 3 (Base/Conservative/Aggressive)
+- `GET /api/project-sku-channels/1/values?scenario_id=1&view_mode=hybrid`
+  → 43 PeriodValue с predict-слоем (auto-fill из задачи 2.5).
+  Sample M1: `{nd: 0.1, offtake: 2.0, shelf_price: 100.0}`,
+  source_type=predict (соответствует ND ramp 0.5×0.20=0.1).
+- Frontend `/projects/1` → 200, таб «Периоды» работает
+
+Запуск backend: **196 passed in 15.90s** (+4 от 192: 4 теста /api/periods).
+
+**Архитектурное решение:** Pivot data конструируется на клиенте через
+`useMemo` (rows = METRICS array, columns = visiblePeriods filtered по
+periodFilter). Простое решение для MVP — 43 столбца × 3 строки
+помещаются легко. Для большего horizon можно вынести в server-side.
+
 ### Added (задача 3.4 — Frontend: Каналы)
 **Привязка SKU к каналам сбыта с авто-генерацией predict (закрытие Фазы 3):**
 

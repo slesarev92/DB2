@@ -3,9 +3,12 @@
 В отличие от Channel/Period (свои файлы), мелкие справочники
 объединены в один модуль `reference.py` чтобы не плодить файлы.
 """
+from datetime import date
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
+
+from app.models import PeriodType
 
 
 class RefInflationRead(BaseModel):
@@ -36,3 +39,21 @@ class RefSeasonalityRead(BaseModel):
     id: int
     profile_name: str
     month_coefficients: dict[str, Any]
+
+
+class PeriodRead(BaseModel):
+    """Справочник периодов: 36 monthly (M1..M36) + 7 yearly (Y4..Y10) = 43.
+
+    Используется frontend'ом для построения column structure в AG Grid
+    таблице периодов (задача 4.1).
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    type: PeriodType
+    period_number: int  # 1..43, глобальный sequential
+    model_year: int     # 1..10
+    month_num: int | None  # 1..12 для monthly, None для yearly
+    start_date: date
+    end_date: date

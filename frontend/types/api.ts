@@ -222,3 +222,99 @@ export interface RefSeasonality {
   profile_name: string;
   month_coefficients: Record<string, unknown>;
 }
+
+// ============================================================
+// Period (справочник 43 периодов)
+// ============================================================
+
+export type PeriodType = "monthly" | "annual";
+
+export interface Period {
+  id: number;
+  type: PeriodType;
+  period_number: number; // 1..43, sequential
+  model_year: number; // 1..10
+  month_num: number | null; // 1..12 для monthly, null для yearly
+  start_date: string; // ISO date
+  end_date: string;
+}
+
+// ============================================================
+// PeriodValue (трёхслойная модель: predict / finetuned / actual)
+// ============================================================
+
+export type SourceType = "predict" | "finetuned" | "actual";
+
+export type ViewMode = "hybrid" | "fact_only" | "plan_only" | "compare";
+
+/** Hybrid / fact_only / plan_only response item — один эффективный слой. */
+export interface PeriodHybridItem {
+  period_id: number;
+  period_number: number;
+  source_type: SourceType;
+  values: Record<string, number | string | null>;
+  is_overridden: boolean;
+}
+
+/** Compare view item — все три слоя одновременно. */
+export interface PeriodCompareItem {
+  period_id: number;
+  period_number: number;
+  predict: Record<string, number | string | null> | null;
+  finetuned: Record<string, number | string | null> | null;
+  actual: Record<string, number | string | null> | null;
+}
+
+export interface PatchPeriodValueResponse {
+  period_id: number;
+  scenario_id: number;
+  psk_channel_id: number;
+  source_type: SourceType;
+  version_id: number;
+  is_overridden: boolean;
+  values: Record<string, number | string | null>;
+}
+
+export interface ResetOverrideResponse {
+  deleted_versions: number;
+}
+
+// ============================================================
+// Scenario
+// ============================================================
+
+export type ScenarioType = "base" | "conservative" | "aggressive";
+export type PeriodScope = "y1y3" | "y1y5" | "y1y10";
+
+export interface ScenarioRead {
+  id: number;
+  project_id: number;
+  type: ScenarioType;
+  delta_nd: string;
+  delta_offtake: string;
+  delta_opex: string;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface ScenarioUpdate {
+  delta_nd?: string;
+  delta_offtake?: string;
+  delta_opex?: string;
+  notes?: string | null;
+}
+
+export interface ScenarioResultRead {
+  id: number;
+  scenario_id: number;
+  period_scope: PeriodScope;
+  npv: string | null;
+  irr: string | null;
+  roi: string | null;
+  payback_simple: string | null;
+  payback_discounted: string | null;
+  contribution_margin: string | null;
+  ebitda_margin: string | null;
+  go_no_go: boolean | null;
+  calculated_at: string;
+}
