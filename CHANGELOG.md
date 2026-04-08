@@ -9,6 +9,56 @@
 
 ## [Unreleased]
 
+### Added (задача 2.1 — Pipeline steps 1–5)
+**Расчётное ядро — первая половина pipeline:**
+
+- `backend/app/engine/context.py` — `PipelineInput` (frozen dataclass, иммутабельный вход)
+  и `PipelineContext` (мутабельный контейнер промежуточных результатов шагов).
+  `PipelineInput.__post_init__` валидирует длины всех массивов — падаем рано с
+  понятной ошибкой, не IndexError глубоко в шаге.
+- `backend/app/engine/steps/s01_volume.py` — `VOLUME_UNITS = UNIVERSE × ND × OFFTAKE × SEASONALITY`
+- `backend/app/engine/steps/s02_price.py` — price waterfall с **D-02/ADR-CE-03**:
+  `EX_FACTORY = SHELF_W / (1 + VAT) × (1 − CHANNEL_MARGIN)` (делим на 1+VAT, не умножаем на 1−VAT).
+- `backend/app/engine/steps/s03_cogs.py` — COGS из BOM (material+package lumped),
+  production % от ex_factory (**D-04**), copacking (0 в MVP).
+- `backend/app/engine/steps/s04_gross_profit.py` — `GP = NR − COGS` **без логистики** (Excel DATA row 23).
+- `backend/app/engine/steps/s05_contribution.py` — `CM = GP − LOGISTICS − PROJECT_OPEX`
+  где `LOGISTICS = cost_per_kg × volume_liters × density` (**D-09**).
+
+**Расхождение с первоначальной формулировкой 2.1 из плана:** логистика перенесена
+из s04 (Gross Profit) в s05 (Contribution) чтобы соответствовать Excel-семантике.
+Итоговая Contribution та же, но терминология критична для сверки с эталоном.
+ADR-CE-01 приоритетно.
+
+**Тесты** (`backend/tests/engine/`) — 25 pure-function тестов, ≈0.25 сек:
+
+*`test_steps_1_5.py`* (18 unit тестов):
+1. `TestVolume` — базовый, zero_nd, seasonality, multi_period (4)
+2. `TestPrice` — ADR-CE-03 VAT, promo waterfall, net_revenue, pre-condition (4)
+3. `TestCogs` — material_only, production_rate_on_ex_factory, all_three_components,
+   zero_volume (4)
+4. `TestGrossProfit` — GP = NR − COGS, логистика **не** влияет на GP (1)
+5. `TestContribution` — logistics + opex subtract, empty_opex=zeros, zero_density (3)
+6. `TestPipelineSmoke` — 3-period full run + input length validation (2)
+
+*`test_gorji_reference.py`* (7 acceptance тестов против GORJI+ Excel):
+Эталонные per-unit значения извлечены из `PASSPORT_MODEL_GORJI_2025-09-05.xlsx`,
+лист DASH, блок SKU_1 (Gorji Цитрус Газ Пэт 0,5 × канал HM), 6 месяцев (M1-M6).
+openpyxl использован одноразово через `docker cp + docker exec`, в requirements.txt
+не добавлен (назначен Фазе 5).
+
+1. `test_active_outlets_matches_dash_row_22` — universe=822 × nd[t] ↔ DASH row 22
+2. `test_price_waterfall_matches_dash_rows_30_35` — shelf_promo / weighted / ex_factory
+3. `test_gross_profit_per_unit_m1_m3` — GP/unit = 14.4293 ₽ (M1-M3, до инфляции)
+4. `test_gross_profit_per_unit_m4_m6` — GP/unit = 13.7450 ₽ (M4-M6, после апрельской +7%)
+5. `test_contribution_per_unit_m1_m3` — CM/unit = 10.4293 ₽
+6. `test_contribution_per_unit_m4_m6` — CM/unit = 9.4650 ₽
+7. `test_inflation_jump_m3_to_m4` — защитный assert: эталон M3 ≠ M4 (поймать если
+   тест "проходит" из-за одинакового эталона)
+
+Запуск: `docker compose -f infra/docker-compose.dev.yml exec backend pytest -v`
+→ **91 passed in 12.36s** (66 CRUD + 25 engine, 0 warnings).
+
 ### Added (задача 1.6 — Scenarios API)
 **Endpoints:**
 - `GET    /api/projects/{project_id}/scenarios` — 3 сценария проекта в порядке Base → Conservative → Aggressive

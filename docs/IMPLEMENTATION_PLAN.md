@@ -307,7 +307,7 @@ ref_seasonality    (id, profile_name, month_coefficients jsonb)
 
 **Цель:** pipeline рассчитывает все KPI корректно. Acceptance-критерий — сравнение с GORJI+ эталоном.
 
-#### Задача 2.1 — Pipeline steps 1–5 (объём, цены, COGS, GP)
+#### ✅ Задача 2.1 — Pipeline steps 1–5 (объём, цены, COGS, GP)
 
 **Что делаем** (`backend/app/engine/steps/`):
 
@@ -315,15 +315,28 @@ ref_seasonality    (id, profile_name, month_coefficients jsonb)
   где `ACTIVE_OUTLETS = UNIVERSE_OUTLETS × ND_PLAN`
 - `s02_price.py`: price waterfall — shelf_promo, shelf_weighted, ex_factory
   **Формула: D-02 из ADR-CE-03** → `EX_FACTORY = SHELF_WEIGHTED / (1+VAT) × (1-CM)`
-- `s03_cogs.py`: `COGS = (BOM_MATERIAL + BOM_PACKAGE) × VOLUME + SHIPPING_W × PRODUCTION_RATE × VOLUME + COPACKING × VOLUME`
-- `s04_gross_profit.py`: `GP = NET_REVENUE - COGS - LOGISTICS`
-- `s05_contribution.py`: `CM = GP - PROJECT_OPEX`
+- `s03_cogs.py`: `COGS = (BOM_MATERIAL + BOM_PACKAGE) × VOLUME + EX_FACTORY × PRODUCTION_RATE × VOLUME + COPACKING × VOLUME`
+- `s04_gross_profit.py`: **по Excel DATA row 23** `GP = NET_REVENUE − COGS` (без логистики).
+- `s05_contribution.py`: **по Excel DATA row 27** `CM = GP − LOGISTICS − PROJECT_OPEX`.
+
+Правка относительно первоначальной формулировки (2026-04-08, коммит Фазы 2.1):
+логистика перенесена из `s04` в `s05` чтобы соответствовать семантике Excel
+(Gross Profit не включает логистику; логистика — компонент Contribution).
+Итоговая Contribution та же, но правильная терминология критична для
+отладки и сверки с эталоном. ADR-CE-01 приоритетно.
 
 **Критерий готовности:**
-- Unit-тест каждого step с синтетическими данными
-- Интеграционный тест: шаги 1–5 с данными GORJI+ SKU_1/HM → GP совпадает с DATA!B23 ±0.01%
+- Unit-тест каждого step с синтетическими данными ✅ (18 тестов)
+- Интеграционный тест: шаги 1–5 с данными GORJI+ SKU_1/HM → per-unit GP
+  совпадает с DASH row 44 (14.43 ₽/unit M1-M3, 13.75 ₽/unit M4-M6
+  после апрельской инфляции) ±0.01% ✅ (7 тестов)
 
-**Как проверяем:** `pytest tests/engine/test_steps_1_5.py -v`.
+Вместо сверки с DATA!B23 (агрегат по всем SKU × каналам) сверяемся с
+DASH row 44/46 per-unit значениями SKU_1/HM — это точнее валидирует
+формулы отдельного шага, а агрегация по SKU/каналам будет тестироваться
+в задаче 2.4 (оркестратор).
+
+**Как проверяем:** `pytest tests/engine/ -v` ✅ 25/25 зелёные.
 
 **Зависимости:** 0.4.
 
@@ -710,14 +723,14 @@ ref_seasonality    (id, profile_name, month_coefficients jsonb)
 - [x] 1.5 PeriodValues API ✅ (2026-04-08, 12/12 pytest зелёные, трёхслойная модель + 4 view modes + append-only versioning)
 - [x] 1.6 Scenarios API ✅ (2026-04-08, 9/9 pytest зелёные, GET/PATCH дельт + results с actionable 404)
 
-### Фаза 2 — Расчётное ядро (← следующий шаг: задача 2.1)
+### Фаза 2 — Расчётное ядро (← следующий шаг: задача 2.2)
 **Архитектурные решения для всей фазы (одобрены пользователем):**
 - Pipeline = pure functions, композиция через оркестратор (не классы, не DataFrame)
 - `PipelineInput` dataclass формируется service'ом, pipeline не ходит в БД
 - float internally, Decimal на границах (БД ↔ memory). Excel модель тоже float, точность ~15 знаков для NPV в миллионах достаточна
 - numpy-financial добавится в задаче 2.3 (для IRR/NPV функций), не раньше
 - Эталонные значения из GORJI Excel захардкожены в тестах — не зависят от наличия xlsx
-- [ ] 2.1 Pipeline steps 1–5
+- [x] 2.1 Pipeline steps 1–5 ✅ (2026-04-08, 25/25 pytest зелёные, сверено с DASH SKU_1/HM per-unit)
 - [ ] 2.2 Pipeline steps 6–9
 - [ ] 2.3 Pipeline steps 10–12 + acceptance-тест
 - [ ] 2.4 Celery orchestration
