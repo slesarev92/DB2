@@ -696,13 +696,13 @@ ref_seasonality    (id, profile_name, month_coefficients jsonb)
 
 ## РАЗДЕЛ 4 — Статус выполнения
 
-### Фаза 0 — Фундамент
+### ✅ Фаза 0 — Фундамент (закрыта 2026-04-08, 7 коммитов)
 - [x] 0.1 Инициализация структуры и Git ✅ (commit b10aef8, 2026-04-08)
 - [x] 0.2 Docker Compose (dev) ✅ (2026-04-08, все 5 сервисов healthy, /health + localhost:3000 зелёные)
 - [x] 0.3 Схема базы данных ✅ (2026-04-08, миграция 1c05696e13e6, 14 таблиц, upgrade/downgrade проверены)
 - [x] 0.4 Справочные данные (seed) ✅ (2026-04-08, 43 periods + 25 channels + 16 inflation + 6 seasonality, идемпотентно)
 
-### Фаза 1 — Backend CRUD API
+### ✅ Фаза 1 — Backend CRUD API (закрыта 2026-04-08, 6 коммитов, **66/66 pytest**, 37 endpoints)
 - [x] 1.1 Auth endpoints ✅ (2026-04-08, 8/8 pytest зелёные)
 - [x] 1.2 Projects API ✅ (2026-04-08, 12/12 pytest зелёные, soft delete + auto-scenarios)
 - [x] 1.3 SKU и BOM API ✅ (2026-04-08, 14/14 pytest зелёные, COGS preview, savepoint pattern)
@@ -710,7 +710,13 @@ ref_seasonality    (id, profile_name, month_coefficients jsonb)
 - [x] 1.5 PeriodValues API ✅ (2026-04-08, 12/12 pytest зелёные, трёхслойная модель + 4 view modes + append-only versioning)
 - [x] 1.6 Scenarios API ✅ (2026-04-08, 9/9 pytest зелёные, GET/PATCH дельт + results с actionable 404)
 
-### Фаза 2 — Расчётное ядро
+### Фаза 2 — Расчётное ядро (← следующий шаг: задача 2.1)
+**Архитектурные решения для всей фазы (одобрены пользователем):**
+- Pipeline = pure functions, композиция через оркестратор (не классы, не DataFrame)
+- `PipelineInput` dataclass формируется service'ом, pipeline не ходит в БД
+- float internally, Decimal на границах (БД ↔ memory). Excel модель тоже float, точность ~15 знаков для NPV в миллионах достаточна
+- numpy-financial добавится в задаче 2.3 (для IRR/NPV функций), не раньше
+- Эталонные значения из GORJI Excel захардкожены в тестах — не зависят от наличия xlsx
 - [ ] 2.1 Pipeline steps 1–5
 - [ ] 2.2 Pipeline steps 6–9
 - [ ] 2.3 Pipeline steps 10–12 + acceptance-тест
