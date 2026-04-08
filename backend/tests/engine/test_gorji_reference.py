@@ -179,16 +179,23 @@ def _build_input_for_range(
     start: int,
     end: int,
 ) -> tuple[PipelineInput, list[float], list[float]]:
-    """Строит PipelineInput для периодов [start, end) — где bom_unit_cost
-    и logistics_per_kg постоянны.
+    """Строит PipelineInput для периодов [start, end) с per-period BOM.
+
+    После задачи 4.2.1 (Discovery fix) `bom_unit_cost` — tuple, что
+    позволяет применять инфляцию на материалы по периодам. Теперь
+    тестируем M1-M6 одним вызовом, не двумя.
 
     Returns: (input, expected_gp_per_unit, expected_cm_per_unit)
     """
-    # Внутри M1-M3 все статические значения одинаковы; в M4-M6 — тоже.
-    # Берём первое значение из диапазона как константу для всего диапазона.
-    bom_unit_cost = GORJI_MATERIAL[start] + GORJI_PACKAGE[start]
-    logistic_kg = GORJI_LOGISTIC_KG[start]
     n = end - start
+
+    # bom_unit_cost per-period: material[t] + package[t] из GORJI Excel
+    bom_per_period = tuple(
+        GORJI_MATERIAL[i] + GORJI_PACKAGE[i] for i in range(start, end)
+    )
+    # logistics_cost_per_kg тоже меняется по апрельской инфляции, но в нашей
+    # текущей PipelineInput модели это константа. Для теста берём первый период.
+    logistic_kg = GORJI_LOGISTIC_KG[start]
 
     inp = PipelineInput(
         project_sku_channel_id=1,
@@ -206,7 +213,7 @@ def _build_input_for_range(
         promo_discount=GORJI_PROMO_DISCOUNT,
         promo_share=GORJI_PROMO_SHARE,
         vat_rate=GORJI_VAT_RATE,
-        bom_unit_cost=bom_unit_cost,
+        bom_unit_cost=bom_per_period,
         production_cost_rate=GORJI_PROD_RATE,
         copacking_per_unit=0.0,
         logistics_cost_per_kg=logistic_kg,

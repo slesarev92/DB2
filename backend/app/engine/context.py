@@ -60,9 +60,12 @@ class PipelineInput:
 
     # --- COGS-компоненты на единицу продукции ---
     # Σ BOMItem.quantity_per_unit × price_per_unit × (1 + loss_pct).
-    # В текущей модели BOMItem не разделяет material/package — это
-    # лампованная сумма. Позже можно разделить без изменения pipeline.
-    bom_unit_cost: float            # ₽/unit, постоянная на горизонте (в MVP)
+    # Per-period: длины period_count, чтобы поддерживать инфляцию на
+    # сырьё/упаковку (Excel DASH row 36/37 растёт по апрельскому/
+    # октябрьскому профилю). Базовое значение из BOMItem умножается
+    # на накопительный inflation_profile через `inflate_series` в
+    # `calculation_service.build_line_inputs`.
+    bom_unit_cost: tuple[float, ...]
     production_cost_rate: float     # ProjectSKU.production_cost_rate (доля от ex_factory)
     copacking_per_unit: float       # ₽/unit. В MVP всегда 0.0 (нет поля в схеме).
 
@@ -106,6 +109,7 @@ class PipelineInput:
             ("offtake", self.offtake),
             ("shelf_price_reg", self.shelf_price_reg),
             ("seasonality", self.seasonality),
+            ("bom_unit_cost", self.bom_unit_cost),
         ]:
             if len(seq) != n:
                 raise ValueError(

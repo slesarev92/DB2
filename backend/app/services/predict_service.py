@@ -92,35 +92,32 @@ def _ramp_values(
     return out
 
 
-def _shelf_price_series(
-    base_price: float,
+def inflate_series(
+    base_value: float,
     sorted_periods: list[Period],
     inflation_profile: RefInflation | None,
 ) -> list[float]:
-    """Применяет инфляционный профиль к базовой shelf price.
+    """Применяет инфляционный профиль к базовому значению.
 
-    Алгоритм:
-    - Для monthly периодов (M1..M36): shelf[t] = shelf[t-1] × (1 + monthly_deltas[month_num-1])
-      М1 — стартует с base_price без модификации (даже если monthly_deltas[0] != 0;
-      ступенька применяется при ПЕРЕХОДЕ в этот месяц).
+    **Используется для:**
+    - shelf price (predict-слой автогенерации, эта функция в predict_service)
+    - bom material/package cost (calculation_service._build_line_input —
+      Excel применяет инфляцию к row 36/37 DASH тем же профилем что и shelf)
 
-      Wait — тогда как обработать M1 если monthly_deltas[0] (январь) > 0? Всё-таки
-      delta применяется ПРИ ПЕРЕХОДЕ в месяц, т.е. shelf[M1] = base × (1 + delta[Jan])?
+    Алгоритм (D-08):
+    - Для monthly периодов (M1..M36):
+      `value[t] = value[t-1] × (1 + monthly_deltas[month_num-1])`
+      Дельта применяется на каждый месяц, включая первый. Для профиля
+      `Апрель/Октябрь +7%` ступеньки только в монтх_num=4 и 10, остальные
+      months delta = 0 → значение константа в эти месяцы.
+    - Для yearly периодов (Y4..Y10):
+      `value[Yk] = value[предыдущего] × (1 + yearly_growth[k-4])`
 
-      Excel D-08 говорит: "SHELF_PRICE_REG[t] = SHELF_PRICE_REG[t-1] × (1 + MONTHLY_INFLATION[t])".
-      Это значит дельта применяется на каждый месяц, включая первый. shelf[M1] = base × (1 + delta[Jan]).
-
-      В GORJI тестах extracted: M1 (январь 2024) = 74.99, M2 (февраль) = 74.99, ..., M4 (апрель) = 74.99.
-      Цена не растёт в апреле! Значит инфляция в shelf не была применена в этой части модели.
-
-      Поэтому реализуем формулу D-08 буквально, но если профиль = "No_Inflation" или
-      все коэффициенты 0 → shelf константа.
-
-    - Для yearly периодов (Y4..Y10): shelf[Yk] = shelf[предыдущего] × (1 + yearly_growth[k-4]).
+    Если профиль None или все коэффициенты 0 → возвращает константу.
     """
     n = len(sorted_periods)
     if inflation_profile is None:
-        return [base_price] * n
+        return [base_value] * n
 
     raw = inflation_profile.month_coefficients or {}
     monthly_deltas: list[float] = []
@@ -135,19 +132,22 @@ def _shelf_price_series(
         yearly_growth = [0.0] * 7
 
     out: list[float] = []
-    prev_price = base_price
+    prev = base_value
     for period in sorted_periods:
         if period.type == PeriodType.MONTHLY and period.month_num is not None:
-            # Применяем месячную дельту при переходе
             delta = monthly_deltas[period.month_num - 1] if 0 <= period.month_num - 1 < 12 else 0.0
-            prev_price = prev_price * (1.0 + delta)
+            prev = prev * (1.0 + delta)
         else:
-            # Yearly период (Y4..Y10): индекс в yearly_growth = model_year - 4
             idx = period.model_year - 4
             growth = yearly_growth[idx] if 0 <= idx < len(yearly_growth) else 0.0
-            prev_price = prev_price * (1.0 + growth)
-        out.append(prev_price)
+            prev = prev * (1.0 + growth)
+        out.append(prev)
     return out
+
+
+# Backward-compat alias для совместимости с существующими тестами
+# (test_predict_service.py использует _shelf_price_series).
+_shelf_price_series = inflate_series
 
 
 async def fill_predict_for_psk_channel(
@@ -215,7 +215,7 @@ async def fill_predict_for_psk_channel(
     )
 
     base_shelf = float(psk_channel.shelf_price_reg)
-    shelf_series = _shelf_price_series(base_shelf, sorted_periods, inflation_profile)
+    shelf_series = inflate_series(base_shelf, sorted_periods, inflation_profile)
 
     # 6. Удаляем старый predict для этого psc по всем сценариям
     await session.execute(

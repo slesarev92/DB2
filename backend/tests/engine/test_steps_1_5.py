@@ -29,8 +29,22 @@ def make_input(**overrides) -> PipelineInput:
 
     По умолчанию — один период, нейтральные значения, без инфляции,
     без сезонности. Переопределяй нужные поля через kwargs.
+
+    `bom_unit_cost` принимает либо float (для удобства тестов — будет
+    раскрыт в tuple длины period_count), либо tuple напрямую.
     """
     n = overrides.pop("period_count", 1)
+
+    # Удобная конвертация: если bom_unit_cost передан как float, делаем
+    # tuple длины n. Если уже tuple — оставляем как есть.
+    bom_override = overrides.pop("bom_unit_cost", None)
+    if bom_override is None:
+        bom_unit_cost: tuple[float, ...] = (10.0,) * n
+    elif isinstance(bom_override, (int, float)):
+        bom_unit_cost = (float(bom_override),) * n
+    else:
+        bom_unit_cost = tuple(bom_override)
+
     defaults: dict = {
         "project_sku_channel_id": 1,
         "scenario_id": 1,
@@ -47,7 +61,7 @@ def make_input(**overrides) -> PipelineInput:
         "promo_discount": 0.0,
         "promo_share": 0.0,
         "vat_rate": 0.20,
-        "bom_unit_cost": 10.0,
+        "bom_unit_cost": bom_unit_cost,
         "production_cost_rate": 0.0,
         "copacking_per_unit": 0.0,
         "logistics_cost_per_kg": 0.0,
@@ -408,7 +422,7 @@ class TestPipelineSmoke:
                 promo_discount=0.0,
                 promo_share=0.0,
                 vat_rate=0.20,
-                bom_unit_cost=10.0,
+                bom_unit_cost=(10.0, 10.0, 10.0),
                 production_cost_rate=0.0,
                 copacking_per_unit=0.0,
                 logistics_cost_per_kg=0.0,

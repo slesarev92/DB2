@@ -189,22 +189,33 @@ async def _build_line_input(
     psc: ProjectSKUChannel,
     scenario: Scenario,
     sorted_periods: list[Period],
+    inflation_profile: "RefInflation | None" = None,
 ) -> PipelineInput:
     """Собирает PipelineInput для одной (psk × psc × scenario) линии."""
     # Effective values по периодам
     effective = await _fetch_effective_values(session, psc.id, scenario.id)
 
-    # BOM unit cost: Σ(quantity × price × (1 + loss_pct))
+    # BOM unit cost: Σ(quantity × price × (1 + loss_pct)) — БАЗОВОЕ значение
+    # (на M1 до инфляции). Per-period серия строится через inflate_series ниже.
     bom_rows = (
         await session.scalars(
             select(BOMItem).where(BOMItem.project_sku_id == psk.id)
         )
     ).all()
-    bom_unit_cost = 0.0
+    bom_unit_cost_base = 0.0
     for b in bom_rows:
-        bom_unit_cost += float(
+        bom_unit_cost_base += float(
             b.quantity_per_unit * b.price_per_unit * (Decimal("1") + b.loss_pct)
         )
+
+    # Инфляционная серия BOM по periods. Excel применяет тот же
+    # inflation_profile к row 36/37 DASH что и к shelf_price (D-08).
+    # Для consistency используем тот же helper из predict_service.
+    from app.services.predict_service import inflate_series
+
+    bom_unit_cost_series = inflate_series(
+        bom_unit_cost_base, sorted_periods, inflation_profile
+    )
 
     # Channel.universe_outlets
     channel_obj = await session.get(Channel, psc.channel_id)
@@ -267,7 +278,7 @@ async def _build_line_input(
         promo_discount=float(psc.promo_discount),
         promo_share=float(psc.promo_share),
         vat_rate=float(project.vat_rate),
-        bom_unit_cost=bom_unit_cost,
+        bom_unit_cost=tuple(bom_unit_cost_series),
         production_cost_rate=float(psk.production_cost_rate),
         copacking_per_unit=0.0,  # MVP: нет поля в схеме
         logistics_cost_per_kg=float(psc.logistics_cost_per_kg),
@@ -319,6 +330,17 @@ async def build_line_inputs(
 
     sorted_periods, _ = await _load_period_catalog(session)
 
+    # Inflation profile проекта (опц.) — нужен для inflate_series в
+    # _build_line_input. Загружаем один раз на проект, переиспользуем
+    # для всех линий.
+    from app.models import RefInflation
+
+    inflation_profile: RefInflation | None = None
+    if project.inflation_profile_id is not None:
+        inflation_profile = await session.get(
+            RefInflation, project.inflation_profile_id
+        )
+
     inputs: list[PipelineInput] = []
     for psk in psk_rows:
         # ProjectSKUChannel'ы для этого PSK
@@ -337,6 +359,7 @@ async def build_line_inputs(
                 psc=psc,
                 scenario=scenario,
                 sorted_periods=sorted_periods,
+                inflation_profile=inflation_profile,
             )
             inputs.append(inp)
 

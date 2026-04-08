@@ -201,7 +201,12 @@ class TestBuildLineInputs:
         assert inp.vat_rate == pytest.approx(0.20)  # default Project
         assert inp.wacc == pytest.approx(0.19)
         assert inp.wc_rate == pytest.approx(0.12)
-        assert inp.bom_unit_cost == pytest.approx(10.0)  # 1 × 10 × (1+0)
+        # bom_unit_cost теперь tuple длины 43 (per-period для инфляции).
+        # Без inflation profile у тестового проекта серия должна быть
+        # константой = базовое значение (1 × 10 × (1+0)).
+        assert len(inp.bom_unit_cost) == 43
+        assert inp.bom_unit_cost[0] == pytest.approx(10.0)
+        assert all(v == pytest.approx(10.0) for v in inp.bom_unit_cost)
         # Effective values из PeriodValue (auto-fill после задачи 2.5):
         # ND рамп-ап от 0.001 × 0.20 = 0.0002 за 12 месяцев до 0.001
         # Y4..Y10 = 0.001 (плато)
