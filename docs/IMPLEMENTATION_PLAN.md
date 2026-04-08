@@ -828,9 +828,41 @@ BOM) и ChannelsTab (для каналов) без модификации — se
 - Если task FAILURE — error message с причиной
 - Timeout 60 сек с понятным сообщением
 - `npx tsc --noEmit` → 0 ошибок ✅
-- Backend pytest **196/196** зелёные ✅
+- Backend pytest **204/204** зелёные ✅
+
+**Дополнения по итогам визуальной проверки 4.2** (3 связанных коммита
+после 4.2 main commit, см. ERRORS_AND_ISSUES.md):
+
+1. **`bfd3226` — ProjectFinancialPlan CRUD + ROI precision + Celery async**
+   - Миграция `65003c0135cc`: ROI Numeric(10,6) → (20,6). Excel D-06 quirk
+     при всех положительных FCF выдаёт mean FCF в ₽, не помещалось в (10,6).
+   - `GET/PUT /api/projects/{id}/financial-plan` для CAPEX/OPEX по годам.
+     Маппинг year → первый period_id model_year.
+   - `FinancialPlanEditor` UI компонент в табе "Параметры".
+   - Фикс Celery async: локальный engine с NullPool в task'е (global
+     async_session_maker не работал в Celery prefork — "Future attached
+     to a different loop").
+   - Worker не видел task — нужен `docker compose restart celery-worker`
+     после изменений `worker.py`.
+
+2. **`c5cc6ab` — per-period bom_unit_cost + inflate_series для BOM**
+   - `PipelineInput.bom_unit_cost: float → tuple[float, ...]`. Excel
+     применяет инфляцию к row 36/37 DASH (material/package) тем же
+     профилем что и к shelf_price.
+   - `_shelf_price_series` → public `inflate_series`, переиспользуется
+     для shelf и BOM.
+   - Discovery скрипт `import_gorji_sku1_hm.py` подтвердил полный
+     match per-line на M1-M6 (rel 1e-6) включая инфляционную ступеньку
+     M3→M4 (-7%).
+   - **Закрытие архитектурного долга 2.4:** workaround в test_gorji_
+     reference (две PipelineInput для M1-M3 и M4-M6 отдельно) скрывал
+     что one-pass прогон не воспроизводит инфляцию на BOM.
 
 **Зависимости:** 4.1, 2.4.
+
+**Sub-task:** 4.2.1 — полный GORJI import (Variant 2 после Discovery V1).
+Создаёт reference project из всех SKU × каналов Excel, сравнивает
+финальные KPI с эталонными NPV/IRR/ROI/Payback из DATA sheet.
 
 ---
 
