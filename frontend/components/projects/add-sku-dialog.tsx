@@ -164,7 +164,7 @@ export function AddSkuDialog({
               <Label htmlFor="sku-select">SKU из каталога</Label>
               <Select
                 value={selectedSkuId}
-                onValueChange={setSelectedSkuId}
+                onValueChange={(v) => setSelectedSkuId(v ?? "")}
                 disabled={submitting}
               >
                 <SelectTrigger id="sku-select">

@@ -47,9 +47,12 @@ export default function ProjectsPage() {
             показывает базовые KPI после расчёта.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/projects/new">Создать проект</Link>
-        </Button>
+        {/* shadcn Button у нас без `asChild` Slot — оборачиваем Link
+            снаружи, чтобы получить тот же визуал и navigate без runtime
+            обработчика. */}
+        <Link href="/projects/new">
+          <Button type="button">Создать проект</Button>
+        </Link>
       </div>
 
       {error !== null && (

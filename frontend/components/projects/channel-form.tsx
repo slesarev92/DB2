@@ -127,7 +127,7 @@ export function ChannelForm({
         <Label htmlFor="channel_id">Канал *</Label>
         <Select
           value={state.channel_id}
-          onValueChange={(v) => update("channel_id", v)}
+          onValueChange={(v) => update("channel_id", v ?? "")}
           disabled={disabled || channelLocked}
         >
           <SelectTrigger id="channel_id">
@@ -269,7 +269,7 @@ export function ChannelForm({
             onValueChange={(v) =>
               update(
                 "seasonality_profile_id",
-                v === NO_SEASONALITY ? "" : v,
+                v === null || v === NO_SEASONALITY ? "" : v,
               )
             }
             disabled={disabled}
