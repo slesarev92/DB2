@@ -161,6 +161,44 @@ project/
 [ ] .env файлы не попали в коммит
 [ ] Миграции актуальны
 
+### Frontend проверки перед коммитом (обязательно)
+
+**`npx tsc --noEmit` — 0 ошибок.** Самая важная проверка. Ловит
+отсутствующие импорты, undefined references, несоответствия типов.
+HTTP 200 на маршрут НЕ достаточен — Next.js dev mode радостно
+компилирует и отдаёт страницу даже с `X is not defined` в коде,
+а runtime ошибка вылезет только когда React реально рендерит
+компонент в браузере (пропускал дважды, см. коммит e48d3b4).
+
+```bash
+docker compose -f infra/docker-compose.dev.yml exec frontend npx tsc --noEmit
+```
+
+**При структурных изменениях — full restart контейнера, не HMR.**
+HMR на Windows + Docker volume mount ненадёжен для новых route groups,
+новых импортов и файлов. Признаки: страница показывает старую версию
+несмотря на правки, `X is not defined` runtime error после Edit.
+
+```bash
+docker compose -f infra/docker-compose.dev.yml restart frontend
+```
+
+**При странностях после изменений — очистка `.next` build volume.**
+Next.js build cache иногда держит старую версию модулей.
+
+```bash
+docker compose -f infra/docker-compose.dev.yml stop frontend
+docker run --rm -v dbpassport-dev_frontend_next:/clean alpine \
+    sh -c 'rm -rf /clean/* /clean/.*'
+docker compose -f infra/docker-compose.dev.yml start frontend
+```
+
+**Визуальная проверка в браузере — после tsc.** Не утверждать что
+задача закрыта, пока пользователь не подтвердит визуально что новый
+функционал реально работает в браузере. SSR HTML для /(app)/*
+маршрутов — это только loading spinner (auth restore на клиенте),
+поэтому curl scraping не показывает реальный контент.
+
 Формат коммита:
 тип(область): краткое описание
 Подробности если нужны.
@@ -231,6 +269,14 @@ Pipeline расчёта строго по шагам из Data Dictionary
 
 При любом расхождении между ТЗ и Excel-моделью — реализуется формула из Excel.
 Все выявленные расхождения задокументированы в `docs/TZ_VS_EXCEL_DISCREPANCIES.md`.
+
+**Все замечания в TZ_VS_EXCEL_DISCREPANCIES.md подтверждены пользователем
+и являются финальными решениями — не пересматривать без явного запроса.**
+Это относится к D-01 ... D-12 включительно, в том числе:
+- D-12 (Excel typo в формуле NPV/ROI/IRR Y1-Y5 — 6 столбцов вместо 5)
+  реализован как в Excel (верифицирован повторно через openpyxl
+  в коммите 111218f). Если бизнес позже скажет "исправить" —
+  правка в одной строке `SCOPE_BOUNDS` в `s11_kpi.py`.
 
 Критические расхождения (не использовать ТЗ-формулы):
 - **D-01 OCF:** `OCF = CONTRIBUTION + ΔWC + TAX`, где `ΔWC = WC[t-1] − WC[t]`,
