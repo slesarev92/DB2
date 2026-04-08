@@ -267,7 +267,7 @@ ref_seasonality    (id, profile_name, month_coefficients jsonb)
 
 ---
 
-#### Задача 1.5 — PeriodValues API
+#### ✅ Задача 1.5 — PeriodValues API
 
 **Что делаем:**
 - `GET /api/project-sku-channels/{id}/values?scenario_id=&view_mode=hybrid` — значения по периодам с применением приоритета слоёв
@@ -707,7 +707,7 @@ ref_seasonality    (id, profile_name, month_coefficients jsonb)
 - [x] 1.2 Projects API ✅ (2026-04-08, 12/12 pytest зелёные, soft delete + auto-scenarios)
 - [x] 1.3 SKU и BOM API ✅ (2026-04-08, 14/14 pytest зелёные, COGS preview, savepoint pattern)
 - [x] 1.4 Channels API ✅ (2026-04-08, 11/11 pytest зелёные, read-only справочник + ProjectSKUChannel CRUD)
-- [ ] 1.5 PeriodValues API
+- [x] 1.5 PeriodValues API ✅ (2026-04-08, 12/12 pytest зелёные, трёхслойная модель + 4 view modes + append-only versioning)
 - [ ] 1.6 Scenarios API
 
 ### Фаза 2 — Расчётное ядро

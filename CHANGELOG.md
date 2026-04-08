@@ -9,6 +9,55 @@
 
 ## [Unreleased]
 
+### Added (задача 1.5 — PeriodValues API + трёхслойная модель данных)
+Материализация ADR-05 (трёхслойная модель `predict / finetuned / actual` с приоритетом `actual > finetuned > predict`) и версионирование fine-tuned значений.
+
+**Endpoints:**
+- `GET    /api/project-sku-channels/{id}/values?scenario_id=&view_mode=hybrid` — значения по периодам с применением приоритета слоёв. 4 view modes: `hybrid` (default), `fact_only`, `plan_only`, `compare`
+- `PATCH  /api/project-sku-channels/{id}/values/{period_id}?scenario_id=` — fine-tune. Append-only: создаёт новую строку с `version_id = MAX + 1`, `is_overridden=true`. Старые версии остаются как audit log
+- `DELETE /api/project-sku-channels/{id}/values/{period_id}/override?scenario_id=` — сброс к predict. Удаляет ВСЕ finetuned версии для периода. Идемпотентно — если не было finetuned, вернёт `deleted_versions=0`
+
+**Service** (`backend/app/services/period_value_service.py`):
+- `validate_context(psk_channel_id, scenario_id, period_id)` — проверка цепочки и бизнес-инварианта (scenario должен принадлежать тому же проекту, что и psk_channel). Custom exceptions: `PSKChannelNotFoundError`, `PeriodNotFoundError`, `ScenarioMismatchError`
+- `get_values_hybrid` — один проход по всем строкам для (psk_channel, scenario), группировка в Python через `_resolve_priority`. Для каждого слоя берётся latest version, потом применяется приоритет actual > finetuned > predict
+- `get_values_fact_only` — только actual-слой, latest version per period
+- `get_values_plan_only` — `_resolve_priority(exclude_actual=True)`. Возвращает finetuned (если есть) или predict
+- `get_values_compare` — все три слоя в одной структуре `CompareResponseItem` с полями `predict`, `finetuned`, `actual` (None если слоя нет)
+- `patch_value` — append-only: `SELECT MAX(version_id) WHERE finetuned ... + 1`, INSERT новой строки
+- `reset_value_to_predict` — `DELETE WHERE source_type=finetuned AND ...`, возвращает rowcount
+
+**Pydantic схемы** (`backend/app/schemas/period_value.py`):
+- `ViewMode` enum (str)
+- `PeriodValueWrite` — тело PATCH (только `values: dict[str, Any]`, JSONB произвольной формы — в MVP только входные показатели по решению пользователя)
+- `HybridResponseItem`, `CompareResponseItem`, `PatchPeriodValueResponse`, `ResetOverrideResponse`
+
+**Endpoint особенности:**
+- `view_mode` через query param, response shape зависит от значения. `response_model=Any` потому что union response model в FastAPI путает OpenAPI генерацию. Frontend знает что ожидать по тому какой view_mode передал
+- `scenario_id` обязательный query parameter (без него непонятно к какому сценарию относятся values)
+- Бизнес-валидация scenario↔project работает через `validate_context` — без неё можно было бы создать PeriodValue с scenario из чужого проекта, чего FK constraints отдельно не проверяют
+
+**Тесты** (`backend/tests/api/test_period_values.py`) — 12 кейсов:
+1. PATCH создаёт finetuned v1, is_overridden=True
+2. PATCH дважды → version_id=1, 2 (append-only, обе строки в БД)
+3. GET hybrid с только predict → возвращает predict
+4. GET hybrid: finetuned побеждает predict
+5. GET hybrid: actual побеждает finetuned и predict
+6. GET hybrid: берёт latest finetuned версию (3 PATCH → возвращает values из v3)
+7. fact_only: только actual, периоды без actual не возвращаются
+8. plan_only: actual игнорируется, finetuned побеждает predict
+9. compare: все 3 слоя в одной структуре CompareResponseItem
+10. DELETE override удаляет ВСЕ finetuned версии (3 PATCH → DELETE → 0 finetuned в БД)
+11. DELETE override + GET hybrid → возвращает predict
+12. PATCH с scenario из чужого проекта → 400 (бизнес-инвариант)
+
+Тесты создают predict и actual слои напрямую через `db_session.add(PeriodValue(...))`, потому что:
+- predict в задаче 1.5 не генерируется автоматически (это задача 2.5)
+- endpoint для записи actual в backlog B-02 (импорт из Excel)
+
+Эти решения зафиксированы как осознанные — архитектурная поддержка через `source_type` enum и приоритет в hybrid view готова, само наполнение слоёв — отдельные задачи.
+
+Запуск: `docker compose -f infra/docker-compose.dev.yml exec backend pytest -v` → **57 passed in 10.83s** (8 auth + 12 projects + 14 skus + 11 channels + 12 period_values, 0 warnings).
+
 ### Added (задача 1.4 — Channels API + ProjectSKUChannel CRUD)
 - **Channels read-only API** (вариант A одобрен — каналы устойчивая бизнес-структура, наполняются seed-скриптом, в MVP не редактируются через UI):
   - `GET /api/channels` — список всех каналов из справочника (25 шт. из GORJI DASH MENU)
