@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { ChannelsTab } from "@/components/projects/channels-tab";
+import { PeriodsTab } from "@/components/projects/periods-tab";
 import { SkusTab } from "@/components/projects/skus-tab";
 import { Button } from "@/components/ui/button";
 import {
