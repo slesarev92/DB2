@@ -122,7 +122,7 @@ MVP считается готовым когда:
 
 ---
 
-#### Задача 0.3 — Схема базы данных (core)
+#### ✅ Задача 0.3 — Схема базы данных (core)
 
 **Что делаем:** SQLAlchemy models + Alembic миграция `0001_initial_schema.py`.
 
@@ -696,7 +696,7 @@ ref_seasonality    (id, profile_name, month_coefficients jsonb)
 ### Фаза 0 — Фундамент
 - [x] 0.1 Инициализация структуры и Git ✅ (commit b10aef8, 2026-04-08)
 - [x] 0.2 Docker Compose (dev) ✅ (2026-04-08, все 5 сервисов healthy, /health + localhost:3000 зелёные)
-- [ ] 0.3 Схема базы данных
+- [x] 0.3 Схема базы данных ✅ (2026-04-08, миграция 1c05696e13e6, 14 таблиц, upgrade/downgrade проверены)
 - [ ] 0.4 Справочные данные (seed)
 
 ### Фаза 1 — Backend CRUD API

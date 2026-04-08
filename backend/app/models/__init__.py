@@ -1,1 +1,55 @@
-"""SQLAlchemy ORM-модели."""
+"""SQLAlchemy ORM-модели цифрового паспорта проекта.
+
+Подробнее: app/models/base.py (Base, миксины, перечисления),
+app/models/entities.py (доменные модели).
+"""
+from app.models.base import (
+    Base,
+    PeriodScope,
+    PeriodType,
+    ScenarioType,
+    SourceType,
+    TimestampMixin,
+    UserRole,
+)
+from app.models.entities import (
+    BOMItem,
+    Channel,
+    Period,
+    PeriodValue,
+    Project,
+    ProjectSKU,
+    ProjectSKUChannel,
+    RefInflation,
+    RefSeasonality,
+    SKU,
+    Scenario,
+    ScenarioResult,
+    User,
+)
+
+__all__ = [
+    # Base
+    "Base",
+    "TimestampMixin",
+    # Enums
+    "PeriodScope",
+    "PeriodType",
+    "ScenarioType",
+    "SourceType",
+    "UserRole",
+    # Entities
+    "BOMItem",
+    "Channel",
+    "Period",
+    "PeriodValue",
+    "Project",
+    "ProjectSKU",
+    "ProjectSKUChannel",
+    "RefInflation",
+    "RefSeasonality",
+    "SKU",
+    "Scenario",
+    "ScenarioResult",
+    "User",
+]

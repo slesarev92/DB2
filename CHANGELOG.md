@@ -9,6 +9,18 @@
 
 ## [Unreleased]
 
+### Added (задача 0.3 — Схема базы данных)
+- `backend/app/models/base.py` — `Base` (DeclarativeBase), `TimestampMixin`, 5 enums (`ScenarioType`, `SourceType`, `PeriodType`, `PeriodScope`, `UserRole`), helper `varchar_enum()` для VARCHAR + CHECK enums с lowercase значениями
+- Naming convention для constraints (`pk_/uq_/fk_/ck_/ix_`) — стабильные имена в миграциях, корректный downgrade
+- `backend/app/models/entities.py` — 13 ORM-моделей: `User`, `RefInflation`, `RefSeasonality`, `SKU`, `Channel`, `Period`, `Project`, `Scenario`, `ProjectSKU`, `ProjectSKUChannel`, `BOMItem`, `PeriodValue` (JSONB по ADR-04), `ScenarioResult`. Все денежные/процентные поля — `Numeric` (точность критична для NPV/IRR)
+- `backend/app/db/__init__.py` — async SQLAlchemy engine, session factory, FastAPI dependency `get_db()`
+- `backend/alembic.ini` + `backend/migrations/env.py` — Alembic с автоподменой `+asyncpg` → `+psycopg` для sync миграций
+- `backend/migrations/versions/1c05696e13e6_initial_schema.py` — первая миграция, 14 таблиц (13 моделей + alembic_version), 13 foreign keys, 10 unique constraints
+- В `backend/requirements.txt` добавлены: `sqlalchemy[asyncio]>=2.0.36`, `alembic>=1.14`, `asyncpg>=0.30`, `psycopg[binary]>=3.2`
+- Backend и celery-worker образы пересобраны с новыми зависимостями (375 MB, +83 MB)
+
+Проверки выполнены против живой БД в compose: `alembic upgrade head` → `\dt` (14 таблиц) → `alembic downgrade -1` → `\dt` (1 таблица alembic_version) → `alembic upgrade head` → `\dt` (14 таблиц).
+
 ### Added (задача 0.2 — Docker Compose dev environment)
 - `infra/docker-compose.dev.yml` с 5 сервисами: postgres:16-alpine, redis:7-alpine, backend (FastAPI), celery-worker, frontend (Next.js 14)
 - `backend/Dockerfile` (dev, python:3.12-slim + uvicorn --reload)
