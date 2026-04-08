@@ -211,7 +211,7 @@ ref_seasonality    (id, profile_name, month_coefficients jsonb)
 
 ---
 
-#### Задача 1.2 — Projects API
+#### ✅ Задача 1.2 — Projects API
 
 **Что делаем:**
 - `GET /api/projects` — список проектов с базовыми KPI
@@ -704,7 +704,7 @@ ref_seasonality    (id, profile_name, month_coefficients jsonb)
 
 ### Фаза 1 — Backend CRUD API
 - [x] 1.1 Auth endpoints ✅ (2026-04-08, 8/8 pytest зелёные)
-- [ ] 1.2 Projects API
+- [x] 1.2 Projects API ✅ (2026-04-08, 12/12 pytest зелёные, soft delete + auto-scenarios)
 - [ ] 1.3 SKU и BOM API
 - [ ] 1.4 Channels API
 - [ ] 1.5 PeriodValues API

@@ -9,6 +9,25 @@
 
 ## [Unreleased]
 
+### Added (задача 1.2 — Projects API + soft delete)
+- Alembic-миграция `7efc99156f7e_add_project_soft_delete.py` — добавлен `projects.deleted_at TIMESTAMPTZ NULL`
+- В `Project` model — `deleted_at: datetime | None` (наследует комментарий о soft delete и отсутствии потери данных)
+- `backend/app/schemas/project.py` — `ProjectBase`, `ProjectCreate`, `ProjectUpdate` (все поля Optional, для PATCH), `ProjectRead`, `ProjectListItem` (Read + KPI поля `npv_y1y10`, `irr_y1y10`, `go_no_go` — все `null` пока расчёт не выполнен в Фазе 2)
+- `backend/app/services/project_service.py` — `list_projects` (фильтр `deleted_at IS NULL`), `get_project`, `create_project` (создаёт проект + 3 сценария Base/Cons/Aggr в одной транзакции), `update_project` (PATCH через `model_dump(exclude_unset=True)`), `soft_delete_project` (set `deleted_at = now()`)
+- `backend/app/api/projects.py` — router `/api/projects` с 5 endpoint'ами:
+  - `GET    /api/projects`        → `list[ProjectListItem]`
+  - `POST   /api/projects`        → `ProjectRead`, 201, авто-создание 3 сценариев
+  - `GET    /api/projects/{id}`   → `ProjectRead`, 404 если deleted
+  - `PATCH  /api/projects/{id}`   → `ProjectRead`, partial update
+  - `DELETE /api/projects/{id}`   → 204, soft delete (физически не удаляется)
+- Все endpoint'ы защищены через `get_current_user` dependency (JWT)
+- Подключён в `backend/app/main.py`
+- В `tests/conftest.py` добавлены fixtures `test_user` (создаёт юзера в БД) и `auth_client` (HTTPX-клиент с `Authorization: Bearer <jwt>`) — переиспользуется во всех защищённых тестах
+- `backend/tests/api/test_projects.py` — **12 тест-кейсов**: создание + auto-scenarios, auth required, validation 422, defaults, list с KPI=null, get by id, 404, PATCH name, PATCH partial, DELETE → 204 + soft delete (физически в БД), GET после delete → 404, list после delete не показывает удалённый
+- Замечание о Decimal в JSON: PG `Numeric(8,6)` возвращает `"0.190000"` (трейлинг нули до объявленной точности), Pydantic v2 сохраняет это как есть. Тесты сравнивают через `Decimal()` — семантическое равенство, без хрупкого форматирования. Frontend нормализует отображение в Фазе 3 (вынесено как осознанное решение, не баг)
+
+Запуск: `docker compose -f infra/docker-compose.dev.yml exec backend pytest -v` → **20 passed in 3.77s** (8 auth + 12 projects).
+
 ### Added (задача 1.1 — Auth endpoints + первые тесты)
 - `backend/app/core/security.py` — bcrypt password hashing + JWT access/refresh encode/decode (HS256, `sub`=user_id как str по RFC 7519, `type`=access|refresh для разделения)
 - `backend/app/schemas/{user.py, auth.py}` — Pydantic-схемы: `UserBase`, `UserCreate`, `UserRead`, `Token`, `AccessToken`, `RefreshRequest` (email хранится как `str` без EmailStr — без зависимости `email-validator`)

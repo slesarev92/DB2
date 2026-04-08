@@ -24,9 +24,10 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
+from app.core.security import create_access_token, hash_password
 from app.db import get_db
 from app.main import app
-from app.models import Base
+from app.models import Base, User
 
 TEST_DB_NAME = "dbpassport_test"
 
@@ -123,3 +124,24 @@ async def client(
         yield ac
 
     app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def test_user(db_session: AsyncSession) -> User:
+    """Тестовый пользователь, который используется в защищённых endpoint'ах."""
+    user = User(
+        email="testuser@example.com",
+        hashed_password=hash_password("testpass123"),
+    )
+    db_session.add(user)
+    await db_session.flush()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def auth_client(client: AsyncClient, test_user: User) -> AsyncClient:
+    """HTTPX клиент с Authorization Bearer для test_user."""
+    token = create_access_token(test_user.id)
+    client.headers["Authorization"] = f"Bearer {token}"
+    return client

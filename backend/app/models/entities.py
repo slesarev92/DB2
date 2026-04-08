@@ -176,6 +176,14 @@ class Project(Base, TimestampMixin):
         nullable=True,
     )
 
+    # Soft delete: устанавливается при DELETE /api/projects/{id}.
+    # Все запросы фильтруют WHERE deleted_at IS NULL.
+    # Финансовый продукт — данные не теряем при ошибочном удалении.
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
 
 class Scenario(Base, TimestampMixin):
     """Сценарий проекта: Base / Conservative / Aggressive (раздел 8.6 ТЗ)."""
