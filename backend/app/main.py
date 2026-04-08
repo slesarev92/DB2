@@ -6,7 +6,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import auth as auth_router
+from app.api import bom as bom_router
+from app.api import project_skus as project_skus_router
 from app.api import projects as projects_router
+from app.api import skus as skus_router
 from app.core.config import settings
 
 app = FastAPI(
@@ -28,6 +31,9 @@ app.add_middleware(
 
 app.include_router(auth_router.router)
 app.include_router(projects_router.router)
+app.include_router(skus_router.router)
+app.include_router(project_skus_router.router)
+app.include_router(bom_router.router)
 
 
 @app.get("/health", tags=["system"])

@@ -28,7 +28,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import (
     Base,
@@ -244,6 +244,11 @@ class ProjectSKU(Base, TimestampMixin):
     marketing_rate: Mapped[Decimal] = mapped_column(
         Numeric(8, 6), nullable=False, default=Decimal("0")
     )
+
+    # Async-safe relationship: lazy='raise_on_sql' запрещает случайные
+    # неявные загрузки. Service всегда должен явно использовать
+    # selectinload(ProjectSKU.sku) при чтении.
+    sku: Mapped["SKU"] = relationship(lazy="raise_on_sql")
 
     __table_args__ = (
         UniqueConstraint("project_id", "sku_id", name="uq_project_skus_project_sku"),

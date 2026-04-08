@@ -9,6 +9,25 @@
 
 ## [Unreleased]
 
+### Added (задача 1.3 — SKU + ProjectSKU + BOM API)
+- Три новых ресурса с раздельным CRUD:
+  - **Справочник SKU** — `/api/skus` (5 endpoint'ов): не привязан к проекту, переиспользуется между проектами. DELETE с проверкой связей через explicit count → custom `SKUInUseError` → HTTP 409
+  - **ProjectSKU** — `/api/projects/{project_id}/skus` (list + create) и `/api/project-skus/{psk_id}` (get/patch/delete). Включение SKU в конкретный проект с rates (production_cost_rate, ca_m_rate, marketing_rate). Дубликат `(project_id, sku_id)` ловится через savepoint + IntegrityError → HTTP 409
+  - **BOM** — `/api/project-skus/{psk_id}/bom` (list + create) и `/api/bom-items/{bom_id}` (patch/delete). FK ON DELETE CASCADE: BOM удаляется автоматически вместе с ProjectSKU
+- Все endpoint'ы защищены через `get_current_user`
+- **COGS preview расчёт** — `GET /api/project-skus/{psk_id}` возвращает `ProjectSKUDetail` с computed полем `cogs_per_unit_estimated = Σ(qty × price × (1 + loss_pct))`. Только на single GET, не на list (избегаем лишнего SQL). Это упрощённая preview-формула для UI; реальная формула COGS из эталонной модели GORJI — в задаче 2.1 расчётного ядра по ADR-CE-01
+- В `Project SKU` model добавлен relationship `sku: Mapped[SKU]` с `lazy="raise_on_sql"` — async-safe: запрещает случайные ленивые загрузки, заставляет явно использовать `selectinload(ProjectSKU.sku)`. Без миграции (relationship — Python-уровень)
+- Новые файлы:
+  - `backend/app/schemas/{sku.py, project_sku.py, bom.py}` — Pydantic схемы
+  - `backend/app/services/{sku_service.py, project_sku_service.py, bom_service.py}` — CRUD + COGS preview
+  - `backend/app/api/{skus.py, project_skus.py, bom.py}` — три router'а
+  - `backend/tests/api/test_skus.py` — **14 тест-кейсов** (5 SKU CRUD + 1 RESTRICT edge case + 4 ProjectSKU + 4 BOM/COGS/CASCADE)
+- Обновлены: `entities.py` (ProjectSKU.sku relationship), `services/__init__.py` (re-exports), `main.py` (3 новых router)
+
+**Один technical-debt fix по дороге:** при попытке вставить дубликат `ProjectSKU` IntegrityError ловится внутри `async with session.begin_nested()` (savepoint), а не через простой `session.rollback()`. Без savepoint простой rollback ломал outer transaction в тестах (`SAWarning: transaction already deassociated from connection`). Savepoint pattern — корректный async-паттерн для retry-семантики в SQLAlchemy.
+
+Запуск: `docker compose -f infra/docker-compose.dev.yml exec backend pytest -v` → **34 passed in 6.23s** (8 auth + 12 projects + 14 skus, 0 warnings).
+
 ### Added (задача 1.2 — Projects API + soft delete)
 - Alembic-миграция `7efc99156f7e_add_project_soft_delete.py` — добавлен `projects.deleted_at TIMESTAMPTZ NULL`
 - В `Project` model — `deleted_at: datetime | None` (наследует комментарий о soft delete и отсутствии потери данных)
