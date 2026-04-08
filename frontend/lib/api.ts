@@ -128,6 +128,13 @@ export function apiPatch<T>(path: string, body: unknown): Promise<T> {
   });
 }
 
+export function apiPut<T>(path: string, body: unknown): Promise<T> {
+  return _request<T>(path, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
 export function apiDelete<T>(path: string): Promise<T> {
   return _request<T>(path, { method: "DELETE" });
 }

@@ -344,3 +344,17 @@ export interface TaskStatusResponse {
   error?: string;
   traceback?: string;
 }
+
+// ============================================================
+// ProjectFinancialPlan (CAPEX/OPEX по годам проекта)
+// ============================================================
+
+export interface FinancialPlanItem {
+  year: number; // 1..10
+  capex: string; // Decimal as string
+  opex: string;
+}
+
+export interface FinancialPlanRequest {
+  items: FinancialPlanItem[];
+}

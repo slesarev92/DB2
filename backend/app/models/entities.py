@@ -449,7 +449,12 @@ class ScenarioResult(Base):
     # Денежные значения — Numeric(20, 2): до 18 цифр целой части, 2 копейки.
     npv: Mapped[Decimal | None] = mapped_column(Numeric(20, 2), nullable=True)
     irr: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
-    roi: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
+    # ROI расширен до Numeric(20, 6) из-за Excel D-06 quirk:
+    # при всех положительных FCF формула ROI вырождается в `SUM(FCF) / N`
+    # — абсолютное среднее в рублях, а не ratio. Это может давать числа
+    # порядка миллионов при проектах без CAPEX Y0. См. ERRORS_AND_ISSUES
+    # запись "ROI numeric overflow" и TZ_VS_EXCEL_DISCREPANCIES.md D-06.
+    roi: Mapped[Decimal | None] = mapped_column(Numeric(20, 6), nullable=True)
     payback_simple: Mapped[Decimal | None] = mapped_column(Numeric(8, 4), nullable=True)
     payback_discounted: Mapped[Decimal | None] = mapped_column(Numeric(8, 4), nullable=True)
     contribution_margin: Mapped[Decimal | None] = mapped_column(

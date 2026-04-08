@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { ChannelsTab } from "@/components/projects/channels-tab";
+import { FinancialPlanEditor } from "@/components/projects/financial-plan-editor";
 import { PeriodsTab } from "@/components/projects/periods-tab";
 import { ResultsTab } from "@/components/projects/results-tab";
 import { SkusTab } from "@/components/projects/skus-tab";
@@ -105,13 +106,12 @@ export default function ProjectDetailPage() {
           <TabsTrigger value="results">Результаты</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="mt-4">
+        <TabsContent value="overview" className="mt-4 space-y-4">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Финансовые параметры</CardTitle>
               <CardDescription>
-                Дефолты соответствуют GORJI Excel модели. Изменение через
-                PATCH /api/projects/{"{id}"} (UI редактирования — задача 3.3+).
+                Дефолты соответствуют GORJI Excel модели.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -153,6 +153,8 @@ export default function ProjectDetailPage() {
               </dl>
             </CardContent>
           </Card>
+
+          <FinancialPlanEditor projectId={projectId} />
         </TabsContent>
 
         <TabsContent value="skus" className="mt-4">

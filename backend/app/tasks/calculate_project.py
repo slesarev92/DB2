@@ -3,20 +3,35 @@
 Запускается через `POST /api/projects/{id}/recalculate` (см. api/projects.py).
 Возвращает `task_id` клиенту, статус опрашивается через `GET /api/tasks/{id}`.
 
-Архитектура async ↔ Celery:
-- Celery worker — sync процесс, не понимает asyncio из коробки.
-- Расчётный сервис (`services/calculation_service.py`) использует
-  AsyncSession (asyncpg). Поэтому в task'е оборачиваем async-вызов
-  через `asyncio.run` — каждая task получает свой event loop.
-- Сессия БД создаётся внутри async-функции через `async_session_maker`
-  (тот же engine что и FastAPI dependency).
+**Архитектурное замечание — asyncpg + Celery prefork + asyncio.run:**
+Celery worker — sync процесс. Каждый вызов task делает `asyncio.run()`
+который создаёт **новый event loop**. asyncpg connection pool привязывает
+коннекшены к loop создания. Если использовать global `async_session_maker`
+из `app.db`, то после первого task коннекшены в пуле принадлежат
+закрытому loop → второй task падает с
+`RuntimeError: Future attached to a different loop`.
+
+**Решение:** создавать **локальный engine с NullPool** внутри каждого
+вызова task. NullPool не переиспользует коннекшены — каждый запрос
+открывает свежий. Коннекшены живут только в рамках текущего asyncio.run
+и корректно закрываются.
+
+Альтернативы: shared engine с pool per-loop (сложно), sync driver
+psycopg2 (теряем async). NullPool простое и надёжное.
 """
 from __future__ import annotations
 
 import asyncio
 from typing import Any
 
-from app.db import async_session_maker
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.pool import NullPool
+
+from app.core.config import settings
 from app.services.calculation_service import (
     NoLinesError,
     ProjectNotFoundError,
@@ -28,17 +43,30 @@ from app.worker import celery_app
 async def _calculate_project_async(project_id: int) -> dict[str, Any]:
     """Async-обёртка вокруг calculate_all_scenarios.
 
-    Открывает AsyncSession, вызывает сервис, коммитит транзакцию. При
-    исключении делает rollback и пробрасывает дальше — Celery поймает
-    и пометит task FAILED с traceback в result backend.
+    Создаёт **локальный engine** с NullPool в рамках текущего event loop,
+    вызывает сервис, коммитит, закрывает engine. При исключении —
+    rollback и пробрасывает дальше (Celery поймает, пометит FAILURE).
     """
-    async with async_session_maker() as session:
-        try:
-            results_by_scenario = await calculate_all_scenarios(session, project_id)
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
+    engine = create_async_engine(
+        settings.database_url,
+        poolclass=NullPool,
+        echo=False,
+    )
+    session_maker = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+    try:
+        async with session_maker() as session:
+            try:
+                results_by_scenario = await calculate_all_scenarios(
+                    session, project_id
+                )
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+    finally:
+        await engine.dispose()
 
     # Сериализуемый ответ для Celery result backend (только примитивы)
     return {
