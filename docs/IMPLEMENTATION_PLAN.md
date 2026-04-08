@@ -250,7 +250,7 @@ ref_seasonality    (id, profile_name, month_coefficients jsonb)
 
 ---
 
-#### Задача 1.4 — Channels API
+#### ✅ Задача 1.4 — Channels API
 
 **Что делаем:**
 - `GET /api/channels` — справочник каналов
@@ -706,7 +706,7 @@ ref_seasonality    (id, profile_name, month_coefficients jsonb)
 - [x] 1.1 Auth endpoints ✅ (2026-04-08, 8/8 pytest зелёные)
 - [x] 1.2 Projects API ✅ (2026-04-08, 12/12 pytest зелёные, soft delete + auto-scenarios)
 - [x] 1.3 SKU и BOM API ✅ (2026-04-08, 14/14 pytest зелёные, COGS preview, savepoint pattern)
-- [ ] 1.4 Channels API
+- [x] 1.4 Channels API ✅ (2026-04-08, 11/11 pytest зелёные, read-only справочник + ProjectSKUChannel CRUD)
 - [ ] 1.5 PeriodValues API
 - [ ] 1.6 Scenarios API
 

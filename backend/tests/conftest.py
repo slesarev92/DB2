@@ -65,11 +65,46 @@ async def test_db_url() -> AsyncGenerator[str, None]:
 
 @pytest_asyncio.fixture(scope="session")
 async def test_engine(test_db_url: str) -> AsyncGenerator[AsyncEngine, None]:
-    """Engine для тестовой БД с применённой схемой (create_all)."""
+    """Engine для тестовой БД с применённой схемой и засеянными справочниками.
+
+    После `Base.metadata.create_all` сразу заполняем справочные таблицы
+    (Channel, RefInflation, RefSeasonality, Period) теми же данными, что
+    использует prod (см. scripts/seed_reference_data.py). Это коммитится
+    один раз на pytest-сессию — каждый тест видит эти данные через свою
+    транзакцию (изменения теста откатываются в `db_session` fixture, но
+    коммиченный seed остаётся).
+
+    Зачем: для read-only ресурсов (Channels — задача 1.4) и для будущего
+    (PeriodValues — задача 1.5 нужны 43 периода).
+    """
     engine = create_async_engine(test_db_url, poolclass=NullPool)
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Seed справочников через тестовый engine (не через app.db, который
+    # привязан к prod DATABASE_URL)
+    from app.models import Channel, Period, RefInflation, RefSeasonality
+    from scripts.seed_reference_data import (
+        CHANNELS_DATA,
+        INFLATION_PROFILES,
+        SEASONALITY_PROFILES,
+        generate_periods,
+    )
+
+    test_session_maker = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+    async with test_session_maker() as session:
+        for ch in CHANNELS_DATA:
+            session.add(Channel(**ch))
+        for prof in INFLATION_PROFILES:
+            session.add(RefInflation(**prof))
+        for prof in SEASONALITY_PROFILES:
+            session.add(RefSeasonality(**prof))
+        for p in generate_periods():
+            session.add(Period(**p))
+        await session.commit()
 
     yield engine
 

@@ -9,6 +9,28 @@
 
 ## [Unreleased]
 
+### Added (задача 1.4 — Channels API + ProjectSKUChannel CRUD)
+- **Channels read-only API** (вариант A одобрен — каналы устойчивая бизнес-структура, наполняются seed-скриптом, в MVP не редактируются через UI):
+  - `GET /api/channels` — список всех каналов из справочника (25 шт. из GORJI DASH MENU)
+  - `GET /api/channels/{id}` — один канал, 404 если не найден
+- **ProjectSKUChannel CRUD** (параметры SKU в конкретном канале сбыта):
+  - `GET    /api/project-skus/{psk_id}/channels` — список каналов SKU с nested channel
+  - `POST   /api/project-skus/{psk_id}/channels` — добавить канал с параметрами (ND target, ramp months, offtake, цены, промо, логистика, опц. seasonality_profile_id)
+  - `GET    /api/psk-channels/{id}` — детали с nested channel
+  - `PATCH  /api/psk-channels/{id}` — partial update параметров
+  - `DELETE /api/psk-channels/{id}` — удалить
+- В `ProjectSKUChannel` model добавлен relationship `channel: Mapped[Channel]` с `lazy="raise_on_sql"` (паттерн из 1.3, применён везде по решению пользователя)
+- Custom exceptions в service: `ChannelNotFoundError`, `ProjectSKUChannelDuplicateError`. Дубликат `(project_sku_id, channel_id)` ловится через **savepoint pattern** (`async with session.begin_nested()`) — тот же паттерн что в 1.3
+- Новые файлы:
+  - `backend/app/schemas/{channel.py, project_sku_channel.py}`
+  - `backend/app/services/{channel_service.py, project_sku_channel_service.py}`
+  - `backend/app/api/{channels.py, project_sku_channels.py}`
+  - `backend/tests/api/test_channels.py` — **11 тест-кейсов** (4 channels read-only + 4 ProjectSKUChannel CRUD + 3 edge cases: дубликат, несуществующий канал, требование auth)
+
+**Улучшение тестового инструментария:** `test_engine` fixture в `backend/tests/conftest.py` теперь после `Base.metadata.create_all` сразу прогоняет seed справочников (`Channel`, `RefInflation`, `RefSeasonality`, `Period`) через тестовый engine. Импорт констант идёт из `scripts.seed_reference_data`, единый источник данных. Коммитится один раз на pytest-сессию — каждый тест видит данные через свою (откатываемую) транзакцию. Это нужно для read-only ресурсов вроде Channels (1.4) и для будущей задачи 1.5 PeriodValues (требует 43 периода).
+
+Запуск: `docker compose -f infra/docker-compose.dev.yml exec backend pytest -v` → **45 passed in 8.31s** (8 auth + 12 projects + 14 skus + 11 channels, 0 warnings).
+
 ### Added (задача 1.3 — SKU + ProjectSKU + BOM API)
 - Три новых ресурса с раздельным CRUD:
   - **Справочник SKU** — `/api/skus` (5 endpoint'ов): не привязан к проекту, переиспользуется между проектами. DELETE с проверкой связей через explicit count → custom `SKUInUseError` → HTTP 409

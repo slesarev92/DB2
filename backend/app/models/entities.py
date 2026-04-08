@@ -300,6 +300,10 @@ class ProjectSKUChannel(Base, TimestampMixin):
         nullable=True,
     )
 
+    # Async-safe: lazy='raise_on_sql' заставляет всегда явно использовать
+    # selectinload(ProjectSKUChannel.channel) при чтении.
+    channel: Mapped["Channel"] = relationship(lazy="raise_on_sql")
+
     __table_args__ = (
         UniqueConstraint(
             "project_sku_id", "channel_id",
