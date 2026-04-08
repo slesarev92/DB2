@@ -1,27 +1,30 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+
+import { useAuth } from "@/components/auth-provider";
+
+/**
+ * Корневая страница / — редирект.
+ *
+ * Не защищённый layout (потому что находится в корне), но проверяет
+ * auth state и перенаправляет:
+ *   - залогинен → /projects
+ *   - нет → /login
+ */
 export default function Home() {
-  const apiUrl =
-    process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  const router = useRouter();
+  const { user, loading } = useAuth();
+
+  useEffect(() => {
+    if (loading) return;
+    router.replace(user !== null ? "/projects" : "/login");
+  }, [loading, user, router]);
 
   return (
-    <main style={{ padding: "2rem", maxWidth: 720 }}>
-      <h1>Цифровой паспорт проекта</h1>
-      <p>Frontend running. Next.js 14 + TypeScript.</p>
-      <p>
-        Backend API:{" "}
-        <code
-          style={{
-            background: "#f0f0f0",
-            padding: "2px 6px",
-            borderRadius: 3,
-          }}
-        >
-          {apiUrl}
-        </code>
-      </p>
-      <p style={{ color: "#666", fontSize: 14 }}>
-        Заглушка из задачи 0.2 (infrastructure). Полноценный UI появляется
-        в Фазе 3 (роутинг, auth, список проектов).
-      </p>
-    </main>
+    <div className="flex min-h-screen items-center justify-center">
+      <p className="text-sm text-muted-foreground">Загрузка...</p>
+    </div>
   );
 }

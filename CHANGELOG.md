@@ -9,6 +9,69 @@
 
 ## [Unreleased]
 
+### Added (задача 3.1 — Frontend: routing, layout, auth)
+**Первая задача Фазы 3 — фронтенд авторизация и защищённые маршруты:**
+
+- **Tailwind CSS v4 + shadcn/ui v4** — установлены, инициализированы.
+  CSS-based config через `app/globals.css` (`@import "tailwindcss"`),
+  postcss.config.mjs с `@tailwindcss/postcss`. Base components добавлены:
+  Button, Input, Label, Card. Inter шрифт через `next/font/google` (Geist
+  доступен только в Next.js 15+, у нас 14.2).
+- **`frontend/lib/api.ts`** — fetch wrapper:
+  - Auto-attach `Authorization: Bearer` header
+  - При 401 → попытка refresh через `/api/auth/refresh`, retry оригинального
+    запроса; при неуспехе → `clearTokens()` (AuthProvider увидит и перенаправит)
+  - `ApiError` класс с `status` и `detail`
+  - Типизированные `apiGet/Post/Patch/Delete`
+  - Отдельный `loginRequest` через OAuth2 password flow (form-urlencoded)
+- **`frontend/lib/auth.ts`** — SSR-safe localStorage helpers (возвращают
+  null на сервере) для access/refresh JWT
+- **`frontend/components/auth-provider.tsx`** — React Context + `useAuth()`:
+  - Восстановление сессии при mount через `/api/auth/me`
+  - `login(email, password)` → токены в localStorage + `router.push("/projects")`
+  - `logout()` → `clearTokens()` + `router.push("/login")`
+- **`frontend/app/(auth)/login/page.tsx`** — login форма (Card + Input + Button)
+  с обработкой ApiError, loading state кнопки, автоматическим редиректом
+  на /projects если уже залогинен
+- **`frontend/components/sidebar.tsx`** — sidebar навигация с активным
+  состоянием через `usePathname`, email текущего user + кнопка "Выйти"
+- **`frontend/app/(app)/layout.tsx`** — защищённый layout с client-side
+  auth check: при `!loading && user === null` → `router.replace("/login")`.
+  Loading спиннер во время восстановления сессии (избегает flash контента).
+- **`frontend/app/(app)/projects/page.tsx`** — placeholder для задачи 3.2
+- **`frontend/app/page.tsx`** — корневой `/` редиректит на `/projects`
+  или `/login` в зависимости от auth state
+- **`backend/scripts/create_dev_user.py`** — идемпотентный скрипт для создания
+  dev user `admin@example.com / admin123`. Только для dev (в prod через
+  Keycloak / административные процедуры по ADR-08).
+
+**Архитектурные решения:**
+- localStorage для токенов (не httpOnly cookies — проще для SPA)
+- React Context для auth state (избыточно ставить zustand для одного state'а)
+- Защита через client-side useEffect (Next.js middleware не имеет доступа
+  к localStorage на server-side)
+- Route groups `(auth)` и `(app)` для группировки публичных и защищённых
+  маршрутов с разными layout'ами
+
+**Известные ограничения:**
+- Frontend dev server не подхватывает структурные изменения (новые route
+  groups) через HMR на Windows + Docker volume mount. Требуется ручной
+  `docker compose restart frontend` после добавления route group.
+- Pre-existing уязвимости в Next.js 14.2.35 (4 high severity) — фикс
+  требует major upgrade до Next.js 16, отдельная задача.
+
+**End-to-end проверка:**
+1. `python -m scripts.create_dev_user` → `admin@example.com` создан
+2. `curl POST /api/auth/login` form-urlencoded → access+refresh tokens
+3. `curl GET /api/auth/me` с Bearer → `{"email":"admin@example.com",...}`
+4. Frontend `/`, `/login`, `/projects` все возвращают 200 после
+   `docker compose restart frontend`
+5. Backend pytest 185/185 зелёные после изменений (только новый dev_user
+   скрипт, кодовая база backend'а не тронута)
+
+Frontend unit/e2e тесты не реализованы в 3.1 — добавятся позже (Vitest/
+Playwright по необходимости).
+
 ### Added (задача 2.5 — Predict-слой автогенерации)
 **Автоматическое заполнение PeriodValue при создании ProjectSKUChannel:**
 

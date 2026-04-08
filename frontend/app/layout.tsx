@@ -1,4 +1,16 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+
+import { AuthProvider } from "@/components/auth-provider";
+import { cn } from "@/lib/utils";
+
+import "./globals.css";
+
+// Geist шрифт доступен только в Next.js 15+. У нас 14.2 — используем Inter.
+const inter = Inter({
+  subsets: ["latin", "cyrillic"],
+  variable: "--font-sans",
+});
 
 export const metadata: Metadata = {
   title: "Цифровой паспорт проекта",
@@ -12,15 +24,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ru">
-      <body
-        style={{
-          margin: 0,
-          fontFamily:
-            "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-        }}
-      >
-        {children}
+    <html lang="ru" className={cn("font-sans", inter.variable)}>
+      <body className="min-h-screen bg-background text-foreground antialiased">
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );
