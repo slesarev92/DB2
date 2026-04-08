@@ -318,3 +318,29 @@ export interface ScenarioResultRead {
   go_no_go: boolean | null;
   calculated_at: string;
 }
+
+// ============================================================
+// Recalculate / Tasks (Celery async job status)
+// ============================================================
+
+export interface RecalculateResponse {
+  task_id: string;
+  project_id: number;
+  status: string;
+}
+
+export type CeleryTaskStatus =
+  | "PENDING"
+  | "STARTED"
+  | "SUCCESS"
+  | "FAILURE"
+  | "RETRY"
+  | "REVOKED";
+
+export interface TaskStatusResponse {
+  task_id: string;
+  status: CeleryTaskStatus;
+  result?: unknown;
+  error?: string;
+  traceback?: string;
+}

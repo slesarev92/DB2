@@ -798,17 +798,37 @@ BOM) и ChannelsTab (для каналов) без модификации — se
 
 ---
 
-#### Задача 4.2 — KPI экран (E-07)
+#### ✅ Задача 4.2 — KPI экран (E-07)
 
-**Что делаем:**
-- Сводный экран после расчёта: NPV (3 горизонта), IRR, ROI, Payback simple/discounted
-- Contribution Margin %, EBITDA % — с цветовой индикацией (>25% → зелёный)
-- Go/No-Go флаг крупным элементом
-- Кнопка "Пересчитать" с индикатором прогресса (polling task status)
+**Что делаем (frontend):**
+- `types/api.ts`: `RecalculateResponse`, `TaskStatusResponse`, `CeleryTaskStatus`
+- `lib/calculation.ts` (новый): `recalculateProject`, `getTaskStatus`
+- `components/projects/kpi-card.tsx`: универсальная карточка одного KPI
+  (label, value, opt. color class, opt. subtitle)
+- `components/projects/results-tab.tsx` (новый, главный таб):
+  - Scenario selector (Base/Conservative/Aggressive), авто-выбор Base
+  - Loading / 404 "не рассчитан" / error states
+  - **Go/No-Go hero** — большой `GoNoGoBadge` scale-150 для Y1-Y10
+  - **NPV row** — 3 карточки (Y1-Y3/Y1-Y5/Y1-Y10), цвет value: зелёный ≥0, красный <0
+  - **IRR row** — 3 карточки (formatPercent)
+  - **ROI row** — 3 карточки
+  - **Payback row** — simple + discounted из Y1-Y10. null → "НЕ ОКУПАЕТСЯ"
+  - **Margins row** — CM% + EBITDA%. ≥25% → зелёный, <25% → красный
+  - **Кнопка "Пересчитать"** → `recalculateProject` → `pollTaskStatus` раз
+    в 1 сек до SUCCESS/FAILURE или 60 сек timeout → refetch результатов
+  - Локализованные статусы: "В очереди..." / "Считаем..." / "Обновляем..."
+  - При FAILURE — Card border-destructive с сообщением
+- `app/(app)/projects/[id]/page.tsx`: таб "Результаты" больше не disabled
 
-**Критерий готовности:**
-- После нажатия "Пересчитать" — спиннер, затем обновлённые KPI
-- Если расчёт упал — показать error message с причиной
+**Backend:** не менялся — все endpoints готовы из задач 2.4 и 1.6.
+
+**Критерий готовности:** ✅
+- После нажатия "Пересчитать" — спиннер со статусом, затем обновлённые KPI
+- 404 на scenarios/{id}/results → placeholder "Расчёт не выполнен"
+- Если task FAILURE — error message с причиной
+- Timeout 60 сек с понятным сообщением
+- `npx tsc --noEmit` → 0 ошибок ✅
+- Backend pytest **196/196** зелёные ✅
 
 **Зависимости:** 4.1, 2.4.
 
@@ -1017,9 +1037,9 @@ BOM) и ChannelsTab (для каналов) без модификации — se
 - [x] 3.3 SKU и BOM ✅ (2026-04-08, sku-panel + bom-panel + add-sku-dialog в табе SKU и BOM, live COGS preview, PATCH rates on blur, E2E COGS=12.18₽ совпал)
 - [x] 3.4 Каналы ✅ (2026-04-08, channels-panel + channel-dialogs в табе Каналы, GET /api/ref-seasonality, E2E auto-fill predict 129 PeriodValue, 192/192 pytest)
 
-### Фаза 4 — Frontend: результаты (← следующий шаг: задача 4.2)
+### Фаза 4 — Frontend: результаты (← следующий шаг: задача 4.3)
 - [x] 4.1 AG Grid таблица периодов ✅ (2026-04-08, AG Grid v35 + новый таб «Периоды» + GET /api/periods + cellClassRules подсветка по source_type, inline PATCH, reset overrides, 196/196 pytest)
-- [ ] 4.2 KPI экран
+- [x] 4.2 KPI экран ✅ (2026-04-08, ResultsTab с Go/No-Go hero + NPV/IRR/ROI/Payback/CM/EBITDA grid + кнопка Пересчитать с polling `/api/tasks/{id}` раз в 1 сек до 60с timeout, 0 tsc errors, 196/196 pytest)
 - [ ] 4.3 Сравнение сценариев
 - [ ] 4.4 Анализ чувствительности
 

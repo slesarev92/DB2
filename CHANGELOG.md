@@ -9,6 +9,58 @@
 
 ## [Unreleased]
 
+### Added (задача 4.2 — KPI экран)
+**Сводный экран результатов расчёта с async recalculate + polling:**
+
+**Frontend:**
+- `types/api.ts` расширен `RecalculateResponse`, `TaskStatusResponse`,
+  `CeleryTaskStatus` ("PENDING"/"STARTED"/"SUCCESS"/"FAILURE"/"RETRY"/
+  "REVOKED")
+- `lib/calculation.ts` (новый) — `recalculateProject(projectId)` →
+  `POST /api/projects/{id}/recalculate`, `getTaskStatus(taskId)` →
+  `GET /api/tasks/{id}`
+- `components/projects/kpi-card.tsx` (новый) — универсальная карточка
+  одного KPI (label, value, optional color class, optional subtitle).
+  Используется ≥10 раз в ResultsTab
+- `components/projects/results-tab.tsx` (новый) — главный таб:
+  - **Scenario selector** (Base/Conservative/Aggressive) с авто-выбором Base
+  - **Loading/404/error состояния**. 404 на `listScenarioResults` →
+    placeholder "Расчёт не выполнен, нажмите Пересчитать"
+  - **Go/No-Go hero** — `<GoNoGoBadge>` с `scale-150` для Y1-Y10 scope
+    (NPV ≥ 0 AND CM ≥ 25%)
+  - **NPV row** — 3 KpiCard по scope, цвет value: зелёный если ≥0, красный если <0
+  - **IRR row** — 3 KpiCard с formatPercent
+  - **ROI row** — 3 KpiCard с formatPercent
+  - **Payback row** — 2 KpiCard (simple / discounted) из Y1-Y10 scope.
+    `null` → "НЕ ОКУПАЕТСЯ" через `formatPayback` helper
+  - **Margins row** — Contribution Margin + EBITDA Margin.
+    `marginClass(value)` возвращает `text-green-600` для ≥25% и
+    `text-red-600` для <25%. CM карточка с subtitle "Порог Go/No-Go: ≥ 25%"
+  - **Кнопка "Пересчитать"** → `handleRecalculate`:
+    - `recalculateProject` → `{task_id}`
+    - `pollTaskStatus(task_id, onStatus)` — while-loop с `await new
+      Promise(r => setTimeout(r, 1000))`, до SUCCESS/FAILURE или 60 сек timeout
+    - Локализованные тексты статуса: "В очереди..." / "Считаем..." /
+      "Обновляем..."
+    - При SUCCESS → `loadResults(selectedScenarioId)` refetch
+    - При FAILURE → Card border-destructive с сообщением
+- `app/(app)/projects/[id]/page.tsx` — таб "Результаты" больше не
+  disabled, использует `<ResultsTab projectId={projectId} />`
+
+**Backend:** не менялся — `POST /recalculate`, `GET /tasks/{id}`,
+`GET /scenarios/{id}/results` готовы из задач 2.4 и 1.6.
+
+**Структура табов /projects/[id]:** Параметры / SKU и BOM / Каналы /
+Периоды / **Результаты**. Все активны. Phase 3-4 UI flow закрыт —
+пользователь может пройти весь путь от создания проекта до получения KPI.
+
+**Проверка (чек-лист из CLAUDE.md):**
+- `npx tsc --noEmit` → 0 ошибок ✅
+- Full restart frontend контейнера ✅
+- `/projects/1` → 200, 1092 модуля ✅
+- Backend pytest **196/196** зелёные ✅
+- Визуальное подтверждение пользователем — ожидается
+
 ### Added (задача 4.1 — AG Grid таблица периодов)
 **Inline-редактируемая таблица периодов с трёхслойной подсветкой
 (старт Фазы 4):**
