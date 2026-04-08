@@ -342,7 +342,7 @@ DASH row 44/46 per-unit значениями SKU_1/HM — это точнее в
 
 ---
 
-#### Задача 2.2 — Pipeline steps 6–9 (EBITDA, WC, Tax, Cash Flow)
+#### ✅ Задача 2.2 — Pipeline steps 6–9 (EBITDA, WC, Tax, Cash Flow)
 
 **Что делаем:**
 
@@ -364,11 +364,20 @@ DASH row 44/46 per-unit значениями SKU_1/HM — это точнее в
   ```
 
 **Критерий готовности:**
-- Unit-тест граничного случая: t=0, wc_previous=0 → delta_wc = -wc[0]
-- Unit-тест: contribution < 0 → tax = 0
-- Интеграционный тест с данными GORJI+: FCF по годам Y0..Y10 совпадает с DATA!B43:K43 ±0.01%
+- Unit-тест граничного случая: t=0, wc_previous=0 → delta_wc = -wc[0] ✅
+- Unit-тест: contribution < 0 → tax = 0 ✅
+- Acceptance EBITDA per unit ↔ DASH row 48 (5.66203 M1-M3, 4.69769 M4-M6) ✅
+- Численная сверка s07-s09 с агрегатами GORJI Y0/Y1 (DATA rows 38-43)
+  через подстановку NR/CM напрямую в контекст: WC, ΔWC, Tax, OCF, ICF, FCF
+  совпадают до 1e-9 ✅
 
-**Как проверяем:** `pytest tests/engine/test_steps_6_9.py -v`.
+Acceptance "FCF по годам Y0..Y10" из исходного критерия требует
+оркестратора (агрегации по SKU × каналам × сценарию) — это задача 2.4.
+Для 2.2 валидация per-line + Y0/Y1 агрегатные подстановки достаточны
+для подтверждения корректности самих формул.
+
+**Как проверяем:** `pytest tests/engine/ -v` ✅ 44/44 зелёные (включая
+17 новых тестов 2.2).
 
 **Зависимости:** 2.1.
 
@@ -723,7 +732,7 @@ DASH row 44/46 per-unit значениями SKU_1/HM — это точнее в
 - [x] 1.5 PeriodValues API ✅ (2026-04-08, 12/12 pytest зелёные, трёхслойная модель + 4 view modes + append-only versioning)
 - [x] 1.6 Scenarios API ✅ (2026-04-08, 9/9 pytest зелёные, GET/PATCH дельт + results с actionable 404)
 
-### Фаза 2 — Расчётное ядро (← следующий шаг: задача 2.2)
+### Фаза 2 — Расчётное ядро (← следующий шаг: задача 2.3)
 **Архитектурные решения для всей фазы (одобрены пользователем):**
 - Pipeline = pure functions, композиция через оркестратор (не классы, не DataFrame)
 - `PipelineInput` dataclass формируется service'ом, pipeline не ходит в БД
@@ -731,7 +740,7 @@ DASH row 44/46 per-unit значениями SKU_1/HM — это точнее в
 - numpy-financial добавится в задаче 2.3 (для IRR/NPV функций), не раньше
 - Эталонные значения из GORJI Excel захардкожены в тестах — не зависят от наличия xlsx
 - [x] 2.1 Pipeline steps 1–5 ✅ (2026-04-08, 25/25 pytest зелёные, сверено с DASH SKU_1/HM per-unit)
-- [ ] 2.2 Pipeline steps 6–9
+- [x] 2.2 Pipeline steps 6–9 ✅ (2026-04-08, 44/44 engine pytest, EBITDA per-unit + Y0/Y1 агрегатная сверка с DATA rows 38-43)
 - [ ] 2.3 Pipeline steps 10–12 + acceptance-тест
 - [ ] 2.4 Celery orchestration
 - [ ] 2.5 Predict-слой

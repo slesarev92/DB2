@@ -9,6 +9,55 @@
 
 ## [Unreleased]
 
+### Added (задача 2.2 — Pipeline steps 6–9)
+**Расчётное ядро — вторая половина без KPI/discount:**
+
+- `backend/app/engine/steps/s06_ebitda.py` — `EBITDA = CM − NR×CA_M_RATE − NR×MARKETING_RATE`
+  (Excel DATA rows 29-31). По D-05 КАиУР и Marketing — % от NR на уровне ProjectSKU,
+  вычитаются на уровне EBITDA, не Contribution.
+- `backend/app/engine/steps/s07_working_capital.py` — `WC[t] = NR[t] × wc_rate`
+  и `ΔWC[t] = WC[t-1] − WC[t]` с граничным случаем `ΔWC[0] = −WC[0]` (нет
+  предыдущего периода). **D-01 / ADR-CE-02** — формула ТЗ `× (1 − 0.12)` неверна,
+  ΔWC основан на изменении уровня WC, не на удержании от Contribution.
+- `backend/app/engine/steps/s08_tax.py` — `TAX[t] = −(CM × tax_rate)` если CM ≥ 0,
+  иначе 0. **D-03 / ADR-CE-04** — нет налогового щита при убытке, знак отрицательный
+  (отток), база — Contribution.
+- `backend/app/engine/steps/s09_cash_flow.py` — `OCF = CM + ΔWC + TAX`,
+  `ICF = −CAPEX`, `FCF = OCF + ICF` (Excel DATA rows 41-43).
+
+**Расширения PipelineInput** (`backend/app/engine/context.py`):
+- `ca_m_rate`, `marketing_rate` — % от NR (ProjectSKU level)
+- `wc_rate`, `tax_rate` — Project-level financial parameters
+- `capex: tuple[float, ...] = ()` — per-period investment, default empty (zeros).
+  На per-line уровне обычно 0, оркестратор (2.4) добавляет project-level.
+- Валидация длин для `capex`.
+
+**PipelineContext** дополнен полями: `ca_m_cost`, `marketing_cost`, `ebitda`,
+`working_capital`, `delta_working_capital`, `tax`, `operating_cash_flow`,
+`investing_cash_flow`, `free_cash_flow`.
+
+**Тесты** (`backend/tests/engine/test_steps_6_9.py`) — 17 новых, ≈0.13 сек:
+
+- `TestEbitda` (3): subtraction формула, zero-rates → EBITDA=CM, pre-condition
+- `TestWorkingCapital` (4): WC формула, граничный t=0, multi-period растущий WC,
+  **численная сверка с Excel DATA rows 38-39** (Y0/Y1 GORJI агрегаты — WC и ΔWC
+  совпадают до 1e-9)
+- `TestTax` (4): positive→negative tax, negative→0 (нет щита), zero→0,
+  **сверка с Excel DATA row 40 Y0/Y1**
+- `TestCashFlow` (5): OCF=CM+ΔWC+TAX, ICF=−CAPEX, empty capex→0, FCF=OCF+ICF,
+  **полная сверка цепочки s07-s09 с DATA rows 41-43 Y0/Y1**
+- `TestPipelineSmoke6_9` (1): full s01..s09 на 3-период с capex в Y0
+
+**Acceptance EBITDA** (`backend/tests/engine/test_gorji_reference.py` +2 теста):
+- `test_ebitda_per_unit_m1_m3` — 5.66203 ₽/unit ↔ DASH row 48 col D-F
+- `test_ebitda_per_unit_m4_m6` — 4.69769 ₽/unit (после апрельской инфляции)
+
+Эталонные значения извлечены тем же openpyxl one-shot методом что и в 2.1.
+В `requirements.txt` openpyxl не добавлен.
+
+Запуск: `docker compose -f infra/docker-compose.dev.yml exec backend pytest -v`
+→ **110 passed in 12.45s** (66 CRUD + 44 engine, 0 warnings).
+
 ### Added (задача 2.1 — Pipeline steps 1–5)
 **Расчётное ядро — первая половина pipeline:**
 

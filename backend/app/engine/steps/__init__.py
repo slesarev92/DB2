@@ -14,4 +14,8 @@ from app.engine.steps import (  # noqa: F401
     s03_cogs,
     s04_gross_profit,
     s05_contribution,
+    s06_ebitda,
+    s07_working_capital,
+    s08_tax,
+    s09_cash_flow,
 )

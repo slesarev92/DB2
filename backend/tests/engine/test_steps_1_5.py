@@ -52,8 +52,13 @@ def make_input(**overrides) -> PipelineInput:
         "copacking_per_unit": 0.0,
         "logistics_cost_per_kg": 0.0,
         "sku_volume_l": 0.5,
+        "ca_m_rate": 0.0,
+        "marketing_rate": 0.0,
+        "wc_rate": 0.12,
+        "tax_rate": 0.20,
         "product_density": 1.0,
         "project_opex": (),
+        "capex": (),
     }
     defaults.update(overrides)
     return PipelineInput(**defaults)
@@ -407,4 +412,8 @@ class TestPipelineSmoke:
                 copacking_per_unit=0.0,
                 logistics_cost_per_kg=0.0,
                 sku_volume_l=0.5,
+                ca_m_rate=0.0,
+                marketing_rate=0.0,
+                wc_rate=0.12,
+                tax_rate=0.20,
             )

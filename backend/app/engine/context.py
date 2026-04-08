@@ -69,6 +69,15 @@ class PipelineInput:
     # --- Логистика ---
     logistics_cost_per_kg: float    # ProjectSKUChannel.logistics_cost_per_kg, ₽/кг
     sku_volume_l: float             # SKU.volume_l, литров на единицу
+
+    # --- EBITDA-компоненты (% от Net Revenue, ProjectSKU level) ---
+    ca_m_rate: float                # КАиУР % (Excel: DASH row 41 СА&М)
+    marketing_rate: float           # Маркетинг % (Excel: DASH row 42)
+
+    # --- Project-level финансовые параметры (Project model) ---
+    wc_rate: float                  # Working Capital ratio (default 0.12). D-01.
+    tax_rate: float                 # Profit tax rate (default 0.20). D-03.
+
     product_density: float = 1.0    # кг/л. Для напитков ≈ 1.0 (D-09).
 
     # --- Project OPEX ---
@@ -76,6 +85,13 @@ class PipelineInput:
     # В Excel — DATA row 26 "PROJECT_OPEX". В MVP источник данных ещё не
     # реализован — дефолт нули по всему горизонту.
     project_opex: tuple[float, ...] = ()
+
+    # --- Инвестиции (CAPEX) ---
+    # Per-period CAPEX. В Excel — DATA row 33. На уровне (SKU × Channel)
+    # capex обычно 0 — это project-level затраты, которые добавляются
+    # оркестратором (задача 2.4). Если пусто, трактуется как нули по всему
+    # горизонту.
+    capex: tuple[float, ...] = ()
 
     def __post_init__(self) -> None:
         # Валидация длин массивов. Падаем рано и с понятной ошибкой —
@@ -97,6 +113,11 @@ class PipelineInput:
         if self.project_opex and len(self.project_opex) != n:
             raise ValueError(
                 f"PipelineInput.project_opex has length {len(self.project_opex)}, "
+                f"expected {n} or 0 (empty = zeros)"
+            )
+        if self.capex and len(self.capex) != n:
+            raise ValueError(
+                f"PipelineInput.capex has length {len(self.capex)}, "
                 f"expected {n} or 0 (empty = zeros)"
             )
 
@@ -136,3 +157,21 @@ class PipelineContext:
     # --- После s05_contribution ---
     logistics_cost: list[float] = field(default_factory=list)   # logistics_cost_per_kg × kg
     contribution: list[float] = field(default_factory=list)     # GP − LOGISTICS − PROJECT_OPEX
+
+    # --- После s06_ebitda ---
+    ca_m_cost: list[float] = field(default_factory=list)        # NR × ca_m_rate
+    marketing_cost: list[float] = field(default_factory=list)   # NR × marketing_rate
+    ebitda: list[float] = field(default_factory=list)           # CM − ca_m − marketing
+
+    # --- После s07_working_capital (D-01 / ADR-CE-02) ---
+    working_capital: list[float] = field(default_factory=list)  # NR × wc_rate
+    delta_working_capital: list[float] = field(default_factory=list)  # wc[t-1] − wc[t]
+
+    # --- После s08_tax (D-03 / ADR-CE-04) ---
+    # Знак отрицательный (отток) — складывается с CM напрямую в OCF.
+    tax: list[float] = field(default_factory=list)              # -(CM × tax_rate) если CM≥0, иначе 0
+
+    # --- После s09_cash_flow ---
+    operating_cash_flow: list[float] = field(default_factory=list)    # CM + ΔWC + tax
+    investing_cash_flow: list[float] = field(default_factory=list)    # -capex
+    free_cash_flow: list[float] = field(default_factory=list)         # OCF + ICF

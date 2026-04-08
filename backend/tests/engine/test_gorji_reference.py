@@ -35,6 +35,7 @@ from app.engine.steps import (
     s03_cogs,
     s04_gross_profit,
     s05_contribution,
+    s06_ebitda,
 )
 
 
@@ -112,6 +113,23 @@ GORJI_LOGISTIC_KG = [
     8.56,   # +7% Apr inflation
     8.56,
     8.56,
+]
+
+# Project-level rates (Excel DASH SKU_1 rows 41/42)
+GORJI_CA_M_RATE = 0.16131139706953254
+GORJI_MARKETING_RATE = 0.020322841010825807
+# Project-level financial parameters (defaults в Project model)
+GORJI_WC_RATE = 0.12
+GORJI_TAX_RATE = 0.20
+
+# Ожидаемый EBITDA per unit (DASH row 48 col D-I)
+EXPECTED_EBITDA_PER_UNIT = [
+    5.662025983162983,   # M1
+    5.662025983162983,   # M2
+    5.662025983162983,   # M3
+    4.69769129815571,    # M4 (после апрельской инфляции)
+    4.69769129815571,    # M5
+    4.69769129815571,    # M6
 ]
 
 # Ожидаемые per-unit результаты (DASH rows 44 и 46):
@@ -192,6 +210,10 @@ def _build_input_for_range(
         copacking_per_unit=0.0,
         logistics_cost_per_kg=logistic_kg,
         sku_volume_l=GORJI_VOLUME_L,
+        ca_m_rate=GORJI_CA_M_RATE,
+        marketing_rate=GORJI_MARKETING_RATE,
+        wc_rate=GORJI_WC_RATE,
+        tax_rate=GORJI_TAX_RATE,
         product_density=1.0,
         project_opex=tuple([0.0] * n),
     )
@@ -199,12 +221,20 @@ def _build_input_for_range(
 
 
 def _run_pipeline(inp: PipelineInput) -> PipelineContext:
+    """Прогон s01..s06 (с EBITDA — для acceptance шага 2.2).
+
+    s07-s09 в этот раннер не включены: WC/Tax/CashFlow на per-line уровне
+    в Excel-агрегатах не показаны (Excel DATA содержит только проектный
+    агрегат). Численная сверка s07-s09 — отдельным test_steps_6_9.py
+    через подстановку агрегатов NR/CM напрямую в контекст.
+    """
     ctx = PipelineContext(input=inp)
     s01_volume.step(ctx)
     s02_price.step(ctx)
     s03_cogs.step(ctx)
     s04_gross_profit.step(ctx)
     s05_contribution.step(ctx)
+    s06_ebitda.step(ctx)
     return ctx
 
 
@@ -278,6 +308,39 @@ class TestGorjiReference:
             cm_per_unit = ctx.contribution[i] / ctx.volume_units[i]
             assert cm_per_unit == pytest.approx(
                 exp_cm[i], rel=REL_TOL, abs=ABS_TOL
+            )
+
+    def test_ebitda_per_unit_m1_m3(self):
+        """EBITDA/unit в M1-M3: 5.66203 ₽/unit (DASH row 48 col D-F).
+
+        Формула: EBITDA = CM − NR×CA_M_RATE − NR×MARKETING_RATE
+        Per unit: 10.4293 − 26.2465×0.16131 − 26.2465×0.02032 = 5.6620
+        """
+        inp, _, _ = _build_input_for_range(0, 3)
+        ctx = _run_pipeline(inp)
+
+        for t in range(3):
+            ebitda_per_unit = ctx.ebitda[t] / ctx.volume_units[t]
+            assert ebitda_per_unit == pytest.approx(
+                EXPECTED_EBITDA_PER_UNIT[t], rel=REL_TOL, abs=ABS_TOL
+            ), (
+                f"M{t + 1}: pipeline ebitda/unit={ebitda_per_unit}, "
+                f"expected={EXPECTED_EBITDA_PER_UNIT[t]}"
+            )
+
+    def test_ebitda_per_unit_m4_m6(self):
+        """EBITDA/unit в M4-M6: 4.69769 ₽/unit (после апрельской инфляции).
+
+        GP падает с 14.43 до 13.74, logistics растёт с 4.0 до 4.28,
+        CA&M/Marketing rates фиксированные → EBITDA падает с 5.66 до 4.70.
+        """
+        inp, _, _ = _build_input_for_range(3, 6)
+        ctx = _run_pipeline(inp)
+
+        for i in range(3):
+            ebitda_per_unit = ctx.ebitda[i] / ctx.volume_units[i]
+            assert ebitda_per_unit == pytest.approx(
+                EXPECTED_EBITDA_PER_UNIT[i + 3], rel=REL_TOL, abs=ABS_TOL
             )
 
     def test_inflation_jump_m3_to_m4(self):
