@@ -165,18 +165,21 @@ ref_seasonality    (id, profile_name, month_coefficients jsonb)
 
 ---
 
-#### Задача 0.4 — Справочные данные (seed)
+#### ✅ Задача 0.4 — Справочные данные (seed)
 
 **Что делаем:** скрипт `backend/scripts/seed_reference_data.py` — заполнить:
-- `ref_inflation`: профили из Predikt-k-TZ-V3.xlsx лист Inflation (включая `Апрель/Октябрь +7%`)
-- `ref_seasonality`: профили из лист Seasonality (Water и другие категории)
-- `channels`: HM, SM, MM, TT, E-COM_OZ, E-COM_OZ_Fresh с данными ОКБ из GORJI+
-- `periods`: M1–M36 + Y4–Y10 (43 периода) с правильными датами
+- `ref_inflation`: 16 профилей из листа DASH MENU GORJI (No_Inflation + Апрель/Октябрь +N% варианты)
+- `ref_seasonality`: 6 профилей категорий из DASH MENU (No_Seasonality, CSD, WTR, EN, TEA, JUI)
+- `channels`: **25 каналов** из листа ОКБ / DASH MENU GORJI (план изначально указывал 6, но в эталонной модели их 25 — использованы все по ADR-CE-01)
+- `periods`: M1–M36 + Y4–Y10 (43 строки)
+
+**Все значения захардкожены** в скрипт (не зависит от наличия xlsx).
 
 **Критерий готовности:**
 - После запуска скрипта в таблицах есть данные
 - `periods` содержит ровно 43 строки
-- `channels` содержит 6 каналов из GORJI+
+- `channels` содержит все 25 каналов из GORJI+ DASH MENU
+- Идемпотентность: повторный запуск не создаёт дубликатов
 
 **Как проверяем:** SQL-запросы на COUNT, unit-тест `test_seed.py`.
 
@@ -697,7 +700,7 @@ ref_seasonality    (id, profile_name, month_coefficients jsonb)
 - [x] 0.1 Инициализация структуры и Git ✅ (commit b10aef8, 2026-04-08)
 - [x] 0.2 Docker Compose (dev) ✅ (2026-04-08, все 5 сервисов healthy, /health + localhost:3000 зелёные)
 - [x] 0.3 Схема базы данных ✅ (2026-04-08, миграция 1c05696e13e6, 14 таблиц, upgrade/downgrade проверены)
-- [ ] 0.4 Справочные данные (seed)
+- [x] 0.4 Справочные данные (seed) ✅ (2026-04-08, 43 periods + 25 channels + 16 inflation + 6 seasonality, идемпотентно)
 
 ### Фаза 1 — Backend CRUD API
 - [ ] 1.1 Auth endpoints

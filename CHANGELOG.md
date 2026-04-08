@@ -9,6 +9,20 @@
 
 ## [Unreleased]
 
+### Added (задача 0.4 — Справочные данные)
+- `backend/scripts/__init__.py`, `backend/scripts/seed_reference_data.py` — идемпотентный seed-скрипт для справочников
+- Загружено в БД:
+  - `periods` — **43 строки**: M1..M36 (помесячно за первые 3 года) + Y4..Y10 (годовые)
+  - `channels` — **25 каналов** из листа DASH MENU модели GORJI (HM, SM, MM, TT, Beauty, Beauty-NS, DS_Pyaterochka, DS_Magnit, HDS, ALCO, 5×E-COM, E_COM_E-grocery, 4×HORECA, 4×QSR, VEND_machine, E-COM_OZ_Fresh) с реальными значениями ОКБ
+  - `ref_inflation` — **16 профилей**: No_Inflation + 4×"Апрель +N%" (N=4..7) + 4×"Октябрь +N%" + 7×"Апрель/Октябрь +N%" (N=4..10). Структура `month_coefficients` — `{monthly_deltas: [12 элементов янв..дек], yearly_growth: [7 элементов Y4..Y10]}`
+  - `ref_seasonality` — **6 профилей**: No_Seasonality, CSD, WTR, EN, TEA, JUI (TEA и JUI в Excel-модели — копии EN). 12 коэффициентов янв..дек, среднее ≈ 1.0
+- Все значения захардкожены в скрипт — нет зависимости от наличия xlsx в окружении (требование пользователя)
+- Идемпотентность: повторный запуск пропускает существующие записи, проверка по уникальным колонкам (`profile_name` / `code` / `period_number`)
+
+**Расхождение с планом по каналам:** план задачи 0.4 указывал "6 каналов", но в реальной модели GORJI DASH MENU их 25. Использованы все 25 как источник истины (ADR-CE-01). План обновлён.
+
+Запуск: `docker compose -f infra/docker-compose.dev.yml exec backend python -m scripts.seed_reference_data`
+
 ### Added (задача 0.3 — Схема базы данных)
 - `backend/app/models/base.py` — `Base` (DeclarativeBase), `TimestampMixin`, 5 enums (`ScenarioType`, `SourceType`, `PeriodType`, `PeriodScope`, `UserRole`), helper `varchar_enum()` для VARCHAR + CHECK enums с lowercase значениями
 - Naming convention для constraints (`pk_/uq_/fk_/ck_/ix_`) — стабильные имена в миграциях, корректный downgrade
