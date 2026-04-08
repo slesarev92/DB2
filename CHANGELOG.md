@@ -9,6 +9,30 @@
 
 ## [Unreleased]
 
+### Added (задача 1.1 — Auth endpoints + первые тесты)
+- `backend/app/core/security.py` — bcrypt password hashing + JWT access/refresh encode/decode (HS256, `sub`=user_id как str по RFC 7519, `type`=access|refresh для разделения)
+- `backend/app/schemas/{user.py, auth.py}` — Pydantic-схемы: `UserBase`, `UserCreate`, `UserRead`, `Token`, `AccessToken`, `RefreshRequest` (email хранится как `str` без EmailStr — без зависимости `email-validator`)
+- `backend/app/services/user_service.py` — `get_user_by_email`, `get_user_by_id`, `create_user`, `authenticate_user`
+- `backend/app/api/deps.py` — `oauth2_scheme` (`OAuth2PasswordBearer`) + `get_current_user` dependency: декодирует JWT, проверяет `type=access`, грузит User из БД, поднимает 401 на любом сбое
+- `backend/app/api/auth.py` — router `/api/auth/{login, refresh, me}`. Login принимает form data (OAuth2 password flow), refresh — JSON body
+- `backend/app/main.py` — подключён auth router
+- `backend/pytest.ini` — `asyncio_mode=auto`, обе scope (fixture и test) = `session` (см. ERRORS_AND_ISSUES.md о том, почему это критично)
+- `backend/tests/conftest.py` — fixtures: `test_db_url` (создаёт чистую `dbpassport_test` через admin connection к `postgres`), `test_engine` (`create_all` schema, NullPool), `db_session` (connection + transaction + rollback на каждый тест), `client` (HTTPX AsyncClient с подменой `get_db`)
+- `backend/tests/api/test_auth.py` — **8 тест-кейсов**, все зелёные:
+  1. login success → 200 + access + refresh
+  2. login wrong password → 401
+  3. login unknown user → 401
+  4. /me without token → 401
+  5. /me with valid token → 200 + user data (role в JSON = `"analyst"` lowercase ✓)
+  6. /me with expired token → 401
+  7. /me with garbage token → 401
+  8. refresh flow: login → /refresh → /me с новым access
+- В `backend/requirements.txt` добавлены: `python-jose[cryptography]>=3.3`, `passlib[bcrypt]>=1.7.4`, `bcrypt>=4.0.0,<4.1.0` (см. ERRORS_AND_ISSUES.md), `python-multipart>=0.0.9`, `pytest>=8.3`, `pytest-asyncio>=0.24`, `httpx>=0.27`
+
+Тесты против реального postgres из compose (вариант, выбранный пользователем; SQLite не подходит из-за JSONB/PG enums). Изоляция через transaction-rollback на каждый тест.
+
+Запуск: `docker compose -f infra/docker-compose.dev.yml exec backend pytest -v` → **8 passed in 1.86s**.
+
 ### Added (задача 0.4 — Справочные данные)
 - `backend/scripts/__init__.py`, `backend/scripts/seed_reference_data.py` — идемпотентный seed-скрипт для справочников
 - Загружено в БД:

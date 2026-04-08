@@ -191,7 +191,7 @@ ref_seasonality    (id, profile_name, month_coefficients jsonb)
 
 **Цель:** все сущности создаются, читаются, обновляются, удаляются через REST API. Расчётов нет.
 
-#### Задача 1.1 — Auth endpoints
+#### ✅ Задача 1.1 — Auth endpoints
 
 **Что делаем:**
 - `POST /api/auth/login` → JWT access + refresh tokens
@@ -703,7 +703,7 @@ ref_seasonality    (id, profile_name, month_coefficients jsonb)
 - [x] 0.4 Справочные данные (seed) ✅ (2026-04-08, 43 periods + 25 channels + 16 inflation + 6 seasonality, идемпотентно)
 
 ### Фаза 1 — Backend CRUD API
-- [ ] 1.1 Auth endpoints
+- [x] 1.1 Auth endpoints ✅ (2026-04-08, 8/8 pytest зелёные)
 - [ ] 1.2 Projects API
 - [ ] 1.3 SKU и BOM API
 - [ ] 1.4 Channels API
