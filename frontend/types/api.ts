@@ -147,6 +147,64 @@ export interface BOMItemRead {
 }
 
 // ============================================================
+// Channel (глобальный справочник, read-only)
+// ============================================================
+
+export interface Channel {
+  id: number;
+  code: string;
+  name: string;
+  universe_outlets: number | null;
+  created_at: string;
+}
+
+// ============================================================
+// ProjectSKUChannel (PSC — параметры SKU в конкретном канале)
+// ============================================================
+
+export interface ProjectSKUChannelCreate {
+  channel_id: number;
+  nd_target?: string;
+  nd_ramp_months?: number;
+  offtake_target?: string;
+  channel_margin?: string;
+  promo_discount?: string;
+  promo_share?: string;
+  shelf_price_reg?: string;
+  logistics_cost_per_kg?: string;
+  seasonality_profile_id?: number | null;
+}
+
+export interface ProjectSKUChannelUpdate {
+  nd_target?: string;
+  nd_ramp_months?: number;
+  offtake_target?: string;
+  channel_margin?: string;
+  promo_discount?: string;
+  promo_share?: string;
+  shelf_price_reg?: string;
+  logistics_cost_per_kg?: string;
+  seasonality_profile_id?: number | null;
+}
+
+export interface ProjectSKUChannelRead {
+  id: number;
+  project_sku_id: number;
+  channel_id: number;
+  channel: Channel;
+  nd_target: string;
+  nd_ramp_months: number;
+  offtake_target: string;
+  channel_margin: string;
+  promo_discount: string;
+  promo_share: string;
+  shelf_price_reg: string;
+  logistics_cost_per_kg: string;
+  seasonality_profile_id: number | null;
+  created_at: string;
+}
+
+// ============================================================
 // Reference
 // ============================================================
 
@@ -157,4 +215,10 @@ export interface RefInflation {
     monthly_deltas?: number[];
     yearly_growth?: number[];
   };
+}
+
+export interface RefSeasonality {
+  id: number;
+  profile_name: string;
+  month_coefficients: Record<string, unknown>;
 }

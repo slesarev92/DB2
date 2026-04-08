@@ -9,6 +9,65 @@
 
 ## [Unreleased]
 
+### Added (задача 3.4 — Frontend: Каналы)
+**Привязка SKU к каналам сбыта с авто-генерацией predict (закрытие Фазы 3):**
+
+**Backend extension:**
+- `schemas/reference.py` — `RefSeasonalityRead` Pydantic схема
+- `api/reference.py` — `GET /api/ref-seasonality` (read-only, JWT,
+  отсортирован по profile_name) для dropdown сезонности
+
+**Frontend:**
+- `types/api.ts` расширен Channel/ProjectSKUChannel(Create/Update/Read)/
+  RefSeasonality
+- `lib/channels.ts` (новый) — типизированные обёртки listChannels/
+  listProjectSkuChannels/getPskChannel/addChannelToPsk/updatePskChannel/
+  deletePskChannel/listRefSeasonality
+- `components/projects/channel-form.tsx` (новый) — **reusable** форма
+  PSC параметров: Select каналов с исключением уже привязанных,
+  9 числовых полей (nd_target, ramp_months, offtake_target,
+  channel_margin, promo_discount, promo_share, shelf_price_reg,
+  logistics_cost_per_kg, seasonality_profile_id Select). Состояние
+  как одна структура `ChannelFormState`, helper `toPscPayload` для
+  API payload. Параметры `excludeChannelIds` (для add) и `channelLocked`
+  (для edit).
+- `components/projects/channel-dialogs.tsx` (новый) — `AddChannelDialog`
+  и `EditChannelDialog`. Add: пустая форма с дефолтами, исключение
+  привязанных каналов. Edit: предзаполнение через `pscToFormState`,
+  channel_id заблокирован, PATCH без `channel_id` поля (backend всё
+  равно игнорирует, но чисто).
+- `components/projects/channels-panel.tsx` (новый) — таблица PSC
+  выбранного PSK (Channel code/name, ND %, Off-take, Margin %,
+  Promo discount/share, Shelf price ₽) с кнопками `✎` (edit) и `×`
+  (delete с window.confirm). Кнопка "+ Привязать канал" → AddChannelDialog.
+- `components/projects/channels-tab.tsx` (новый) — комбинирующий
+  компонент. **Переиспользует** `SkuPanel` слева (1/3 grid) +
+  `ChannelsPanel` справа (2/3) + selectedPskId state поднят сюда.
+  Никаких render-prop'ов или дополнительной абстракции — каждый таб
+  держит свой selection state.
+- `app/(app)/projects/[id]/page.tsx` — таб "Каналы" больше не disabled,
+  использует `<ChannelsTab projectId={projectId} />`. Остаётся только
+  таб "Результаты" disabled (Phase 4).
+
+**E2E проверка (curl):**
+- `GET /api/ref-seasonality` → 6 профилей
+- `GET /api/channels` → 25 каналов, HM id=1
+- `POST /api/project-skus/1/channels` HM с дефолтами → 201
+- `SELECT COUNT(*) FROM period_values WHERE psk_channel_id=1 AND source_type='predict'`
+  → **129** (43 периода × 3 сценария — auto-fill predict из задачи 2.5)
+- Frontend `/projects/1` → 200, таб "Каналы" работает
+
+**3 новых backend теста** (192 total, 15.61 сек):
+- `test_list_ref_seasonality_returns_seeded_profiles` — структура и наличие
+- `test_list_ref_seasonality_unauthorized` — 401 без JWT
+- `test_list_ref_seasonality_sorted_by_name` — алфавитная сортировка
+
+**ФАЗА 3 ЗАКРЫТА.** End-to-end UI flow готов: пользователь регистрируется
+→ создаёт проект → добавляет SKU + BOM (live COGS) → привязывает каналы
+(с auto-fill predict) → готов запускать `/recalculate`. Следующая фаза —
+**4. Frontend: результаты и анализ** (AG Grid периоды, KPI экран,
+сравнение сценариев, чувствительность).
+
 ### Added (задача 3.3 — Frontend: SKU и BOM)
 **Полный CRUD flow для SKU и BOM в карточке проекта:**
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { ChannelsTab } from "@/components/projects/channels-tab";
 import { SkusTab } from "@/components/projects/skus-tab";
 import { Button } from "@/components/ui/button";
 import {
@@ -97,9 +98,7 @@ export default function ProjectDetailPage() {
         <TabsList>
           <TabsTrigger value="overview">Параметры</TabsTrigger>
           <TabsTrigger value="skus">SKU и BOM</TabsTrigger>
-          <TabsTrigger value="channels" disabled>
-            Каналы
-          </TabsTrigger>
+          <TabsTrigger value="channels">Каналы</TabsTrigger>
           <TabsTrigger value="results" disabled>
             Результаты
           </TabsTrigger>
@@ -157,6 +156,10 @@ export default function ProjectDetailPage() {
 
         <TabsContent value="skus" className="mt-4">
           <SkusTab projectId={projectId} />
+        </TabsContent>
+
+        <TabsContent value="channels" className="mt-4">
+          <ChannelsTab projectId={projectId} />
         </TabsContent>
       </Tabs>
     </div>

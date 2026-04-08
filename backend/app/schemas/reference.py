@@ -21,3 +21,18 @@ class RefInflationRead(BaseModel):
     id: int
     profile_name: str
     month_coefficients: dict[str, Any]
+
+
+class RefSeasonalityRead(BaseModel):
+    """Профиль сезонности (Water, Energy drinks и т.д.).
+
+    `month_coefficients` — JSONB список из 12 чисел по календарным месяцам
+    январь..декабрь. Сумма обычно нормализована к 12.0 (среднее = 1.0).
+    Применяется в `s01_volume` для monthly периодов M1..M36.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    profile_name: str
+    month_coefficients: dict[str, Any]

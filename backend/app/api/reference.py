@@ -12,8 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.db import get_db
-from app.models import RefInflation, User
-from app.schemas.reference import RefInflationRead
+from app.models import RefInflation, RefSeasonality, User
+from app.schemas.reference import RefInflationRead, RefSeasonalityRead
 
 router = APIRouter(prefix="/api", tags=["reference"])
 
@@ -29,4 +29,19 @@ async def list_ref_inflation_endpoint(
     возвращает пустой список (frontend покажет dropdown без вариантов).
     """
     stmt = select(RefInflation).order_by(RefInflation.profile_name)
+    return list((await session.scalars(stmt)).all())
+
+
+@router.get("/ref-seasonality", response_model=list[RefSeasonalityRead])
+async def list_ref_seasonality_endpoint(
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> list[RefSeasonality]:
+    """Список профилей сезонности для dropdown в форме канала.
+
+    Применяется в `s01_volume` через `seasonality_profile_id` поля
+    ProjectSKUChannel. Возвращает все сидированные профили (Water,
+    Energy drinks и т.д. — см. backend/scripts/seed_reference_data.py).
+    """
+    stmt = select(RefSeasonality).order_by(RefSeasonality.profile_name)
     return list((await session.scalars(stmt)).all())
