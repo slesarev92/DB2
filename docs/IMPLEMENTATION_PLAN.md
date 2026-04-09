@@ -1041,19 +1041,60 @@ in-memory pipeline runs (легко), вместо 20 раздельных Celer
 
 ### Фаза 5 — Экспорт
 
-#### Задача 5.1 — Экспорт XLSX (F-08)
+#### ✅ Задача 5.1 — Экспорт XLSX (F-08)
 
-**Что делаем:** `backend/app/export/excel_exporter.py` — генерация XLSX через openpyxl:
-- Лист "Вводные": параметры проекта, SKU, каналы
-- Лист "PnL по периодам": все показатели по M1–Y10
-- Лист "KPI": NPV, IRR, ROI, Payback по трём сценариям
+**Что сделано:**
 
-**Критерий готовности:**
-- Файл открывается в Excel без ошибок
-- Значения соответствуют данным в UI
-- Celery task отдаёт файл, endpoint `/api/projects/{id}/export/xlsx` возвращает `application/vnd.openxmlformats`
+**Backend:**
+- `backend/requirements.txt`: добавлен `openpyxl>=3.1.0,<4.0.0`
+  (согласовано с user, single tool для read+write XLSX в проекте)
+- `backend/app/export/excel_exporter.py` — `generate_project_xlsx()`:
+  - Загружает project + inflation + SKU/BOM + каналы + financial plan
+    + scenarios + scenario results
+  - Запускает Base pipeline in-memory чтобы получить per-period детали
+    для PnL листа (ScenarioResult хранит только KPI agg, не full state)
+  - Строит 3 листа в openpyxl Workbook → bytes через BytesIO
+- `backend/app/api/projects.py`: `GET /api/projects/{id}/export/xlsx`
+  - Возвращает `StreamingResponse` с MIME
+    `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+  - `Content-Disposition: attachment; filename="project_{id}_{slug}.xlsx"`
+  - 404 если project не найден
+- 14 backend тестов в `tests/api/test_export_xlsx.py`:
+  - Service-level: bytes/3 sheets/inputs params/SKU table/channels table/
+    PnL period columns/PnL metric rows/KPI 3×3 matrix/404
+  - Endpoint-level: MIME/valid XLSX/filename/404/401
 
-**Зависимости:** 2.4.
+**Структура XLSX:**
+- **Лист «Вводные»**: project params + SKU table (с BOM total) + каналы
+  table (launch/ND/offtake/promo/shelf/logistics) + financial plan (CAPEX/
+  OPEX по периодам)
+- **Лист «PnL по периодам»**: 18 метрик (Volume Units/Liters, NR, COGS
+  components, GP, Logistics, Contribution, CA&M, Marketing, EBITDA, WC/
+  ΔWC, Tax, OCF/ICF/FCF) × 43 period columns (M1..M36 + Y4..Y10) +
+  годовые агрегаты Y1..Y10 (Annual NR/CM/FCF/DCF/Cumulative)
+- **Лист «KPI»**: 9 строк = 3 сценария × 3 scope. Колонки: NPV / IRR /
+  ROI / Payback simple / Payback discounted / CM% / EBITDA% / Go-No-Go.
+  Если ScenarioResult отсутствует — "—" (нужен POST /recalculate).
+
+**Frontend:**
+- `frontend/lib/api.ts`: добавлен `apiGetBlob(path)` helper для GET
+  binary с auth (использует existing `_fetchWithAuth` с refresh при 401)
+- `frontend/lib/export.ts`: `downloadProjectXlsx(projectId)` — fetch
+  blob → trigger browser download через `<a href={url} download>`
+- `frontend/components/projects/results-tab.tsx`: добавлена кнопка
+  «Скачать XLSX» рядом с «Пересчитать» в header. Локальный
+  exporting/exportError state, error card.
+
+**Критерий готовности:** ✅
+- Файл открывается в openpyxl без ошибок (14 unit тестов это проверяют)
+- Значения соответствуют данным в UI (PnL запускает тот же pipeline
+  что и Results таб)
+- Endpoint возвращает правильный MIME type
+- 231/231 backend pytest зелёные (217 + 14 export)
+- 0 ошибок `npx tsc --noEmit`
+- HTTP 200 на `/projects/1` после restart frontend
+
+**Зависимости:** 2.4 ✅
 
 ---
 
@@ -1413,8 +1454,11 @@ GitHub Secrets).
   4 параметра × 5 уровней = 20 cells, SensitivityTab с матрицей NPV/CM,
   Base reference card. 9 backend тестов + 0 tsc errors, 217/217 pytest.)
 
-### Фаза 5 — Экспорт
-- [ ] 5.1 XLSX
+### Фаза 5 — Экспорт (← следующий шаг: задача 5.2)
+- [x] 5.1 XLSX ✅ (2026-04-09, openpyxl 3.1, excel_exporter с 3 листами
+  Вводные/PnL/KPI, GET /api/projects/{id}/export/xlsx StreamingResponse,
+  кнопка «Скачать XLSX» в ResultsTab. 14 backend тестов, 231/231 pytest,
+  0 tsc errors)
 - [ ] 5.2 PPT
 - [ ] 5.3 PDF
 

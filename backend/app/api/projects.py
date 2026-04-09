@@ -2,6 +2,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -203,3 +204,66 @@ async def sensitivity_analysis_endpoint(
         )
 
     return SensitivityResponse(**result)
+
+
+@router.get(
+    "/{project_id}/export/xlsx",
+    responses={
+        200: {
+            "content": {
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {}
+            },
+            "description": "XLSX файл с тремя листами: Вводные / PnL / KPI",
+        },
+        404: {"description": "Project не найден"},
+    },
+)
+async def export_project_xlsx_endpoint(
+    project_id: int,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> StreamingResponse:
+    """Экспорт проекта в XLSX (задача 5.1, F-08).
+
+    Возвращает .xlsx файл с тремя листами:
+    - **Вводные**: параметры проекта, SKU+BOM, каналы, financial plan
+    - **PnL по периодам**: per-period финансовые показатели Base сценария
+      (volume, NR, COGS, GP, CM, EBITDA, WC, Tax, OCF, FCF) + годовые
+      агрегаты Y1..Y10
+    - **KPI**: NPV/IRR/ROI/Payback × 3 сценария × 3 scope (Y1Y3/Y1Y5/Y1Y10)
+
+    Если расчёт ещё не выполнен (нет ScenarioResult) — KPI лист содержит
+    "—" в ячейках, PnL лист пустой с пометкой. Чтобы получить полный
+    экспорт — сначала POST /api/projects/{id}/recalculate.
+
+    Filename: `project_{id}_{name_slug}.xlsx`. Stream без temp files.
+    """
+    from io import BytesIO
+    from app.export.excel_exporter import (
+        ProjectNotFoundForExport,
+        generate_project_xlsx,
+    )
+
+    try:
+        xlsx_bytes = await generate_project_xlsx(session, project_id)
+    except ProjectNotFoundForExport:
+        raise _not_found
+
+    # Slug из имени проекта для filename
+    project = await project_service.get_project(session, project_id)
+    name_slug = "project"
+    if project is not None:
+        name_slug = "".join(
+            c if c.isalnum() else "_" for c in project.name
+        )[:50]
+
+    filename = f"project_{project_id}_{name_slug}.xlsx"
+
+    return StreamingResponse(
+        BytesIO(xlsx_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(xlsx_bytes)),
+        },
+    )

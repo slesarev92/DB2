@@ -36,3 +36,9 @@ python-multipart>=0.0.9,<1.0.0
 pytest>=8.3.0,<9.0.0
 pytest-asyncio>=0.24.0,<1.0.0
 httpx>=0.27.0,<1.0.0
+
+# --- Export (Фаза 5) ---
+# openpyxl: чтение Excel моделей (GORJI import) + генерация XLSX экспорта
+# (5.1). Mature, pure Python, Apache 2.0. Используется и в read, и в write —
+# единый инструмент для всех XLSX операций в проекте.
+openpyxl>=3.1.0,<4.0.0

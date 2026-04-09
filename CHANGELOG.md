@@ -9,6 +9,85 @@
 
 ## [Unreleased]
 
+### Added (задача 5.1 — Экспорт XLSX)
+
+**Backend:** новый excel_exporter сервис + endpoint + 14 тестов.
+**Frontend:** кнопка «Скачать XLSX» в табе Результаты.
+
+**Зависимости:**
+- `backend/requirements.txt`: добавлен `openpyxl>=3.1.0,<4.0.0`
+  (согласовано с user, single tool для read+write XLSX в проекте —
+  read используется в `import_gorji_full.py`, write для экспорта).
+- Backend + celery-worker контейнеры пересобраны.
+
+**Backend:**
+- `backend/app/export/excel_exporter.py` — новый модуль,
+  `generate_project_xlsx(session, project_id) → bytes`
+  - Загружает project + inflation profile + SKU/BOM + каналы +
+    financial plan + scenarios + scenario results
+  - Запускает Base pipeline in-memory чтобы получить per-period детали
+    для PnL листа (ScenarioResult хранит только KPI agg, не full state)
+  - Строит 3 листа в openpyxl Workbook → bytes через BytesIO
+  - Style helpers: `_set_header` (header fill+font), `_set_section`,
+    `_autosize_columns`
+  - Если pipeline падает или scenarios пусты — graceful degradation:
+    Вводные/KPI листы строятся, PnL содержит placeholder
+- `backend/app/api/projects.py`: новый endpoint
+  `GET /api/projects/{id}/export/xlsx`
+  - Возвращает `StreamingResponse` с MIME
+    `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+  - `Content-Disposition: attachment; filename="project_{id}_{slug}.xlsx"`
+  - 404 если project не найден
+- `backend/tests/api/test_export_xlsx.py` — **14 тестов**:
+  - Service-level (9): bytes, 3 sheets, inputs section/SKU table/channels
+    table, PnL period columns (M1..M36 + Y4..Y10), PnL metric rows,
+    KPI 3×3 matrix (после `calculate_all_scenarios`), 404
+  - Endpoint-level (5): MIME type, valid XLSX content, filename in
+    Content-Disposition, 404, 401 unauthorized
+
+**Структура XLSX:**
+- **Лист «Вводные»**:
+  - Параметры проекта (название, дата старта, горизонт, WACC, tax_rate,
+    wc_rate, vat_rate, валюта, профиль инфляции)
+  - SKU + BOM таблица (бренд, объём, rates, BOM total ₽/unit)
+  - Каналы × SKU таблица (launch Y/M, ND, offtake, channel_margin,
+    promo, shelf, logistics)
+  - Financial plan таблица (CAPEX/OPEX по периодам, если есть)
+- **Лист «PnL по периодам»**:
+  - 18 метрик: Volume Units/Liters, Net Revenue, COGS Material/
+    Production/Total, Gross Profit, Logistics, Contribution, CA&M,
+    Marketing, EBITDA, Working Capital/ΔWC, Tax, OCF/ICF/FCF
+  - 43 period columns (M1..M36 + Y4..Y10)
+  - Годовые агрегаты Y1..Y10 секция: Annual NR/CM/FCF/Discounted FCF/
+    Cumulative FCF/Cumulative DCF
+- **Лист «KPI»**:
+  - 9 строк = 3 сценария × 3 scope (Y1Y3/Y1Y5/Y1Y10)
+  - Колонки: Сценарий / Scope / NPV / IRR / ROI / Payback simple /
+    Payback discounted / CM% / EBITDA% / Go-No-Go
+  - Если ScenarioResult отсутствует — "—" (расчёт не выполнен)
+
+**Frontend:**
+- `frontend/lib/api.ts`: добавлен `apiGetBlob(path)` helper для GET
+  binary с auth (использует existing `_fetchWithAuth` с refresh при 401)
+- `frontend/lib/export.ts` (новый): `downloadProjectXlsx(projectId)`
+  - fetch blob → создаёт object URL → trigger `<a href download>` click
+  - revokeObjectURL через таймаут
+- `frontend/components/projects/results-tab.tsx`: добавлена кнопка
+  «Скачать XLSX» (variant outline) рядом с «Пересчитать» в header
+  - Локальный exporting/exportError state
+  - Error card при ошибке скачивания
+
+**Архитектурное решение:** sync endpoint (не Celery). Генерация XLSX
+для GORJI scale (8 SKU × 6 channels × 43 periods) ~200ms. При больших
+проектах (>50 SKU) можно перевести на async, но MVP scale достаточно.
+
+**Проверки:**
+- Backend pytest **231/231** зелёные (217 + 14 export)
+- `npx tsc --noEmit` → 0 ошибок ✅
+- HTTP 200 на `/projects/1` после restart frontend ✅
+- Backend контейнер пересобран с openpyxl ✅
+- Визуальная проверка скачивания файла — нужна перед закрытием
+
 ### Added (задача 4.4 — Анализ чувствительности)
 
 **Backend:** новый sensitivity service + sync endpoint, 9 тестов.

@@ -139,6 +139,23 @@ export function apiDelete<T>(path: string): Promise<T> {
   return _request<T>(path, { method: "DELETE" });
 }
 
+/**
+ * GET binary file (для XLSX/PDF/PPT экспорта). Возвращает Blob с auth
+ * через _fetchWithAuth (поддерживает refresh при 401).
+ *
+ * Использование:
+ *   const blob = await apiGetBlob("/api/projects/1/export/xlsx");
+ *   const url = URL.createObjectURL(blob);
+ *   // → trigger <a href={url} download="..."/> click
+ */
+export async function apiGetBlob(path: string): Promise<Blob> {
+  const resp = await _fetchWithAuth(path, { method: "GET" });
+  if (!resp.ok) {
+    throw await _parseError(resp);
+  }
+  return await resp.blob();
+}
+
 // ============================================================
 // Auth-specific (не используют existing token)
 // ============================================================

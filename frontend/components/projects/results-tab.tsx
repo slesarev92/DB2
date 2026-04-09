@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { ApiError } from "@/lib/api";
 import { getTaskStatus, recalculateProject } from "@/lib/calculation";
+import { downloadProjectXlsx } from "@/lib/export";
 import { formatMoney, formatPercent } from "@/lib/format";
 import {
   listProjectScenarios,
@@ -94,6 +95,10 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
   const [recalculating, setRecalculating] = useState(false);
   const [recalcStatus, setRecalcStatus] = useState<string>("");
   const [recalcError, setRecalcError] = useState<string | null>(null);
+
+  // Export state
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   // Загружаем сценарии
   useEffect(() => {
@@ -194,6 +199,20 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
     }
   }
 
+  async function handleExportXlsx() {
+    setExportError(null);
+    setExporting(true);
+    try {
+      await downloadProjectXlsx(projectId);
+    } catch (err) {
+      setExportError(
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка экспорта",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
+
   // --- Рендеринг ---
 
   if (error !== null) {
@@ -254,6 +273,13 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
               {recalcStatus === "SUCCESS" && "Обновляем..."}
             </span>
           )}
+          <Button
+            onClick={handleExportXlsx}
+            disabled={exporting || recalculating}
+            variant="outline"
+          >
+            {exporting ? "Экспорт..." : "Скачать XLSX"}
+          </Button>
           <Button onClick={handleRecalculate} disabled={recalculating}>
             {recalculating ? "Пересчитываем..." : "Пересчитать"}
           </Button>
@@ -264,6 +290,14 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
         <Card className="border-destructive">
           <CardContent className="pt-6 text-sm text-destructive">
             Ошибка расчёта: {recalcError}
+          </CardContent>
+        </Card>
+      )}
+
+      {exportError !== null && (
+        <Card className="border-destructive">
+          <CardContent className="pt-6 text-sm text-destructive">
+            {exportError}
           </CardContent>
         </Card>
       )}
