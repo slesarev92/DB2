@@ -13,6 +13,7 @@ from app.models.base import (
     UserRole,
 )
 from app.models.entities import (
+    AIUsageLog,
     BOMItem,
     Channel,
     MediaAsset,
@@ -41,6 +42,7 @@ __all__ = [
     "SourceType",
     "UserRole",
     # Entities
+    "AIUsageLog",
     "BOMItem",
     "Channel",
     "MediaAsset",

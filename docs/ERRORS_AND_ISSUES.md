@@ -25,6 +25,104 @@
 
 ## Записи
 
+## [2026-04-09] Polza AI base URL и model naming — две ошибки в ADR-16, выявленные live smoke-тестом Phase 7.1
+
+**Проблема:** После того как пользователь положил реальный
+`POLZA_AI_API_KEY` в `.env`, запустил `pytest -m live
+tests/integration/test_polza_smoke.py` — тест упал **два раза подряд**
+из-за разных ошибок в ADR-16.
+
+**Ошибка №1 — неверный base URL.** Первый запуск: `openai` SDK
+выполнил `POST https://polza.ai/v1/chat/completions` и получил в ответ
+**HTML-страницу лендинга polza.ai** (Next.js 404 page на 2.5КБ),
+который SDK попытался парсить как JSON. `APIError` с огромным HTML
+в тексте исключения.
+
+Первая версия ADR-16 (до Phase 7.1) указывала `https://polza.ai/v1`
+без `/api` префикса, якобы «верифицированный» через чтение
+`polza.ai/docs/llms.txt`. На самом деле правильный URL —
+`https://polza.ai/api/v1`, что подтверждается curl-примером в
+`polza.ai/docs/api-reference/chat/completions.md`:
+```bash
+curl -X POST "https://polza.ai/api/v1/chat/completions" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+**Ошибка №2 — неверный формат имени модели.** После фикса URL второй
+запуск вернул HTTP 400 JSON:
+```json
+{"error":{"code":"BAD_REQUEST","message":"Модель \"anthropic/claude-sonnet-4-6\" не найдена"}}
+```
+
+ADR-16 указывал `anthropic/claude-sonnet-4-6` (с дефисами между
+major и minor версиями). Проверка через `/api/v1/models` endpoint
+показала, что Polza именует Claude модели **с точкой**:
+`anthropic/claude-sonnet-4.6`, `anthropic/claude-opus-4.6`. Всего в
+Polza 379 моделей, 12 из них Claude (3-haiku, 3.5-haiku, 3.7-sonnet,
+3.7-sonnet:thinking, haiku-4.5, opus-4 / 4.1 / 4.5 / 4.6, sonnet-4 /
+4.5 / 4.6).
+
+**Контекст:** Phase 7.1 была завершена с 8 unit-тестами на моках —
+моки конечно всегда зелёные, они не ходят в реальный Polza. Именно
+отдельный live smoke-тест с маркером `@pytest.mark.live` (который
+в обычный pytest прогон не попадает) выявил обе ошибки при первом
+реальном вызове. Без smoke-теста Phase 7.2 началась бы с такой же
+поломки, но в более сложном контексте (endpoint, UI, промпт).
+
+**Решение:**
+
+1. **Base URL.** Исправлен в трёх местах:
+   - `.env.example` → `POLZA_AI_BASE_URL=https://polza.ai/api/v1`
+   - Пользовательский локальный `.env` (только URL, ключ не трогал)
+   - `docs/ADR.md` ADR-16: обновлены все упоминания URL + добавлена
+     секция "История корректировок URL" с хронологией двух неверных
+     версий, чтобы будущие читатели не повторили
+
+2. **Model naming.** Исправлены константы в
+   `backend/app/services/ai_service.py`:
+   ```python
+   DEFAULT_CHAT_MODEL = "anthropic/claude-sonnet-4.6"  # было: 4-6
+   COMPLEX_CHAT_MODEL = "anthropic/claude-opus-4.6"    # было: 4-6
+   ```
+   Соответствующие assert'ы в `test_ai_service.py` — тоже.
+   ADR-16 обновлён с явной пометкой «Формат имени модели: с точками».
+
+3. **Повторный smoke-тест.** После обоих фиксов:
+   ```
+   tests/integration/test_polza_smoke.py::test_polza_smoke_chat_completion PASSED in 5.36s
+   ```
+   Round-trip Polza → Claude 4.6 Sonnet → JSON {"reply":"pong",
+   "lucky_number":<int>} → Pydantic validation → OK. Стоимость ~0.01₽.
+
+4. **Regression.** `pytest -m "not acceptance and not live"` → 286/286
+   зелёных (8 unit-тестов test_ai_service используют `claude-sonnet-4.6`
+   в моках).
+
+**Урок:**
+
+- **До первого реального вызова любой внешний API — не верифицирован.**
+  Документация может противоречить сама себе или быть неполной. ADR-16
+  написан на базе документации polza.ai, но две из трёх ключевых
+  деталей (URL + формат имени модели) оказались некорректны.
+- **Мок-тесты не ловят ошибки в структуре запроса к реальному API.**
+  Они только проверяют логику вокруг SDK. Для внешних интеграций
+  обязателен хотя бы один live smoke-тест — он должен быть написан
+  в той же задаче что и клиент, иначе расхождение выплывет
+  позже в более дорогом контексте.
+- **Модели в Polza — через точку.** Форматы имён моделей у LLM
+  провайдеров неконсистентны: Anthropic native API использует
+  `claude-sonnet-4-5-20250929`, OpenRouter — `anthropic/claude-sonnet-4.5`,
+  Polza — `anthropic/claude-sonnet-4.5` / `4.6`. Всегда проверять
+  через `/models` endpoint перед деплоем.
+- **Docker env_file для secrets.** Найден рядом: `infra/docker-compose.dev.yml`
+  не имел `env_file:` директивы, поэтому новые переменные из `.env`
+  не доходили до контейнера. Добавлено `env_file: ../.env` в секции
+  `backend` и `celery-worker`. На будущее: любая новая переменная
+  окружения должна одновременно попадать в `.env.example` и в
+  compose `environment:` или `env_file:`.
+
+---
+
 ## [2026-04-09] Docker Desktop Windows: file-level bind mount создаёт 0-byte marker на хосте (Phase 6.1)
 
 **Проблема:** При настройке GORJI Excel fixture для E2E acceptance

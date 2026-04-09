@@ -55,3 +55,10 @@ weasyprint>=63.0,<64.0
 # Jinja2: шаблонизатор для HTML паспорта. FastAPI уже тянет старую
 # версию как транзитивную зависимость, но закрепляем явно.
 jinja2>=3.1.0,<4.0.0
+
+# --- AI integration (Фаза 7, ADR-16) ---
+# openai: OpenAI Python SDK. Используется как клиент к Polza AI
+# (OpenAI-совместимый прокси) через `AsyncOpenAI(base_url=...)`.
+# Apache-2.0. Включает встроенный retry с exponential backoff и
+# rate-limit handling — не пишем свой HTTP-клиент (см. ADR-16).
+openai>=1.54.0,<2.0.0

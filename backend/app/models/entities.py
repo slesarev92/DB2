@@ -607,3 +607,65 @@ class MediaAsset(Base):
             name="ck_media_assets_kind",
         ),
     )
+
+
+# ============================================================
+# AI usage log (Фаза 7.1, ADR-16)
+# ============================================================
+
+
+class AIUsageLog(Base):
+    """Журнал вызовов Polza AI — для cost monitoring и debugging.
+
+    Таблица создаётся в Phase 7.1 (базовая инфра), но активное
+    логирование включается в Phase 7.5 — endpoint'ы из 7.2..7.4
+    будут писать сюда после каждого вызова `ai_service.complete_json`.
+    Phase 7.5 добавляет budget enforcement: перед вызовом проверяется
+    SUM(cost_rub) WHERE project_id=X AND created_at >= start_of_month
+    против Project.ai_budget_rub_monthly (поле добавляется в 7.5).
+
+    `project_id` — nullable: часть AI-вызовов может быть не привязана
+    к конкретному проекту (например, будущие admin-операции). Для 7.2..7.8
+    заполняется всегда.
+
+    `error` — nullable text: при успехе NULL, при failure сохраняем
+    message+type (без stack trace — не нужно в audit log).
+
+    `cost_rub` — nullable Decimal(12, 6): калькулируется в 7.5 по
+    токенам × Polza pricing. В 7.1 NULL, так как ничего не логируется
+    активно — таблица пустая.
+
+    Без TimestampMixin: updated_at бессмыслен (лог-запись immutable),
+    created_at с server_default достаточно.
+    """
+
+    __tablename__ = "ai_usage_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # Какой сервис-метод / endpoint выполнил вызов — для агрегации
+    # расходов по фичам в 7.5 (например, 'explain_kpi', 'marketing_research').
+    endpoint: Mapped[str] = mapped_column(String(100), nullable=False)
+    # Модель в Polza-формате "<provider>/<model_id>", например
+    # "anthropic/claude-sonnet-4-6".
+    model: Mapped[str] = mapped_column(String(100), nullable=False)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    completion_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    # Рубли с точностью до 6 знаков: Polza pricing per 1k tokens может
+    # быть дробным (например, 0.000003 ₽ за токен).
+    cost_rub: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 6), nullable=True
+    )
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )

@@ -1602,279 +1602,1030 @@ GitHub Secrets не требуются для разработки и тести
 
 ### Фаза 7 — AI-интеграция через Polza AI (post-MVP)
 
-**Цель:** добавить AI-объяснения к уже валидированным финансовым
-результатам. Не вмешивается в расчётное ядро. Стартует только после
-закрытия задачи 6.1 (E2E acceptance test прошёл) — AI должен
-комментировать только проверенные числа. CI/CD (6.2) на этом этапе
-не нужен — достаточно локального `.env` с POLZA_AI_API_KEY.
+**Цель:** добавить AI-объяснения и AI-генерацию контента к уже
+валидированным финансовым результатам. Не вмешивается в расчётное
+ядро. Стартует только после закрытия задачи 6.1 (E2E acceptance test
+прошёл) — AI должен комментировать только проверенные числа. CI/CD
+(6.2) на этом этапе не нужен — достаточно локального `.env` с
+`POLZA_AI_API_KEY`.
 
 **Архитектурная база:** ADR-16. Polza AI как OpenAI-совместимый прокси,
-`openai` Python SDK (`AsyncOpenAI`) с `base_url=POLZA_AI_BASE_URL`.
-Дефолт `anthropic/claude-sonnet-4-6`, опция `anthropic/claude-opus-4-6`
-для критичных задач.
+`openai` Python SDK (`AsyncOpenAI`) с
+`base_url=https://polza.ai/api/v1`. URL и формат имени моделей
+верифицированы live smoke-тестом в 7.1 (см. ERRORS_AND_ISSUES запись
+"Polza AI base URL and model naming corrections").
 
-**Принципы Фазы 7 (применимы ко всем подзадачам):**
+#### Ключевые архитектурные решения Фазы 7 (ratified 2026-04-09)
+
+**Эти решения зафиксированы на этапе обсуждения после закрытия 7.1
+и применяются ко ВСЕМ задачам 7.2..7.8.** Изменять — только через
+явное согласование с пользователем.
+
+**1. Мульти-модельная стратегия (Model Tiering).**
+Полный каталог Polza — 379 моделей, использовать осознанно:
+
+| Tier | Модель | Стоимость/вызов | Где используется |
+|---|---|---|---|
+| `FAST_CHEAP` | `anthropic/claude-haiku-4.5` | ~0.1-0.5₽ | 7.6 content field generation (15 полей × 0.3₽ = 4.5₽ vs 45₽ на Sonnet) |
+| `BALANCED` *(default)* | `anthropic/claude-sonnet-4.6` | ~1-3₽ | 7.2 explain KPI, 7.3 sensitivity interpretation, короткий summary — 80% задач |
+| `HEAVY` | `anthropic/claude-opus-4.6` | ~5-15₽ | 7.4 executive summary, аудит формул, сложные «почему» |
+| `RESEARCH` | `anthropic/claude-opus-4.6` + `web_search` tool | ~10-30₽ | 7.7 marketing research |
+| `IMAGE` | `black-forest-labs/flux-2-pro` | ~5-10₽/img | 7.8 package mockups |
+
+Реализация: enum `AIModelTier` + dict `FEATURE_DEFAULT_TIER` в
+`ai_service.py` — маппинг фича → tier. UI expensive-фич даёт toggle
+`Standard | Deep` — Deep = upgrade текущей фичи на `HEAVY`.
+Hard-coded имя модели в endpoint'е — запрещено.
+
+**2. Task-specific context builders (не "полный контекст всегда").**
+Отдельный модуль `backend/app/services/ai_context_builder.py` с
+методами под каждую фичу:
+
+```python
+class AIContextBuilder:
+    async def for_kpi_explanation(project_id, scenario_id, scope) -> dict: ...  # ~2-4k токенов
+    async def for_sensitivity_interpretation(project_id, scenario_id) -> dict: ...  # ~1k
+    async def for_content_field(project_id, field_name) -> dict: ...  # ~1-2k
+    async def for_executive_summary(project_id) -> dict: ...  # ~5-8k
+    async def for_freeform_chat(project_id, user_question) -> dict: ...  # ~8-12k
+    async def for_marketing_research(project_id, topic) -> dict: ...  # ~1-2k
+    async def for_package_mockup(project_sku_id, style, user_prompt) -> dict: ...  # ~500t
+```
+
+Causing: больше контекста = линейно больше ₽. После baseline KPI+
+params+top-N SKU отдача от расширения контекста падает, а prompt
+injection surface растёт (content-поля содержат user input).
+
+**3. Hybrid UX: inline ✨ + правый AI Panel drawer.**
+- **Inline ✨ кнопки** в местах естественной интеграции: под Go/No-Go
+  hero (7.2), под sensitivity tornado (7.3), возле каждого content-поля
+  (7.6), возле SKU image upload (7.8)
+- **Dedicated AI Panel** — правый drawer, toggle через кнопку в header
+  или `Ctrl+K`. Состоит из:
+  - **Balance widget** (см. решение №8) — Polza balance + project budget
+  - **Monthly budget progress bar** (цвет по порогам: <60% green, 60-80% yellow, >80% red)
+  - **Quick actions:** «Explain current KPI», «Executive summary», «Audit params»
+  - **История** последних 10 вызовов (model, tokens, ₽, ts, ссылка на результат)
+  - **Freeform chat** — «спроси что угодно про этот проект», default BALANCED, переключатель на HEAVY, **SSE streaming**
+  - **Settings:** per-feature tier override для power-users
+- **НЕ использовать модалки** — они ломают контекст UI. Preview
+  генерации показывается inline в editable textarea.
+- **Keyboard shortcut:** `Ctrl+K` открывает panel + фокусирует chat input
+- **Persistent state** — переключение таба не теряет контекст panel'а
+
+**4. Cache-first стратегия (Redis).**
+Identical call `(project_id, feature, input_hash)` возвращает
+кэшированный результат **24 часа** без обращения к Polza.
+- `input_hash` = stable-sorted JSON dump всех input полей (SHA-256)
+- Key: `ai_cache:{project_id}:{feature}:{input_hash}`
+- Value: serialized Pydantic response + usage metadata
+- TTL: 86400 (24ч), invalidation при PATCH `Project.*` или
+  recalculate (чтобы stale KPI не комментировались)
+- **Request dedupe:** если тот же запрос уже в полёте — второй ждёт
+  результат первого (Redis lock `ai_lock:{project_id}:{feature}:{hash}`)
+
+**5. AI-outputs персистятся в БД, экспорт их только читает.**
+PPT/PDF экспорт **никогда** не вызывает AI live. Причины:
+- Скорость: экспорт сейчас 5-10с, +AI = 20+с = неюзабельно при
+  множественных fine-tuning итерациях
+- Стоимость: 10 экспортов × executive summary на Opus = 50-150₽ за
+  одну сессию → бюджет сгорит
+- Review workflow: AI — draft, аналитик должен прочитать/отредактировать
+  перед вставкой в PPT
+
+Новые поля в `Project` (миграция в задаче 7.4):
+- `ai_executive_summary: Text | None` — отредактированный черновик
+- `ai_kpi_commentary: JSONB | None` — `{scenario_id: {scope: {summary, drivers, risks, ...}}}`
+- `ai_commentary_updated_at: TIMESTAMPTZ | None` — когда последний раз редактировали
+
+Flow: Results tab → «Generate AI executive summary» → AI draft →
+editable textarea → «Сохранить» → Project.ai_executive_summary
+→ PPT/PDF экспорт подхватывает из БД. Отдельная кнопка «♻ Regenerate»
+для свежей версии. Если поле пустое — секция в экспорте пропускается.
+
+**6. 4-слойная защита от перерасхода (Cost Protection).**
+
+*Слой 1 — Request-level:*
+- 24ч Redis cache + dedupe (см. пункт 4)
+- `max_tokens` hard cap: summary=800, explain=1200, research=3000, chat=2000
+- `temperature=0.2` везде (кроме 7.8 image где 0.7)
+
+*Слой 2 — Project-level budget:*
+- `Project.ai_budget_rub_monthly: Decimal | None` — default **500₽**
+  (снижено с 1000₽ в первой версии ADR-16 — 500 реалистичнее)
+- Middleware перед каждым AI-вызовом: `SUM(cost_rub) WHERE project_id=X
+  AND created_at >= start_of_month`
+- Thresholds: 80% warning в UI, 95% confirmation dialog, 100% hard block 429
+
+*Слой 3 — System-level safety net:*
+- `slowapi` rate limit: **10 req/min/user/feature**
+- Per-user daily limit **100₽** — защита от stuck UI loops (bugged useEffect)
+- Log warnings при срабатывании любого лимита
+
+*Слой 4 — UI transparency (самый важный):*
+- **Pre-flight cost estimate** в кнопке: «Explain KPI (~3₽)»
+- **Confirmation dialog** для expensive (>5₽): «Запрос ~10₽ из 240/500. Продолжить?»
+- **Post-call toast** показывает фактическую стоимость: «KPI объяснён · 2.4₽ · 3.2с · claude-sonnet-4.6»
+- **Abort controller** — кнопка «Отменить» рядом с loading state, прерывает SSE stream
+
+*Dev safety:*
+- pytest никогда не дёргает real Polza (`-m "not live"` по умолчанию)
+- CI не имеет ключа (skip smoke test)
+- Dev `.env` default `AI_BUDGET=50₽` вместо 500
+- Mock-mode переключатель: `ai_mock_mode: bool = False` в settings —
+  если True, `ai_service` возвращает hardcoded responses без
+  обращения к Polza (для dev'а UI без расхода)
+
+**7. Go/No-Go: AI обязан рекомендовать, но с честной confidence.**
+- В промпте жёсткие критерии для go/no-go/review (NPV, IRR-WACC gap,
+  payback, согласованность сценариев)
+- `confidence: float (0..1)` — если Base и Conservative дают
+  противоположные вердикты → confidence < 0.5 → рекомендация `review`
+- UI отображает как **предложение**, не решение: «AI рекомендует:
+  🟡 REVIEW (уверенность 0.62). Основания: ...»
+- Финальный Go/No-Go аналитик кликает в **другом месте UI** (не в AI
+  блоке) — чтобы не спутать AI-рекомендацию с человеческим решением
+
+**8. Balance widget (в AI Panel).**
+- **Два индикатора:**
+  - **Polza balance** (глобальный) — из Polza `/api/v1/balance` или
+    аналогичного endpoint'а, **TODO в 7.5**: проверить существует ли
+    такой endpoint (не верифицирован). Fallback если нет: ссылка на
+    `polza.ai/dashboard` с пометкой «Глобальный баланс недоступен»
+  - **Project budget** (локальный) — из БД `SUM(cost_rub) / ai_budget_rub_monthly`
+- **Кэш:** Polza balance — 5 минут (не дёргаем при каждом клике),
+  project budget — real-time после каждого вызова
+- **Цвет:** зелёный <60%, жёлтый 60-80%, красный >80%
+
+**9. Tone-of-voice (жёстко в system prompt).**
+Общий tone-стандарт для всех chat-фич:
+
+```
+Ты — senior финансовый аналитик корпоративной FMCG компании с 15+
+лет опыта в NPD. Твой стиль:
+- Формальный, без разговорных оборотов и эмоций
+- Основан ИСКЛЮЧИТЕЛЬНО на переданных числах — не выдумывай
+- Критичен, но конструктивен: если видишь слабое место —
+  называй прямо, с формулировкой что смущает и что проверить
+- НЕ используй маркетинговый язык ("мощный потенциал",
+  "стратегическая возможность") — используй бизнес-термины
+  ("маржа", "вклад", "payback", "IRR-WACC gap")
+- Если данные противоречивы — укажи противоречие
+- Короткие предложения, активный залог, без канцелярита
+```
+
+Вынести в константу `BASE_TONE_PROMPT` в `ai_prompts.py`,
+конкатенировать с task-specific prompt'ом.
+
+**10. A/B prompt comparison tool (dev-only).**
+В AI Panel под флагом `settings.environment == "development"`
+скрытая вкладка «Prompt lab»:
+- Хранит 2+ версии system prompt'а на фичу
+- Запускает обе одновременно, показывает результаты side-by-side +
+  стоимость каждой
+- Помогает итерировать промпты без guessing
+- В production UI невидимо
+- Реализация в 7.2 (первая task где это критично)
+
+---
+
+#### Базовые принципы Фазы 7 (существующие, применимы ко всем подзадачам)
+
 - AI-модуль полностью изолирован от `engine/`. Читает только
   сохранённые `ScenarioResult` + параметры проекта.
 - Все промпты — Python-константы в `backend/app/services/ai_prompts.py`,
-  ревьюятся через PR. Никаких "промптов из БД" в MVP.
-- Output — структурированный JSON через `response_format`. Pydantic-схемы
-  на ответ. Никаких свободных текстов в API.
+  ревьюятся через PR. Никаких "промптов из БД" в MVP (prompt injection
+  surface).
+- Output — структурированный JSON через `response_format={"type": "json_object"}`.
+  Pydantic-схемы на ответ. Никаких свободных текстов в API (кроме
+  freeform chat).
 - Cost monitoring обязателен: каждый вызов логируется в `ai_usage_log`,
-  месячный бюджет на проект — параметр.
-- Тесты — мок `AsyncOpenAI.chat.completions.create` через `respx` или
+  месячный бюджет на проект — параметр (см. решение №6).
+- Тесты — мок `AsyncOpenAI.chat.completions.create` через
   `unittest.mock.AsyncMock`. Real Polza — отдельный
-  `tests/integration/test_polza_smoke.py` c маркером `@pytest.mark.live`,
+  `tests/integration/test_polza_smoke.py` с маркером `@pytest.mark.live`,
   не в CI.
 - Если Polza недоступен — graceful degradation: AI-фичи возвращают
-  placeholder "AI-комментарий недоступен", расчёт работает как обычно.
+  placeholder "AI-комментарий недоступен" (через
+  `AIServiceUnavailableError` → endpoint catches), расчёт работает
+  как обычно.
 
 ---
 
-#### Задача 7.1 — Polza AI client + базовая инфраструктура
+#### ✅ Задача 7.1 — Polza AI client + базовая инфраструктура (закрыта 2026-04-09)
 
-**Что делаем:**
-- `backend/requirements.txt`: добавить `openai>=1.0`
-- `backend/app/core/config.py`: `POLZA_AI_API_KEY`, `POLZA_AI_BASE_URL`
-- `backend/app/services/ai_service.py` (новый): тонкий wrapper над
-  `AsyncOpenAI(api_key=..., base_url=...)`. Singleton клиент через
-  `lru_cache`. Метод `complete_json(system_prompt, user_prompt, schema,
-  *, model="anthropic/claude-sonnet-4-6")` возвращает валидированный
-  Pydantic-объект.
-- `backend/app/services/ai_prompts.py` (новый): пустой модуль, заполняется
-  в задачах 7.2..7.4
-- `backend/tests/services/test_ai_service.py`: моки `AsyncOpenAI`,
-  проверка retry/error handling, проверка fallback при недоступности.
-- Новая таблица `ai_usage_log` через миграцию (создаётся в 7.1, но
-  заполняется только в 7.5 когда логирование включится в endpoint'ы).
-  Колонки: `id, project_id, endpoint, model, prompt_tokens,
-  completion_tokens, cost_rub, latency_ms, error, created_at`.
+**Что сделано:**
+- `backend/requirements.txt`: `openai>=1.54.0,<2.0.0` (установлен 1.109.1)
+- `backend/app/core/config.py`: `polza_ai_api_key`, `polza_ai_base_url`,
+  `polza_ai_timeout_seconds` (60s), `polza_ai_max_retries` (3)
+- `backend/app/services/ai_service.py` — singleton `AsyncOpenAI` через
+  `@lru_cache`, метод `complete_json(system_prompt, user_prompt, schema,
+  model=..., endpoint=..., temperature=0.2) -> AICallResult[T]`,
+  возвращает dataclass с `.parsed` (Pydantic instance) + usage метрики
+  (prompt_tokens, completion_tokens, total_tokens, latency_ms, model).
+  `AIServiceUnavailableError` для graceful degradation. Обрабатывает
+  все типы openai ошибок (Auth, RateLimit, Timeout, Connection, API),
+  невалидный JSON, Pydantic ValidationError.
+- `backend/app/services/ai_prompts.py` — документированная заглушка
+  под промпты из 7.2..7.8
+- `backend/app/models/entities.py` — `AIUsageLog` модель + миграция
+  `c341fb0685fe_phase_7_1_ai_usage_log_table.py`. Таблица пустая в 7.1,
+  активное логирование в 7.5.
+- `backend/tests/services/test_ai_service.py` — 8 unit-тестов с моками
+  `AsyncOpenAI.chat.completions.create`: happy path + APIConnectionError +
+  invalid JSON + schema mismatch + missing API key + APITimeoutError +
+  AuthenticationError + custom model. Autouse fixture `_isolate_client_cache`.
+- `backend/tests/integration/test_polza_smoke.py` — live smoke-тест с
+  маркером `@pytest.mark.live`, реальный round-trip Polza → Claude 4.6
+  Sonnet → `{"reply":"pong","lucky_number":int}` → Pydantic validation.
+  Skip если `POLZA_AI_API_KEY` пустой.
+- `backend/pytest.ini` — новый маркер `live`, обычный прогон `-m "not
+  acceptance and not live"`.
+- `infra/docker-compose.dev.yml` — добавлен `env_file: ../.env` в
+  секциях `backend` и `celery-worker` (без этого переменные из
+  project-root `.env` не доходили до контейнера).
+
+**Корректировки ADR-16 после smoke-теста (важно!):**
+Live smoke-тест выявил **две ошибки** в ADR-16 — исправлено:
+1. **Base URL:** было `https://polza.ai/v1` (возвращал 404 HTML
+   лендинга Polza), стало `https://polza.ai/api/v1` — верифицировано
+   curl-примером в `polza.ai/docs/api-reference/chat/completions.md`
+2. **Model naming:** было `claude-sonnet-4-6` (с дефисом), стало
+   `claude-sonnet-4.6` (с точкой) — верифицировано через
+   `/api/v1/models` endpoint (12 Claude моделей, все с точками)
+
+Подробности — в `docs/ERRORS_AND_ISSUES.md` запись "Polza AI base
+URL and model naming corrections (Phase 7.1)". ADR-16 обновлён с
+историей корректировок и пометкой "формат с точками".
+
+**Результаты:**
+- `pytest -m "not acceptance and not live"` → **286/286 зелёных**
+  (278 baseline + 8 новых test_ai_service)
+- `pytest -m live tests/integration/test_polza_smoke.py` → **PASSED
+  in 5.36s** (реальный Polza + Claude 4.6 Sonnet + JSON parse + Pydantic)
+- Стоимость одного smoke-вызова: ~0.01₽
+
+**Что НЕ сделано в 7.1** (по плану — это задачи следующих подзадач):
+- Логирование в `ai_usage_log` — включится в 7.5 на уровне endpoint'ов
+- `Project.ai_budget_rub_monthly` — добавляется в 7.5
+- Реальные промпты — добавляются с 7.2
+- Redis cache + dedupe — добавляется в 7.2 (первая фича где это нужно)
+- AI Panel UI + tier registry + context builders — добавляется в 7.2
+
+---
+
+#### Задача 7.2 — AI-объяснение KPI + архитектурный scaffolding Phase 7
+
+**Примечание:** это самая большая задача в Phase 7 — одновременно строит
+весь архитектурный фундамент (tier registry, context builders, cache,
+rate limit, AI Panel UI skeleton) и первую реальную фичу «Explain KPI».
+Это осознанное решение — строить scaffolding "с первой реальной
+фичей", чтобы не over-engineer'ить без use case. 7.3..7.8 затем
+переиспользуют всё.
+
+**Что делаем (Backend):**
+
+1. **Model tier registry в `ai_service.py`:**
+   ```python
+   class AIModelTier(str, Enum):
+       FAST_CHEAP = "fast_cheap"
+       BALANCED = "balanced"
+       HEAVY = "heavy"
+       RESEARCH = "research"
+       IMAGE = "image"
+
+   TIER_MODEL: dict[AIModelTier, str] = {
+       AIModelTier.FAST_CHEAP: "anthropic/claude-haiku-4.5",
+       AIModelTier.BALANCED: "anthropic/claude-sonnet-4.6",
+       AIModelTier.HEAVY: "anthropic/claude-opus-4.6",
+       AIModelTier.RESEARCH: "anthropic/claude-opus-4.6",  # + web_search tool
+       AIModelTier.IMAGE: "black-forest-labs/flux-2-pro",
+   }
+
+   class AIFeature(str, Enum):
+       EXPLAIN_KPI = "explain_kpi"
+       EXPLAIN_SENSITIVITY = "explain_sensitivity"
+       EXECUTIVE_SUMMARY = "executive_summary"
+       CONTENT_FIELD = "content_field"
+       MARKETING_RESEARCH = "marketing_research"
+       PACKAGE_MOCKUP = "package_mockup"
+       FREEFORM_CHAT = "freeform_chat"
+
+   FEATURE_DEFAULT_TIER: dict[AIFeature, AIModelTier] = {...}
+   ```
+   Метод `complete_json` получает новый параметр `feature: AIFeature`
+   вместо явного `model: str`. Резолвинг модели — внутри через
+   `FEATURE_DEFAULT_TIER[feature]`. Override через отдельный параметр
+   `tier_override: AIModelTier | None` (для UI Standard/Deep toggle).
+
+2. **Context builder модуль `backend/app/services/ai_context_builder.py`:**
+   Класс `AIContextBuilder` с методом `for_kpi_explanation(
+   project_id, scenario_id, scope)` — первый метод, остальные —
+   в 7.3..7.8. Читает из БД: `ScenarioResult` (все 3 scope, чтобы AI
+   видел общую картину), `Project` params, top-3 SKU по vol, top-3
+   channels. Возвращает `dict` готовый для JSON dump в user_prompt.
+   Размер ~2-4k токенов.
+
+3. **Redis cache + dedupe слой в `ai_service.py`:**
+   Wrapper вокруг `complete_json` с ключом
+   `ai_cache:{project_id}:{feature}:{input_hash}`. `input_hash` —
+   SHA-256 от `json.dumps(context_dict, sort_keys=True)`. TTL 86400s.
+   При cache hit — возврат без вызова Polza + логирование
+   `ai_usage_log.cost_rub=0, error='cache_hit'` (для observability
+   cache rate). Dedupe через Redis `SETNX` lock.
+
+4. **Rate limit middleware через `slowapi`:**
+   Установить `slowapi>=0.1.9`. Конфиг: 10 req/min per user per
+   feature. Ограничение применяется декоратором на уровне endpoint'ов
+   в `api/ai.py`. Helper:
+   ```python
+   @router.post("/explain-kpi")
+   @limiter.limit("10/minute", key_func=lambda r: f"{r.user_id}:explain_kpi")
+   async def explain_kpi(...): ...
+   ```
+   Per-user daily budget 100₽ — отдельный middleware check, не через
+   slowapi (slowapi не умеет cost-based limits).
+
+5. **Logging в `ai_usage_log` (активация 7.1 таблицы):**
+   Helper `log_ai_usage(project_id, feature, result: AICallResult,
+   error: str | None)` в `ai_service.py`. Вызывается в каждом endpoint'е
+   из 7.2..7.8 после `complete_json`. Записывает: model, tokens,
+   `cost_rub` (калькуляция из токенов × tier pricing — см. пункт 6),
+   latency, error. Фаза 7.5 добавит budget enforcement middleware.
+
+6. **Polza pricing table в `ai_service.py`:**
+   ```python
+   # ₽ per 1k tokens, верифицировать через polza.ai/dashboard/pricing
+   # или /api/v1/models endpoint в 7.2 (actual API format TBD)
+   MODEL_PRICING: dict[str, tuple[Decimal, Decimal]] = {
+       # (prompt_per_1k, completion_per_1k)
+       "anthropic/claude-haiku-4.5": (Decimal("0.08"), Decimal("0.40")),
+       "anthropic/claude-sonnet-4.6": (Decimal("0.30"), Decimal("1.50")),
+       "anthropic/claude-opus-4.6": (Decimal("1.50"), Decimal("7.50")),
+       # ...
+   }
+   def calculate_cost(model: str, prompt_tok: int, completion_tok: int) -> Decimal: ...
+   ```
+   **TODO в 7.2 Discovery:** проверить доступен ли `/api/v1/pricing`
+   endpoint в Polza — если да, обновлять таблицу автоматически; если
+   нет — ручная таблица с датой последнего обновления.
+
+7. **API endpoint `backend/app/api/ai.py` (новый модуль):**
+   `POST /api/projects/{id}/ai/explain-kpi`
+   - Body: `{"scenario_id": int, "scope": "y1y3"|"y1y5"|"y1y10", "tier_override": "balanced"|"heavy" | null}`
+   - Flow:
+     1. Check daily user budget (safety net)
+     2. `context = await AIContextBuilder.for_kpi_explanation(...)`
+     3. `input_hash = hash_context(context)`
+     4. Redis cache check — hit → return cached (log as cache_hit)
+     5. Redis dedupe lock (если другой инстанс уже в полёте — await)
+     6. `result = await ai_service.complete_json(feature=EXPLAIN_KPI, ...)`
+     7. Log в `ai_usage_log` (Decimal cost_rub)
+     8. Store в Redis cache (TTL 24h)
+     9. Release dedupe lock
+     10. Return response
+   - Returns: `AIKpiExplanationResponse` (Pydantic):
+     ```python
+     class AIKpiExplanationResponse(BaseModel):
+         summary: str  # 2-3 предложения executive
+         key_drivers: list[str]  # топ-3 фактора влияющих на NPV
+         risks: list[str]  # 2-3 риска
+         recommendation: Literal["go", "no-go", "review"]
+         confidence: float = Field(ge=0, le=1)
+         rationale: str  # 1-2 предложения почему такая рекомендация
+         cost_rub: Decimal  # fact cost
+         model: str  # fact model used
+         cached: bool  # был ли hit в cache
+     ```
+
+8. **Промпт в `ai_prompts.py`:**
+   - `BASE_TONE_PROMPT` — константа с tone-of-voice (см. решение №9)
+   - `KPI_EXPLAIN_SYSTEM = BASE_TONE_PROMPT + "\n\n" + KPI_EXPLAIN_TASK`
+   - Task-specific prompt: роль, формат JSON (json_object mode),
+     жёсткие критерии go/no-go/review, инструкция "confidence < 0.5
+     при противоречиях сценариев", запрет выдумывать числа
+
+**Что делаем (Frontend):**
+
+1. **AI Panel drawer skeleton** (`frontend/components/ai-panel/`):
+   - `ai-panel-drawer.tsx` — правый drawer, toggle кнопка в header,
+     `Ctrl+K` shortcut (использовать `cmdk` или вручную). Persistent
+     state через Zustand store (уже есть в проекте).
+   - `ai-panel-balance-widget.tsx` — placeholder (реальная реализация
+     в 7.5 после подтверждения Polza balance API). Пока показывает
+     только project budget.
+   - `ai-panel-budget-progress.tsx` — bar с цветовым индикатором.
+     Читает из нового `GET /api/projects/{id}/ai/usage` (endpoint в 7.5,
+     пока mock-данные).
+   - `ai-panel-history.tsx` — последние 10 вызовов (mock в 7.2,
+     real data через `GET .../ai/usage` в 7.5)
+   - `ai-panel-quick-actions.tsx` — кнопки «Explain KPI», «Executive
+     summary», «Audit params». В 7.2 работает только первая.
+   - `ai-panel-chat.tsx` — заглушка «Chat coming в 7.3» (или полный
+     чат — зависит от bandwidth 7.2)
+   - `ai-panel-settings.tsx` — tier override per feature (pending)
+
+2. **Inline ✨ кнопка на `ResultsTab`:**
+   Под Go/No-Go hero блок. Кнопка показывает pre-flight cost estimate:
+   «Explain KPI (~3₽)». При клике:
+   - Check project budget (from AI panel state)
+   - Если >95% — confirmation dialog
+   - POST `/api/ai/explain-kpi`
+   - Show loading с abort button + estimated ETA («~4 сек»)
+   - При success — inline collapsible карточка с:
+     - Summary (жирным)
+     - Key drivers (список)
+     - Risks (список, красный акцент)
+     - AI рекомендация как **badge**: 🟢 GO / 🔴 NO-GO / 🟡 REVIEW
+       + confidence (0.84) + rationale в tooltip
+     - Post-call toast: «AI objяснение готово · 2.4₽ · 3.2с»
+   - Tier toggle `Standard | Deep` выше карточки
+
+3. **A/B Prompt Lab (dev-only, под `NODE_ENV=development`):**
+   В AI Panel скрытая вкладка «Prompt lab». Позволяет:
+   - Сохранить 2+ версии `KPI_EXPLAIN_SYSTEM` как named draft'ы
+     (хранится в локальном state, не в БД)
+   - Вызвать endpoint `/api/ai/explain-kpi/debug` (только dev) с
+     `prompt_override: str` в body
+   - Side-by-side результаты + стоимость каждой версии
 
 **Критерий готовности:**
-- `pytest tests/services/test_ai_service.py` зелёные (минимум 5 кейсов:
-  successful call, network error, invalid JSON response, schema
-  validation failure, missing API key)
-- Smoke-тест с реальным Polza (отдельный run, не в CI) проходит
-- Никакого реального ключа в репо
+- Endpoint работает с моком в pytest (8+ кейсов: happy path, cache
+  hit, cache miss, rate limit 429, budget exceeded 429, invalid
+  scope, missing scenario, Pydantic validation fail)
+- На реальных GORJI данных (4.2.1 reference) AI выдаёт осмысленный
+  комментарий — **ручная проверка + сохранённый пример output'а в
+  `docs/ai_samples/explain_kpi_gorji.md`** (для будущей
+  регрессии промптов)
+- UI: кнопка работает, AI panel открывается по Ctrl+K, inline карточка
+  отображается, abort controller прерывает запрос
+- Cost: cache hit ratio > 50% при повторных кликах на одном проекте
+- Cost: типичный explain на claude-sonnet-4.6 <= 3₽
+- `ai_usage_log` содержит записи с `cost_rub` > 0 после реальных вызовов
+- Live smoke-тест `test_polza_smoke.py` всё ещё PASSED (не сломали базу)
 
-**Зависимости:** 6.1 (MVP acceptance test проходит — AI комментирует
-только валидированные числа). `POLZA_AI_API_KEY` на этапе разработки
-Phase 7 читается из локального `.env` (см. `.env.example`). Перенос
-секрета в GitHub Secrets — при деплое, см. «Финальный этап — CI/CD»
-в конце плана.
-
----
-
-#### Задача 7.2 — AI-объяснение KPI (NPV/IRR/Payback/Go-NoGo)
-
-**Что делаем:**
-- `backend/app/api/ai.py` (новый): `POST /api/projects/{id}/ai/explain-kpi`
-  - Body: `{ "scenario_id": int, "scope": "y1y10", "model": "default" | "complex" }`
-  - Reads: `ScenarioResult` для (scenario × scope) + project params + lines summary
-  - Returns: `AIKpiExplanationResponse` (Pydantic):
-    ```
-    {
-      "summary": str,                    # 2-3 предложения executive
-      "key_drivers": [str, ...],         # топ-3 фактора влияющих на NPV
-      "risks": [str, ...],               # 2-3 риска
-      "recommendation": "go" | "no-go" | "review",
-      "confidence": float                # 0..1
-    }
-    ```
-- Промпт в `ai_prompts.py:KPI_EXPLAIN_SYSTEM` — описывает роль (FMCG
-  финансовый аналитик), формат JSON, ограничения (не выдумывать числа,
-  опираться только на переданные данные)
-- Frontend: на `ResultsTab` добавить блок "AI-комментарий" под Go/No-Go
-  hero. Кнопка "Объяснить" → POST → отображение карточками с key_drivers
-  и risks. Селектор "Базовая модель / Углублённая (Opus)".
-- `slowapi` rate limit 10 req/min на пользователя на этот endpoint
-
-**Критерий готовности:**
-- Endpoint работает с моком в pytest (5+ кейсов)
-- На реальных GORJI данных (после 4.2.1) AI выдаёт осмысленный
-  комментарий — ручная проверка
-- В UI кнопка работает, ответ отображается, ошибки graceful
-- Cost <= 5 руб на типичный вызов (sonnet-4-6)
-
-**Зависимости:** 7.1, 4.2 (KPI экран есть), 4.2.1 (GORJI reference
-данные для ручной валидации).
+**Зависимости:** 7.1 (client + exception handling), 4.2 (KPI экран),
+4.2.1 (GORJI reference), 4.4 (sensitivity — для AIContextBuilder).
 
 ---
 
-#### Задача 7.3 — AI-комментарий к чувствительности (tornado interpretation)
+#### Задача 7.3 — AI-комментарий к чувствительности + Freeform Chat
 
-**Что делаем:**
+**Что делаем (Backend):**
 - `POST /api/projects/{id}/ai/explain-sensitivity`
-  - Body: `{ "scenario_id": int }`
-  - Reads: результаты sensitivity analysis из задачи 4.4 (NPV-дельты по
-    ND/offtake/shelf/COGS)
-  - Returns: `AISensitivityExplanationResponse`:
+  - Tier: `BALANCED` (claude-sonnet-4.6)
+  - Context builder: `AIContextBuilder.for_sensitivity_interpretation(
+    project_id, scenario_id)` — sensitivity matrix 4×5 + baseline KPI
+    + metadata из sensitivity_service (что есть tornado)
+    (~1k токенов)
+  - Cache через тот же Redis слой (input_hash по sensitivity matrix)
+  - Body: `{ "scenario_id": int, "tier_override": ... | null }`
+  - Returns: `AISensitivityExplanationResponse` (Pydantic):
+    ```python
+    class AISensitivityExplanationResponse(BaseModel):
+        most_sensitive_param: str
+        most_sensitive_impact: str  # "+5% ND → +12.3М NPV"
+        least_sensitive_param: str
+        narrative: str  # 3-4 предложения интерпретации + критика слабых мест
+        actionable_levers: list[str]  # что аналитик может тюнить
+        warning_flags: list[str]  # red flags если есть (hyper-sensitivity к ND, etc)
+        cost_rub: Decimal
+        cached: bool
     ```
-    {
-      "most_sensitive": str,             # параметр с макс влиянием
-      "least_sensitive": str,
-      "narrative": str,                  # 3-4 предложения интерпретации
-      "actionable_levers": [str, ...]    # что аналитик может изменить
-    }
-    ```
-- Промпт: `ai_prompts.py:SENSITIVITY_EXPLAIN_SYSTEM`
-- Frontend: блок "AI-интерпретация" под таблицей чувствительности
+- `POST /api/projects/{id}/ai/chat` — **freeform chat endpoint**
+  - Tier: `BALANCED` по умолчанию, override на `HEAVY`
+  - Context builder: `AIContextBuilder.for_freeform_chat(project_id,
+    user_question)` — KPI + params + SKU/channel summary + content
+    summary (~8-12k токенов)
+  - **Streaming response** через SSE (`Server-Sent Events`) — openai
+    SDK поддерживает `stream=True`, возвращает `AsyncIterator[ChatCompletionChunk]`
+  - Body: `{ "question": str, "conversation_id": str | null,
+    "tier_override": ... | null }`
+  - Response: `text/event-stream` с chunks (не JSON — это единственное
+    исключение из принципа "структурированный JSON везде")
+  - Conversation history хранится в Redis (не в PostgreSQL — ephemeral,
+    TTL 1 час), key `ai_chat:{project_id}:{conversation_id}`
+  - Pre-flight cost estimate сложнее: показываем только «~2-5₽» диапазон
+
+**Что делаем (Frontend):**
+- `SensitivityTab`: inline ✨ «AI-интерпретация» кнопка над tornado chart.
+  Collapsible результат с `most_sensitive_param` выделением в chart (bar
+  highlight), narrative текст, warning_flags с красным акцентом.
+- **AI Panel Chat вкладка** (полноценная реализация, не заглушка из 7.2):
+  - Scroll area с messages (user + assistant)
+  - SSE streaming: assistant message появляется token-by-token
+  - Input внизу, Enter = отправить, Shift+Enter = новая строка
+  - Abort controller для прерывания streaming
+  - Tier toggle в toolbar `BALANCED | HEAVY`
+  - «Clear conversation» button (удаляет Redis key + local state)
+  - Conversation sharable через URL-параметр `?chat=conversation_id`
+    для demo (только в dev)
 
 **Критерий готовности:**
-- pytest на моках, ручная проверка на GORJI, UI работает
+- pytest на моках sensitivity (6+ кейсов)
+- pytest на chat streaming (мок SSE через `AsyncMock` с
+  `__aiter__`) — минимум 4 кейса (happy, abort mid-stream,
+  conversation history, network error mid-stream)
+- Ручная проверка на GORJI: sensitivity interpretation выдаёт
+  осмысленный narrative, chat отвечает связно на 3-5 вопросов подряд
+- UI: tornado interpretation отображается inline, chat в AI panel
+  работает со streaming
 
-**Зависимости:** 7.2, 4.4.
+**Зависимости:** 7.2 (scaffolding + tier registry + context builder
+base), 4.4 (sensitivity service).
 
 ---
 
-#### Задача 7.4 — AI executive summary в PPT-экспорт
+#### Задача 7.4 — AI executive summary (DB-cached, экспорт читает из БД)
 
-**Что делаем:**
-- При `POST /api/projects/{id}/export/ppt` с флагом `include_ai_summary=true`:
-  pipeline вставляет новый слайд "Executive Summary" между Титулом и
-  Макро-факторами. Контент — AI-генерация на основе всех KPI + всех
-  сценариев + чувствительности
-- Промпт: `ai_prompts.py:EXECUTIVE_SUMMARY_SYSTEM`
-- Структура слайда: заголовок, 4-5 буллетов, recommendation (Go/No-Go/Review),
-  3 ключевых числа крупно
-- Если AI недоступен — слайд пропускается, экспорт продолжает работать
+**Ключевое архитектурное решение:** экспорт **никогда** не вызывает AI
+live (см. решение №5 в начале Phase 7). AI-сгенерированный summary
+сохраняется в `Project.ai_executive_summary` после review аналитика,
+PPT/PDF читают оттуда. Flow: generate → draft → edit → save → export.
+
+**Что делаем (Backend):**
+
+1. **Миграция — добавить поля в `Project`:**
+   - `ai_executive_summary: Text | None` — текст отредактированный
+     аналитиком (или оригинал AI)
+   - `ai_kpi_commentary: JSONB | None` — структура
+     `{"<scenario_id>": {"<scope>": {"summary","drivers","risks",...}}}`
+     для cached 7.2 responses, используется при повторных экспортах
+   - `ai_commentary_updated_at: TIMESTAMPTZ | None`
+   - `ai_commentary_updated_by: int | None` FK users — кто последний
+     редактировал (для audit)
+
+2. **`POST /api/projects/{id}/ai/generate-executive-summary`:**
+   - Tier: `HEAVY` (claude-opus-4.6) — это критичная long-form задача
+   - Context builder: `AIContextBuilder.for_executive_summary(
+     project_id)` — KPI × 3 scenario × 3 scope (27 чисел) + top risks
+     из content fields + top sensitivity drivers + SKU/channel snapshot
+     (~5-8k токенов)
+   - Cache с более коротким TTL (12ч вместо 24ч — executive часто
+     переделывают)
+   - Returns: `AIExecutiveSummaryResponse`:
+     ```python
+     class AIExecutiveSummaryResponse(BaseModel):
+         title: str  # заголовок слайда
+         bullets: list[str]  # 4-5 ключевых пунктов
+         recommendation: Literal["go", "no-go", "review"]
+         confidence: float
+         key_numbers: list[dict]  # [{"label":"NPV Y1-10", "value":"13.5М ₽"}, ...] — 3 числа
+         risks_section: list[str]  # отдельно от bullets
+         one_line_summary: str  # для README/обложки
+         cost_rub: Decimal
+         cached: bool
+     ```
+
+3. **`PATCH /api/projects/{id}/ai/executive-summary`:**
+   - Body: `{"ai_executive_summary": str}` (только этот текст, structured
+     поля в `ai_kpi_commentary` не редактируются вручную — только
+     regenerate)
+   - Обновляет `Project.ai_executive_summary`, `ai_commentary_updated_at`,
+     `ai_commentary_updated_by`
+
+4. **Модификация экспортов 5.2 (PPT) и 5.3 (PDF):**
+   - `ppt_exporter.py` и `pdf_exporter.py` читают
+     `Project.ai_executive_summary` — если не NULL, вставляют отдельный
+     слайд/секцию "Executive Summary" с текстом из БД
+   - Если NULL — **секция пропускается целиком** (не ломает экспорт)
+   - Флаг `include_ai_summary` больше НЕ нужен — наличие данных в БД
+     определяет включение. Упрощает API экспорта.
+
+**Что делаем (Frontend):**
+
+1. **На `ResultsTab`:** блок «Executive Summary» под AI explain-kpi
+   карточкой из 7.2. Состояния:
+   - Пусто: кнопка «✨ Сгенерировать Executive Summary (~12₽, ~8 сек)»
+     — **confirmation dialog** потому что >5₽
+   - После генерации: editable textarea с draft'ом + preview структуры
+     (bullets, key numbers, recommendation badge)
+   - Кнопки «💾 Сохранить в паспорт», «♻ Regenerate», «❌ Отмена»
+   - Кнопка «Применить к PPT/PDF» — показывает tooltip «Экспорт уже
+     содержит этот текст автоматически»
+
+2. **Индикатор в экспорт-кнопках:**
+   `Export PPT ✨` (с звёздочкой если `ai_executive_summary != NULL`),
+   hover tooltip «Включает AI-сгенерированную executive summary».
 
 **Критерий готовности:**
-- PPT с AI-слайдом открывается, контент осмысленный
-- PPT без AI (флаг false) — без слайда, как было до 7.4
-- При AI failure — слайд пропускается, в логах warning
+- Миграция применяется чисто, `ai_executive_summary` в Project видно
+- Генерация на GORJI → осмысленный текст с корректными числами
+  (ручная проверка, пример сохранён в `docs/ai_samples/`)
+- PPT с сохранённым summary → новый слайд виден, текст корректен
+- PPT без summary (пустое поле) → слайд отсутствует, экспорт работает
+- PDF аналогично
+- Edit flow работает: generate → edit → save → export → видно
+  отредактированную версию
+- pytest на endpoint'ах (6+ кейсов)
+- Regression: 4 E2E acceptance теста + все 14 XLSX + 11 PPT + 11 PDF
+  тестов остаются зелёными
 
-**Зависимости:** 7.2, 5.2 (PPT экспорт готов).
+**Зависимости:** 7.2 (scaffolding), 5.2 (PPT), 5.3 (PDF).
 
 ---
 
-#### Задача 7.5 — Cost monitoring + rate limiting + бюджеты
+#### Задача 7.5 — Cost monitoring polish + Balance widget + бюджеты
 
-**Что делаем:**
-- Включить логирование `ai_usage_log` во всех endpoint'ах из 7.2..7.4
-  (метрики: model, tokens, cost_rub, latency, error)
-- Новое поле в `Project`: `ai_budget_rub_monthly: Decimal | None`
-  (default 1000 ₽). Миграция.
-- Middleware/decorator: перед AI-вызовом проверять `SUM(cost_rub)
-  WHERE project_id=X AND created_at >= start_of_month`. Если превышен
-  бюджет — `429 Too Many Requests` с понятным сообщением "Месячный
-  AI-бюджет проекта исчерпан, обратитесь к администратору".
-- `GET /api/projects/{id}/ai/usage` — endpoint для UI: текущее
-  использование за месяц, остаток бюджета, history по дням
-- Frontend: блок "AI-бюджет" в табе "Параметры" (текущее / лимит,
-  индикатор). Поле редактирования лимита.
-- Алёрт в логи (warning) когда бюджет израсходован >80%
+**Примечание:** основная часть логирования и rate limiting уже
+реализована в 7.2 (scaffolding). 7.5 добавляет: real Polza balance
+API integration, project-level budget enforcement на реальных данных,
+UI widgets, per-user daily limits.
+
+**Что делаем (Backend):**
+
+1. **Миграция — `Project.ai_budget_rub_monthly: Decimal | None`**
+   (default 500₽ — обсуждено, снижено с 1000₽ в ADR-16). Nullable
+   для backward compat с существующими проектами.
+
+2. **Project-level budget enforcement middleware:**
+   В `api/ai.py` wrapper/dependency:
+   ```python
+   async def check_project_budget(project_id: int, feature: AIFeature, db):
+       project = await get_project(project_id)
+       if project.ai_budget_rub_monthly is None:
+           return  # budget не задан = disabled
+       spent = await db.scalar(select(func.sum(AIUsageLog.cost_rub))
+           .where(AIUsageLog.project_id == project_id)
+           .where(AIUsageLog.created_at >= start_of_month))
+       if spent >= project.ai_budget_rub_monthly:
+           raise HTTPException(429, detail={
+               "error": "project_budget_exceeded",
+               "spent_rub": spent, "limit_rub": project.ai_budget_rub_monthly,
+               "message": "Месячный AI-бюджет проекта исчерпан"
+           })
+   ```
+   Применяется как `Depends(check_project_budget)` на всех AI endpoint'ах.
+   Pre-flight estimate в ответе 200: `{"ai_budget_remaining": ..., "ai_budget_used": ...}`.
+
+3. **Per-user daily limit (safety net):**
+   Аналогично project budget, но фильтр `WHERE user_id = X
+   AND created_at >= today`. Default 100₽/день, настройка в
+   `settings.ai_user_daily_limit_rub`.
+
+4. **Polza balance integration (TODO на Discovery):**
+   - В начале задачи проверить через curl/browser существует ли
+     endpoint типа `/api/v1/balance`, `/api/v1/user`, `/api/v1/account`
+     в Polza. Читать `polza.ai/docs/api-reference/`.
+   - Если endpoint есть — реализовать `ai_service.get_polza_balance()
+     -> Decimal` с 5-минутным Redis cache
+   - Если нет — fallback: `get_polza_balance() -> None`, UI
+     показывает placeholder «Глобальный баланс недоступен, проверяйте
+     на polza.ai/dashboard»
+
+5. **`GET /api/projects/{id}/ai/usage`:**
+   - Returns:
+     ```python
+     class AIUsageResponse(BaseModel):
+         project_id: int
+         month_start: date
+         spent_rub: Decimal
+         budget_rub: Decimal | None
+         budget_remaining_rub: Decimal | None
+         budget_percent_used: float  # 0..1
+         daily_history: list[dict]  # [{"date": "2026-04-09", "spent": 12.5, "calls": 5}, ...]
+         recent_calls: list[dict]  # последние 10: {ts, feature, model, tokens, cost, latency, error}
+         cache_hit_rate_24h: float  # для debug + optimization
+         polza_global_balance_rub: Decimal | None  # from Polza API or None
+     ```
+   - Cache: Redis 30 секунд (не дёргаем БД при каждом renderе AI panel)
+
+6. **`PATCH /api/projects/{id}/ai/budget`:**
+   - Body: `{"ai_budget_rub_monthly": Decimal | null}`
+   - Обновляет поле, возвращает обновлённый `AIUsageResponse`
+
+**Что делаем (Frontend):**
+
+1. **Balance widget в AI Panel** (из 7.2 был placeholder):
+   - Верхняя часть panel'а (над quick actions)
+   - Две полоски: Polza global balance (если доступен) + Project budget
+   - Цветовая шкала: <60% зелёный, 60-80% жёлтый, >80% красный
+   - Refresh иконка (cooldown 30с)
+
+2. **Budget editing UI** в табе «Параметры» (существующий):
+   - Блок «AI budget (месячный)» с input Decimal
+   - Save → PATCH `/api/projects/{id}/ai/budget`
+   - Preset кнопки: 250 / 500 / 1000 / 2000 / Unlimited
+
+3. **Warnings:**
+   - При >80% — ненавязчивый toast при открытии проекта: «AI budget:
+     85% использовано (425/500 ₽)»
+   - При >95% — confirmation dialog на каждый expensive вызов: «Осталось
+     25₽, запрос ~10₽. Продолжить?»
+   - При 100% — AI кнопки disabled + tooltip «Budget исчерпан,
+     увеличьте лимит в Параметрах»
+
+4. **History виджет в AI Panel** (полноценно, из 7.2 был mock):
+   - Читает `recent_calls` из `/ai/usage`
+   - Каждая запись: иконка feature + model name + tokens + cost + timestamp
+   - Клик на запись → раскрывает details (если это cached 7.2/7.4
+     response, показывает его inline)
 
 **Критерий готовности:**
-- Симуляция превышения бюджета → 429
-- UI показывает корректный остаток
-- pytest на ai_usage_log accumulator
+- Симуляция превышения project budget → 429 с корректным message
+- Симуляция превышения daily user limit → 429
+- Balance widget показывает корректные данные (real Polza или
+  fallback)
+- Cache hit rate > 40% на типичной fine-tuning сессии (проверка
+  через `/ai/usage`)
+- pytest: budget enforcement (happy, at_limit, over_limit, null_budget),
+  daily limit, Polza balance fetch with mock, usage endpoint
+- Regression: все существующие AI endpoint'ы всё ещё работают
 
-**Зависимости:** 7.2 (есть что логировать).
+**Зависимости:** 7.2 (logging активировано), 7.3 и 7.4 опционально
+(больше фич — больше данных для budget).
 
 ---
 
 #### Задача 7.6 — AI генерация text content fields паспорта
 
-**Что делаем:**
+**Что делаем (Backend):**
 - `POST /api/projects/{id}/ai/generate-content`
-  - Body: `{ "field": "executive_summary" | "project_goal" | "target_audience" | "concept_text" | "rationale" | "growth_opportunity" | ..., "context": "freeform user prompt" }`
-  - Reads: project params + KPI + content fields (для context)
-  - Returns: `{ "field": str, "generated_text": str, "tokens_used": int, "cost_rub": float }`
+  - Tier: `FAST_CHEAP` (claude-haiku-4.5) по умолчанию — большинство
+    content полей короткие (<500 токенов), Haiku даёт 10x экономию.
+    Override на `BALANCED` через UI toggle для полей требующих
+    deeper reasoning (target_audience, rationale).
+  - Context builder: `AIContextBuilder.for_content_field(project_id,
+    field_name)` — project name + goal + innovation_type + geography
+    + concept + **existing content других полей** (как "не пиши того же")
+    + user freeform hint если передан (~1-2k токенов)
+  - Cache через тот же Redis слой (input_hash по project_id + field +
+    context snapshot + user_hint)
+  - Body:
+    ```python
+    {
+        "field": Literal["project_goal", "target_audience", "concept_text",
+                         "rationale", "growth_opportunity", "idea_short",
+                         "technology", "rnd_progress", ...],
+        "user_hint": str | None,  # freeform instruction от аналитика
+        "tier_override": "balanced" | null
+    }
+    ```
+  - Returns: `{ "field": str, "generated_text": str, "cost_rub": Decimal,
+    "model": str, "cached": bool }`
+
 - Промпты в `ai_prompts.py`:
-  - `EXECUTIVE_SUMMARY_GENERATION` — на основе KPI + context
-  - `PROJECT_GOAL_GENERATION` — на основе innovation_type, geography, etc
-  - `TARGET_AUDIENCE_GENERATION` — на основе SKU profile + concept
-  - и т.д. для остальных text полей (15-16 промптов)
-- Frontend: рядом с каждым text field в content tab — кнопка
-  «✨ Сгенерировать AI» → opens modal с user prompt input → POST →
-  preview generated text → "Применить" (PATCH project) или "Отменить"
-- Использует `anthropic/claude-sonnet-4-6` по умолчанию, `opus-4-6` для
-  сложных полей (target_audience с глубоким анализом).
+  - `CONTENT_FIELD_BASE_SYSTEM = BASE_TONE_PROMPT + content-specific guidance`
+  - Per-field task prompts (dict `CONTENT_FIELD_PROMPTS: dict[str, str]`):
+    - `PROJECT_GOAL` — "Формулируй SMART-цель на основе innovation_type, geography..."
+    - `TARGET_AUDIENCE` — "Опиши ЦА на основе SKU profile + concept..."
+    - `CONCEPT_TEXT` — "Опиши concept с точки зрения consumer need..."
+    - `RATIONALE` — "Обоснуй почему этот проект имеет смысл сейчас..."
+    - ...и так для всех 15-16 полей из 4.5.1
+  - Каждый промпт жёстко ограничивает output по длине
+    (typical 200-400 слов), иначе Haiku может писать простыни
+
+**Что делаем (Frontend):**
+
+- **НЕ модалка.** Inline interaction в существующем content tab
+  (см. решение №3 — против модалок):
+  - Рядом с каждым text field маленькая кнопка `✨ AI` (не большая
+    «Сгенерировать»)
+  - Click → открывается collapsible panel **прямо под полем**:
+    - Input для `user_hint` (опционально)
+    - Tier toggle `Haiku (0.3₽) | Sonnet (1.5₽)` — default Haiku
+    - Кнопка «Сгенерировать»
+  - После генерации collapsible panel показывает:
+    - Generated text в editable textarea (не read-only — редактируй сразу)
+    - Кнопки «✅ Применить в поле», «♻ Regenerate», «❌ Отмена»
+    - Cost toast при success
+  - «Применить в поле» → PATCH `Project.<field>` с отредактированным
+    текстом + закрывает AI panel
 
 **Критерий готовности:**
 - 15+ промптов покрывают все text fields из 4.5.1
-- AI генерация для каждого поля даёт осмысленный результат на GORJI
-  данных (ручная проверка)
-- Cost monitoring (D-21 → 7.5) учитывает каждый вызов
+- Smoke-тест на реальном Polza: генерация project_goal,
+  target_audience, rationale для GORJI WTR проекта — **ручная проверка
+  + сохранённые examples** в `docs/ai_samples/content_fields_gorji.md`
+- Массовая генерация всех 15 полей на Haiku — total cost < 8₽
+- UI: inline generation работает для каждого поля, editable preview
+  корректен, «Применить» сохраняет в БД
+- Cache hit ratio > 30% при повторных кликах
+- pytest на endpoint'ах (5+ кейсов: happy, invalid field, cached,
+  budget exceeded, tier override)
 
-**Зависимости:** 7.1, 4.5.1 (поля существуют).
+**Зависимости:** 7.2 (scaffolding), 4.5.1 (fields существуют в Project).
 
 ---
 
 #### Задача 7.7 — AI marketing research через web search
 
-**Что делаем:**
-- `POST /api/projects/{id}/ai/marketing-research`
-  - Body: `{ "topic": "competitive analysis" | "market size" | "consumer trends" | "category benchmarks", "custom_query": str | None }`
-  - Backend формирует промпт на основе project context (категория,
-    география, target audience) и **запускает web search через Polza**
-    (точный API формат: уточнить через `polza.ai/openapi.json` или
-    support — Anthropic native `web_search` tool в `tools[]` или special
-    Polza extra_body параметр)
-  - Returns: `{ "topic": str, "research_text": str, "sources": [{ "url", "title", "snippet" }], "generated_at": datetime, "cost_rub": float }`
-- Новое поле в Project (миграция): `marketing_research: JSONB`
-  - Структура: `{ topic: { text, sources, generated_at } }` (multi-topic
-    storage чтобы пользователь мог запустить несколько исследований)
-- Frontend: новая секция в content tab «Marketing research» с:
-  - Кнопка для каждого topic + custom query input
-  - Отображение research_text + список sources
-  - Кнопка «Сохранить в паспорт» → markup для PPT/PDF (5.2/5.3 включают
-    как отдельный слайд если research присутствует)
-- Использует **`anthropic/claude-opus-4-6`** (research = критическая
-  задача, цена ошибки высокая). Promt-шаблоны в `ai_prompts.py`.
+**Pre-work (Discovery, до начала кодинга):** проверить формат Polza
+web search API через `polza.ai/openapi.json`, `/api/v1/models` или
+support@polza.ai. Варианты: Anthropic native `web_search` tool в
+`tools[]`, Polza `extra_body` параметр, query string flag. Результат
+Discovery зафиксировать в ADR-16 комментарием.
 
-**Уточнение Polza API формата (до начала разработки 7.7):**
-- Прочитать `https://polza.ai/openapi.json` и найти `web_search` tool
-  или special параметр
-- Альтернатива: связаться с support@polza.ai
-- Зафиксировать в ADR-16 точный код использования
+**Что делаем (Backend):**
+
+1. **Миграция — `Project.marketing_research: JSONB | None`:**
+   Структура multi-topic storage:
+   ```json
+   {
+     "competitive_analysis": {
+       "text": "...",
+       "sources": [{"url": "...", "title": "...", "snippet": "..."}],
+       "generated_at": "2026-04-09T12:34:56Z",
+       "cost_rub": 15.4,
+       "model": "anthropic/claude-opus-4.6+websearch"
+     },
+     "market_size": {...},
+     ...
+   }
+   ```
+
+2. **`POST /api/projects/{id}/ai/marketing-research`:**
+   - Tier: `RESEARCH` (opus-4.6 + web_search tool)
+   - Context builder: `AIContextBuilder.for_marketing_research(
+     project_id, topic)` — project category, geography, target audience,
+     SKU profile (~1-2k токенов)
+   - **НЕ кэшируем через обычный Redis** — web search результаты
+     должны быть свежими. Хранение только в `Project.marketing_research`
+     с timestamp, expiry 7 дней (показать warning в UI «Research
+     устарел на >7 дней»).
+   - Body:
+     ```python
+     {
+         "topic": Literal["competitive_analysis", "market_size",
+                          "consumer_trends", "category_benchmarks", "custom"],
+         "custom_query": str | None,  # для topic=custom
+     }
+     ```
+   - Returns: `AIMarketingResearchResponse`:
+     ```python
+     class AIMarketingResearchResponse(BaseModel):
+         topic: str
+         research_text: str  # связный narrative с inline citations [1], [2]
+         sources: list[ResearchSource]  # [{url, title, snippet, published_at?}]
+         key_findings: list[str]  # 3-5 bullet'ов top insight'ов
+         confidence_notes: str  # "Данные за 2025-2026, 5 sources, покрытие средне"
+         generated_at: datetime
+         cost_rub: Decimal
+         model: str
+     ```
+
+3. **Jobs в Celery?** Web search может занимать 20-40 секунд —
+   близко к timeout'у обычного HTTP request. **Решение:**
+   - Синхронный endpoint с увеличенным timeout'ом (90с)
+   - Frontend показывает длинный loading state с progress indicator
+   - Если timeout — fallback на Celery task с polling
+   - **Decision по Celery в начале 7.7** — зависит от measured latency
+     на реальных запросах
+
+4. **Промпт в `ai_prompts.py`:**
+   - `MARKETING_RESEARCH_SYSTEM = BASE_TONE_PROMPT + research-specific
+     guidance` — инструкции: используй только web_search результаты,
+     цитируй источники inline, отмечай противоречия между источниками,
+     отмечай уровень свежести данных
+
+5. **`PATCH /api/projects/{id}/ai/marketing-research`:**
+   - Body: `{"topic": str, "edited_text": str}` — аналитик может
+     редактировать research_text перед сохранением
+   - Обновляет конкретный topic в JSONB
+
+6. **`DELETE /api/projects/{id}/ai/marketing-research/{topic}`:**
+   - Удаляет конкретный topic (при regenerate старая версия затирается)
+
+**Что делаем (Frontend + Export):**
+
+1. **Новая секция «Marketing research» в content tab:**
+   - Карточки для каждого topic (pre-defined + custom)
+   - Пустая карточка: «Запустить исследование (~15-25₽, ~30 сек)»
+     + confirmation dialog
+   - Заполненная карточка: research_text (collapsible), sources list
+     с internal link previews, timestamp, «♻ Regenerate», «✏️ Edit»,
+     «🗑 Delete»
+   - Warning badge «Устарело на N дней» если >7 дней
+
+2. **Экспорт integration:**
+   - PPT (5.2): отдельный слайд «Marketing Research» per topic если
+     `Project.marketing_research[topic]` присутствует
+   - PDF (5.3): отдельная секция с sources в footnotes
 
 **Критерий готовности:**
-- Generate research для GORJI WTR категории даёт релевантный ответ с
-  актуальными источниками (ручная проверка)
-- Sources валидные (URL открываются)
-- Cost monitoring учитывает (с web search дороже — multipliers через
-  Polza pricing)
+- Discovery Polza web search API завершён, результат в ADR-16
+- Generate research для GORJI WTR категории даёт релевантный ответ
+  с актуальными источниками (ручная проверка — ± sources свежие,
+  URL открываются, narrative связный)
+- Latency < 60s на типичный запрос (или Celery fallback работает)
+- UI: запуск, редактирование, delete, regenerate работают
+- PPT/PDF включают research секцию если topic присутствует
+- Cost < 30₽ на типичный запрос
 
-**Зависимости:** 7.1, 4.5.1 (для marketing_research field).
+**Зависимости:** 7.2 (scaffolding), 4.5.1 (если PROJECT.marketing_research
+использует existing content-поля как context), 5.2/5.3 (export
+integration).
 
 ---
 
 #### Задача 7.8 — AI генерация package mockups (image generation)
 
-**Что делаем:**
-- `POST /api/projects/{id}/skus/{psk_id}/ai/generate-package`
-  - Body: `{ "prompt": str, "style": "minimalist" | "premium" | "youth" | "natural", "n_variants": int (1-4) }`
-  - Backend формирует расширенный image prompt на основе:
-    - `prompt` (user input — например, "blue energy drink can with electrolytes")
-    - `style` (преcет промпт-добавок)
-    - SKU metadata (`brand`, `name`, `format`, `volume_l`, `package_type`)
-  - Вызывает Polza `/v1/images/generations` с моделью
-    `"black-forest-labs/flux-2-pro"` (дефолт по ADR-16)
-  - Сохраняет каждый сгенерированный image как `MediaAsset` (kind=
-    `concept_design`) в Docker volume через `media_service` (4.5.2)
-  - Returns: `{ "variants": [{ "asset_id", "url" }], "cost_rub": float }`
-- Frontend: рядом с image upload в `bom-panel.tsx` или `sku-image-upload`:
-  - Кнопка «✨ Сгенерировать AI» → modal с prompt + style + n_variants
-  - Loading state (image generation ~10-30 сек)
-  - Preview всех вариантов → пользователь выбирает один → PATCH
-    `ProjectSKU.package_image_id`
-  - Не выбранные варианты остаются как `kind=concept_design` в БД (не
-    удаляются — могут пригодиться для альтернатив в презентации)
-- **Disclaimer в UI** рядом с кнопкой: "AI-mockup для презентации,
-  не production-ready дизайн. Production дизайн делают дизайнеры."
-- Cost monitoring: image generation в 5-10x дороже chat (per call ~5-10₽
-  vs <1₽). 7.5 budget proжно considers image vs chat raтes.
+**Ключевое отличие от chat-фич:** image generation дорого (5-10₽ за
+картинку), медленно (10-30 сек), и результат принципиально
+stochastic — cache hit вероятность низкая (пользователь хочет
+variants). Cost protection через явный `n_variants` limit и pre-flight
+confirmation обязательны.
+
+**Что делаем (Backend):**
+
+1. **`POST /api/projects/{id}/skus/{psk_id}/ai/generate-package`:**
+   - Tier: `IMAGE` (flux-2-pro)
+   - Context builder: `AIContextBuilder.for_package_mockup(project_sku_id,
+     style, user_prompt)` — SKU metadata (brand, name, format, volume_l,
+     package_type) + style preset additions (~500 токенов)
+   - **Нет caching** — пользователь хочет variants, каждый вызов
+     уникален. Но dedupe работает: identical prompt + style + n_variants
+     в течение 60с → возврат того же результата (защита от double-click).
+   - Body:
+     ```python
+     {
+         "user_prompt": str,  # "blue energy drink can with electrolytes"
+         "style": Literal["minimalist", "premium", "youth", "natural",
+                          "corporate", "playful"],  # preset prompt additions
+         "n_variants": int  # 1..4, pre-flight cost = n × ~7₽
+     }
+     ```
+   - Pre-flight cost: `7₽ × n_variants`. Для `n=4` = 28₽ — обязательная
+     confirmation dialog в UI.
+   - Backend flow:
+     1. Budget check (project + daily user)
+     2. Сформировать финальный image prompt: `user_prompt + ", " +
+        STYLE_PRESETS[style] + ", " + SKU metadata text`
+     3. Вызов Polza `/api/v1/images/generations` через openai SDK
+        (`client.images.generate(model="black-forest-labs/flux-2-pro",
+        prompt=..., n=n_variants, size="1024x1024")`)
+     4. Для каждого изображения:
+        - Скачать base64/URL из ответа
+        - Сохранить через `media_service.save_media_file(
+          project_id, kind="concept_design", content=..., filename=...)`
+        - Создать `MediaAsset` row
+     5. Вернуть list of `MediaAsset.id` + URLs
+   - Returns:
+     ```python
+     class AIPackageMockupResponse(BaseModel):
+         variants: list[dict]  # [{"asset_id": 42, "url": "/api/media/42/download"}, ...]
+         full_prompt_used: str  # для debug/transparency
+         cost_rub: Decimal
+         model: str
+     ```
+
+2. **Style presets в `ai_prompts.py`:**
+   ```python
+   PACKAGE_STYLE_PRESETS: dict[str, str] = {
+       "minimalist": "minimalist design, clean typography, lots of white space, ...",
+       "premium": "premium aesthetic, gold accents, elegant typography, ...",
+       "youth": "bold colors, playful graphics, street art influence, ...",
+       "natural": "earth tones, organic shapes, eco-friendly materials aesthetic, ...",
+       "corporate": "professional, clean, corporate identity compliant, ...",
+       "playful": "bright colors, cartoon elements, childlike simplicity, ...",
+   }
+   ```
+
+3. **Celery task для async generation (optional):**
+   Если latency > 30s на variants — fallback на Celery. Polza support
+   варьируется. Решение в начале 7.8 после measured latency.
+
+**Что делаем (Frontend):**
+
+1. **Inline ✨ кнопка возле SKU image upload** (`bom-panel.tsx` или
+   `sku-image-upload.tsx`):
+   - **НЕ модалка** (см. решение №3). Inline expandable panel:
+     - Textarea для user_prompt
+     - Style dropdown с mini-preview каждого preset'а
+     - `n_variants` slider 1..4
+     - Pre-flight cost label «~28₽ (4 × 7₽)» обновляется live
+     - **Confirmation dialog** перед вызовом (> 5₽)
+     - Loading state с SSE-like прогресс («Вариант 2 из 4...» — если
+       Polza даёт streaming updates; иначе spinner с ETA)
+     - Abort button
+
+2. **Preview variants** после генерации:
+   - Grid из 1-4 generated images
+   - Hover: show full prompt used (для debug)
+   - Click на изображение → выбор → PATCH `ProjectSKU.package_image_id`
+   - Не выбранные variants остаются в `MediaAsset` таблице с
+     `kind=concept_design` — могут быть использованы позже
+   - «♻ Regenerate all» button если ничего не подходит
+   - Cost toast при success
+
+3. **Disclaimer в UI:**
+   Маленький текст под кнопкой: «AI-mockup для презентации, не
+   production дизайн. Финальный дизайн — задача design team.»
 
 **Критерий готовности:**
 - Полный flow: prompt → 4 variants → выбор → linked to SKU
-- MediaAsset rows + filesystem files создаются корректно
-- AI cost logging
-- Pytest с моком Polza image API
-- Visual check generated mockups для типового SKU
+- MediaAsset rows + filesystem files создаются корректно для каждого
+  variant'а
+- Unselected variants не удаляются, доступны в `MediaAsset` таблице
+- AI cost logging корректный (~28₽ для n=4)
+- pytest с моком Polza image API (4+ кейсов: happy, Polza error,
+  budget exceeded, invalid style)
+- Visual smoke-check: generate mockup для одного GORJI SKU, screenshot
+  в `docs/ai_samples/package_mockups_gorji.png`
+- Confirmation dialog блокирует >5₽ вызовы без явного подтверждения
 
-**Зависимости:** 7.1, 4.5.1 (поле package_image_id), 4.5.2 (media storage).
+**Зависимости:** 7.2 (scaffolding), 4.5.1 (`package_image_id` field),
+4.5.2 (media storage backend), 7.5 (budget enforcement activated).
 
 ---
 
@@ -2155,9 +2906,32 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
   production deploy step, а не блокер Phase 7. Для разработки AI
   локального `.env` с POLZA_AI_API_KEY достаточно
 
-### Фаза 7 — AI-интеграция (Polza AI, post-MVP, ADR-16) ← **следующий шаг**
-- [ ] 7.1 Polza AI client + ai_service.py + ai_usage_log таблица
-- [ ] 7.2 AI-объяснение KPI (POST /api/projects/{id}/ai/explain-kpi)
+### Фаза 7 — AI-интеграция (Polza AI, post-MVP, ADR-16) ← **в работе**
+- [x] 7.1 Polza AI client + ai_service.py + ai_usage_log таблица ✅
+  (2026-04-09, openai>=1.54 SDK, AsyncOpenAI wrapper с singleton и
+  graceful degradation, AIServiceUnavailableError, AICallResult[T]
+  с usage-метриками для 7.5 cost logging, ai_prompts.py заглушка,
+  миграция c341fb0685fe для ai_usage_log, 8 unit-тестов с моками,
+  live smoke-тест passed на Claude 4.6 Sonnet, URL+model naming
+  corrections в ADR-16, 286/286 pytest)
+- [ ] **7.2** Explain KPI + архитектурный scaffolding всей Phase 7
+  (tier registry, context builders, Redis cache, rate limit middleware,
+  AI Panel drawer skeleton, inline ✨ на ResultsTab, 4-layer cost
+  protection activation, A/B Prompt Lab dev-only) ← **следующий шаг**
+- [ ] 7.3 Sensitivity interpretation + Freeform Chat в AI Panel
+  (SSE streaming, Redis conversation history)
+- [ ] 7.4 AI executive summary (DB-cached, экспорт PPT/PDF читает
+  `Project.ai_executive_summary` из БД, не вызывает AI live)
+- [ ] 7.5 Cost monitoring polish (project budget 500₽ default,
+  daily user limit 100₽, real Polza balance widget, usage endpoint,
+  budget editing UI)
+- [ ] 7.6 AI generate content fields (Haiku default для 15 полей,
+  inline collapsible panel вместо модалки, batch cost < 8₽)
+- [ ] 7.7 AI marketing research (web search Discovery → implementation,
+  multi-topic JSONB в Project, 7-day freshness, PPT/PDF integration)
+- [ ] 7.8 AI package mockups (flux-2-pro, n=1..4 variants, inline
+  panel + style presets, confirmation dialog >5₽, unselected variants
+  остаются в MediaAsset)
 - [ ] 7.3 AI-комментарий чувствительности (POST .../ai/explain-sensitivity)
 - [ ] 7.4 AI executive summary slide в PPT-экспорте
 - [ ] 7.5 Cost monitoring + бюджет проекта + rate limiting

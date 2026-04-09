@@ -9,6 +9,143 @@
 
 ## [Unreleased]
 
+### Fixed (Phase 7.1 — Polza AI base URL и model naming, 2026-04-09)
+
+**Live smoke-тест Phase 7.1 выявил две ошибки в ADR-16** при первом
+реальном вызове Polza AI. Подробности — в `docs/ERRORS_AND_ISSUES.md`.
+
+1. **Base URL:** `https://polza.ai/v1` → `https://polza.ai/api/v1`.
+   Старый URL возвращал 404 HTML polza.ai-лендинга, SDK пытался
+   его парсить как JSON. Правильный URL подтверждён curl-примером
+   в `polza.ai/docs/api-reference/chat/completions.md`.
+2. **Model naming:** `claude-sonnet-4-6` → `claude-sonnet-4.6`
+   (тоже для opus). Polza использует точку между major.minor, а не
+   дефис. Проверено через `/api/v1/models` endpoint — 12 Claude
+   моделей доступны, все с точками.
+
+**Изменения:**
+- `.env.example` — URL + расширенный комментарий с историей
+  корректировок
+- `backend/app/services/ai_service.py` — константы `DEFAULT_CHAT_MODEL`,
+  `COMPLEX_CHAT_MODEL`
+- `backend/tests/services/test_ai_service.py` — assert'ы на новое
+  имя модели в happy path и test_respects_custom_model
+- `docs/ADR.md` ADR-16 — URL в 6 местах, секция "История корректировок
+  URL", пометка "Формат имени модели: с точками, не с дефисами",
+  обновлена сводная таблица ADR
+- `docs/ERRORS_AND_ISSUES.md` — подробный incident с обеими ошибками
+
+**Также:** `infra/docker-compose.dev.yml` — добавлена директива
+`env_file: ../.env` в секции `backend` и `celery-worker`.
+Без неё переменные из project-root `.env` не доходили до контейнера
+(backend читал только свои explicit `environment:` + мёртвый
+`/app/.env` через pydantic-settings).
+
+**Smoke-тест после фиксов:**
+`tests/integration/test_polza_smoke.py::test_polza_smoke_chat_completion PASSED in 5.36s`
+— Polza → Claude 4.6 Sonnet → JSON ответ → Pydantic валидация → OK.
+Стоимость ~0.01₽.
+
+**Regression:** `pytest -m "not acceptance and not live"` → 286/286
+зелёных.
+
+### Added (задача 7.1 — Polza AI client + базовая инфраструктура, 2026-04-09)
+
+**Phase 7 стартовала.** Базовая инфраструктура для AI-интеграции через
+Polza AI (OpenAI-совместимый прокси, оплата в рублях, без VPN — ADR-16).
+Фундамент для задач 7.2..7.8 (объяснение KPI, sensitivity, executive
+summary, AI-генерация content fields, marketing research, package mockups).
+
+**Зависимости:**
+- `openai>=1.54.0,<2.0.0` — Python SDK как OpenAI-compat клиент к Polza.
+  Встроенный retry с exponential backoff, rate-limit handling,
+  connection pooling через httpx.
+
+**Конфигурация (`backend/app/core/config.py`):**
+- `polza_ai_api_key: str = ""` — пустое значение = AI-модуль отключён,
+  `ai_service` поднимает `AIServiceUnavailableError`, endpoint'ы в
+  7.2..7.8 отдают placeholder.
+- `polza_ai_base_url: str = "https://polza.ai/v1"` — verified URL из
+  polza.ai/docs (ADR-16 был исправлен с api.polza.ai/api/v1 на
+  polza.ai/v1 во время Discovery).
+- `polza_ai_timeout_seconds: float = 60.0` — ADR-16 фиксирует верхний
+  лимит Polza 600s; 60s — разумный default для chat completions.
+- `polza_ai_max_retries: int = 3` — внутри SDK, exponential backoff.
+
+`.env.example` уже содержал `POLZA_AI_API_KEY=` placeholder (добавлено
+при создании ADR-16), пользователь кладёт реальный ключ в локальный `.env`.
+
+**Сервисы (`backend/app/services/`):**
+- `ai_service.py` (новый, 220 строк) — клиент Polza AI:
+  - `complete_json(*, system_prompt, user_prompt, schema, model=..., endpoint=..., temperature=0.2) -> AICallResult[T]`
+    — единственный публичный метод, вызов chat completion с
+    `response_format={"type": "json_object"}` + Pydantic валидация ответа.
+  - `AICallResult[T]` dataclass: `.parsed` (валидированный Pydantic
+    инстанс), `.model`, `.prompt_tokens`, `.completion_tokens`,
+    `.total_tokens`, `.latency_ms` — usage метрики готовы для
+    7.5 cost logging.
+  - `AIServiceUnavailableError` — доменное исключение для graceful
+    degradation. Endpoint-слой ловит и возвращает placeholder.
+  - `_get_client()` singleton через `@lru_cache(maxsize=1)`, ранняя
+    проверка `POLZA_AI_API_KEY` (без ключа — не дёргаем Polza).
+  - `reset_client_cache()` — только для тестов (monkeypatch-friendly).
+  - Константы `DEFAULT_CHAT_MODEL = "anthropic/claude-sonnet-4-6"`,
+    `COMPLEX_CHAT_MODEL = "anthropic/claude-opus-4-6"` (ADR-16).
+  - Обрабатываемые ошибки → `AIServiceUnavailableError`:
+    `AuthenticationError` (401), `RateLimitError` (429),
+    `APITimeoutError`, `APIConnectionError`, `APIError` (5xx),
+    пустой `choices[]`, невалидный JSON в content,
+    `ValidationError` от Pydantic на mismatch схемы.
+- `ai_prompts.py` (новый, заглушка) — все system/user промпты как
+  Python-константы, заполняется начиная с 7.2. Документирует
+  принципы: никаких "промптов из БД" (prompt injection surface),
+  версионирование через git, строгий JSON-output + Pydantic-схемы.
+
+**Модель + миграция (`backend/app/models/entities.py`):**
+- `AIUsageLog` — новая таблица `ai_usage_log`: `id`, `project_id`
+  (nullable FK projects SET NULL), `endpoint` (str 100),
+  `model` (str 100), `prompt_tokens` (int), `completion_tokens` (int),
+  `cost_rub` (Numeric(12,6) nullable — заполняется в 7.5 по Polza
+  pricing), `latency_ms` (int), `error` (Text nullable),
+  `created_at` (TIMESTAMPTZ server_default now()). Без TimestampMixin —
+  лог-запись immutable, updated_at бессмыслен.
+- Миграция `c341fb0685fe_phase_7_1_ai_usage_log_table.py` (Alembic
+  autogenerate + ручной docstring). Таблица пустая в 7.1 — активное
+  логирование подключается только в 7.5, когда endpoint'ы 7.2..7.4
+  начнут писать сюда после каждого AI-вызова.
+
+**Тесты (`backend/tests/`):**
+- `services/test_ai_service.py` — 8 unit-тестов с моками
+  `AsyncOpenAI.chat.completions.create` через `unittest.mock.AsyncMock`:
+  1. Happy path → `AICallResult` с `.parsed` Pydantic instance и
+     заполненными usage-метриками, проверка kwargs вызова.
+  2. `APIConnectionError` → `AIServiceUnavailableError`.
+  3. Невалидный JSON в response content → `AIServiceUnavailableError`.
+  4. JSON не соответствует Pydantic-схеме → `AIServiceUnavailableError`.
+  5. Пустой `POLZA_AI_API_KEY` → ранний `AIServiceUnavailableError`
+     (Polza не дёргается).
+  6. `APITimeoutError` → `AIServiceUnavailableError`.
+  7. `AuthenticationError` (401) → `AIServiceUnavailableError`.
+  8. Кастомная модель (`COMPLEX_CHAT_MODEL`) пробрасывается в SDK.
+  Autouse fixture `_isolate_client_cache` сбрасывает singleton между
+  тестами, чтобы monkeypatch на `settings.polza_ai_api_key` работал.
+- `integration/test_polza_smoke.py` — один живой smoke-тест с
+  маркером `@pytest.mark.live`, реальный вызов Polza `/v1/chat/completions`
+  с минимальным `{"reply": "pong", "lucky_number": int}` промптом.
+  Skip если `POLZA_AI_API_KEY` пустой (CI без секрета просто пропустит).
+  Стоимость ~0.01₽ на прогон. Не в обычном pytest — запуск вручную
+  `pytest -v -m live`.
+- `pytest.ini`: новый маркер `live`, обычный прогон
+  `-m "not acceptance and not live"`.
+
+**Прогон:** 286/286 pytest зелёные (278 baseline + 8 новых
+test_ai_service.py), 5 deselected (4 acceptance + 1 live smoke).
+
+**Что не сделано в 7.1 (по плану):**
+- Логирование в `ai_usage_log` — включится в 7.5 на уровне endpoint'ов.
+- `AIUsageLog` не экспонирован через API — нет use case до 7.2.
+- Нет реальных промптов в `ai_prompts.py` — они приходят с 7.2.
+
 ### Changed (реструктуризация плана, 2026-04-09)
 
 **Задача 6.2 GitHub Actions CI перенесена в конец IMPLEMENTATION_PLAN.md**

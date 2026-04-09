@@ -53,6 +53,13 @@ services:
       # concept designs). Persistent volume — survives container restart.
       # Структура: /media/{project_id}/{kind}/{uuid}_{filename}
       - media-storage:/media
+    # Phase 7.1: секреты (POLZA_AI_API_KEY и т.п.) читаются из
+    # project-root .env. Пути в env_file относительны compose-файлу
+    # (infra/), поэтому ../.env = DB2/.env. Переменные из env_file
+    # перезатираются значениями в explicit `environment:` ниже —
+    # порядок precedence docker-compose: environment > env_file.
+    env_file:
+      - ../.env
     environment:
       DATABASE_URL: postgresql+asyncpg://dbuser:dbpassword@postgres:5432/dbpassport
       REDIS_URL: redis://redis:6379/0
@@ -84,6 +91,10 @@ services:
       # Тот же volume что у backend — celery task'и Phase 7.8 будут
       # сохранять AI-generated изображения.
       - media-storage:/media
+    # Phase 7.1: celery-worker тоже нуждается в POLZA_AI_API_KEY для
+    # будущих async AI-задач (7.8 image generation через Celery task).
+    env_file:
+      - ../.env
     environment:
       DATABASE_URL: postgresql+asyncpg://dbuser:dbpassword@postgres:5432/dbpassport
       REDIS_URL: redis://redis:6379/0

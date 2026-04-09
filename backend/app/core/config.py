@@ -48,6 +48,24 @@ class Settings(BaseSettings):
     # Hard-limit на размер одного файла в байтах (10 MB).
     media_max_file_size: int = 10 * 1024 * 1024
 
+    # --- AI integration (Фаза 7, ADR-16) ---
+    # Polza AI = OpenAI-совместимый прокси с оплатой в рублях, без VPN.
+    # Используется через `openai` Python SDK (AsyncOpenAI) с кастомным
+    # base_url. Дефолтные модели задаются в ai_service.py, не здесь —
+    # здесь только credentials + endpoint. Ключ выдаётся в
+    # polza.ai/dashboard/api-keys, в .env.example — пустой placeholder.
+    # Пустое значение = AI-модуль отключён, ai_service поднимает
+    # AIServiceUnavailableError, endpoint'ы в 7.2..7.8 отдают placeholder.
+    polza_ai_api_key: str = ""
+    polza_ai_base_url: str = "https://polza.ai/v1"
+    # Timeout на один Polza вызов. ADR-16 фиксирует верхний лимит
+    # Polza 600 сек; 60 сек — разумный дефолт для chat completions,
+    # image generation (7.8) поднимет до 300 сек локально.
+    polza_ai_timeout_seconds: float = 60.0
+    # Количество retry внутри openai SDK при 5xx/connection errors.
+    # Exponential backoff встроен в SDK, см. openai._base_client.
+    polza_ai_max_retries: int = 3
+
     @property
     def cors_origins_list(self) -> list[str]:
         """Парсинг CSV в список: 'http://a,http://b' → ['http://a', 'http://b']."""
