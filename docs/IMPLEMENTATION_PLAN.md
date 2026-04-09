@@ -1039,6 +1039,223 @@ in-memory pipeline runs (легко), вместо 20 раздельных Celer
 
 ---
 
+### Фаза 4.5 — Контент паспорта (data model + UI)
+
+**Цель:** дать пользователю возможность заполнить **все** поля паспорта
+проекта (текстовые блоки, готовность функций, риски, дорожная карта,
+согласующие, упаковка) — чтобы Phase 5 (PPT/PDF) экспортировала
+готовый паспорт в стиле PASSPORT_ELEKTRA, а не "только числа".
+
+**Контекст:** Discovery — прочитан PASSPORT_ELEKTRA_ZERO_2025-08-09.pdf
+(22 страницы, GATE-4 ЭЛЕКТРА). Структура слайдов: KPI/идея/продуктовый
+микс/готовность функций/расчёт/чувствительность/стакан/бюджет/прогноз/
+АКБ/СИМ/profitability/Nielsen/КП на копакинг/дорожная карта/согласующие.
+Числовые слайды (KPI, расчёт, чувствительность, стакан, прогноз, СИМ,
+АКБ) — уже покрыты текущей моделью. **Не покрыты:** текстовые блоки
+(идея, концепция, ЦА, R&D, валидация, риски), готовность функций
+(8 департаментов со статусами), дорожная карта, согласующие, изображения
+упаковки.
+
+Список полей одобрен пользователем 2026-04-09 (16 scalar + 5 JSONB
++ MediaAsset + ProjectSKU.package_image_id).
+
+#### Задача 4.5.1 — Расширение data model + миграция
+
+**Что делаем:**
+
+**Project — 16 scalar полей:**
+| Поле | Тип | Назначение |
+|---|---|---|
+| `description` | TEXT | Короткое описание (1-2 предложения) |
+| `gate_stage` | VARCHAR(10) CHECK IN ('G0','G1','G2','G3','G4','G5') | Текущий гейт |
+| `passport_date` | DATE | Дата паспорта на гейт |
+| `project_owner` | VARCHAR(200) | Ответственный (ФИО) |
+| `project_goal` | TEXT | Цель проекта |
+| `innovation_type` | VARCHAR(100) | "Новая категория" / "Расширение" / etc |
+| `geography` | VARCHAR(200) | "РФ (потенциально СНГ)" |
+| `production_type` | VARCHAR(100) | "Копакинг" / "Сами" / "Mixed" |
+| `growth_opportunity` | TEXT | Возможность роста |
+| `concept_text` | TEXT | Концепция продукта |
+| `rationale` | TEXT | Рационал / предпосылки |
+| `idea_short` | TEXT | Краткая идея запуска |
+| `target_audience` | TEXT | Длинный narrative ЦА (КТО/ЧТО/КАК) |
+| `replacement_target` | TEXT | Вместо чего потреблять |
+| `technology` | TEXT | Технология производства |
+| `rnd_progress` | TEXT | Разработки R&D |
+| `executive_summary` | TEXT | AI-generated (заполняется в Phase 7.6) |
+
+**Project — 5 JSONB полей:**
+| Поле | Структура | Назначение |
+|---|---|---|
+| `risks` | `list[str]` | Список рисков (bullet points) |
+| `validation_tests` | `{concept_test, naming_test, design_test, product_test, price_test}` каждое — `{score: float, notes: str}` | Результаты тестов |
+| `function_readiness` | `{dept_name: {status: 'green'\|'yellow'\|'red', notes: str}}` для **фиксированных 8 departments** (МАРКЕТИНГ, RND, АНАЛИТИКА, ФИНАНСЫ, ДТР, ЮРИДИЧЕСКИЕ, ЗАКУПКИ, ПРОИЗВОДСТВО) | Готовность функций |
+| `roadmap_tasks` | `list[{name, start_date, end_date, status, owner}]` | Дорожная карта |
+| `approvers` | `list[{metric, approver, source}]` | Согласующие |
+
+**ProjectSKU — 1 новое поле:**
+- `package_image_id` — `int NULL FK → media_assets.id ON DELETE SET NULL`
+
+**Новая таблица `media_assets`:**
+```python
+class MediaAsset:
+    id: int (PK)
+    project_id: int (FK → projects.id, CASCADE)
+    kind: str (CHECK IN ('package_image', 'concept_design', 'other'))
+    filename: str(500)        # original upload filename
+    content_type: str(100)    # MIME type
+    storage_path: str(500)    # относительный путь в /media volume
+    size_bytes: int
+    created_at: timestamptz (server_default now())
+    uploaded_by: int NULL FK → users.id ON DELETE SET NULL
+```
+
+**CHECK constraints:**
+- `gate_stage` ∈ G0..G5
+- `MediaAsset.kind` ∈ ('package_image', 'concept_design', 'other')
+
+**Pydantic schemas:**
+- `app/schemas/project.py` расширить ProjectBase / ProjectRead /
+  ProjectUpdate всеми новыми полями
+- `app/schemas/media.py` — новый файл с MediaAssetRead / MediaAssetCreate
+
+**Миграция alembic:**
+- ALTER TABLE projects ADD 16 scalar columns + 5 JSONB columns
+- ALTER TABLE project_skus ADD package_image_id
+- CREATE TABLE media_assets
+
+**Тесты:** валидация enum (`gate_stage`), JSONB roundtrip, FK constraints.
+
+**Критерий готовности:**
+- Миграция up/down работают
+- Pydantic schemas валидируют новые поля
+- 207+/207+ pytest зелёные
+- Backend контейнер не нуждается в rebuild (миграция вручную)
+
+**Зависимости:** 4.4 (закрыта).
+
+---
+
+#### Задача 4.5.2 — File storage backend
+
+**Что делаем:**
+
+**Storage:** filesystem mount в Docker volume (для MVP без MinIO/S3,
+согласовано с пользователем 2026-04-09; MinIO/S3 — backlog для
+production deploy).
+
+- В `infra/docker-compose.dev.yml` добавить volume `media_storage:/media`
+  на backend контейнер
+- Структура storage: `/media/{project_id}/{kind}/{uuid}_{filename}`
+- В Dockerfile создать `/media` директорию с правильными permissions
+
+**Backend сервис `app/services/media_service.py`:**
+- `save_uploaded_file(session, project_id, kind, file: UploadFile, user_id) → MediaAsset`
+- `get_media_asset(session, asset_id) → MediaAsset | None`
+- `delete_media_asset(session, asset_id) → None` (DELETE FILE + DELETE row)
+- `read_media_file(asset: MediaAsset) → bytes`
+- Validation: max size (10 MB по умолчанию), MIME type whitelist
+  (image/png, image/jpeg, image/webp), filename sanitization
+
+**Endpoints `app/api/media.py`:**
+- `POST /api/projects/{project_id}/media` (multipart/form-data,
+  fields: kind, file) → 201 MediaAssetRead
+- `GET /api/media/{asset_id}` → StreamingResponse с правильным MIME
+  (для preview в UI и embedding в PPT/PDF)
+- `DELETE /api/media/{asset_id}` → 204
+- `GET /api/projects/{project_id}/media` → list[MediaAssetRead]
+  (фильтр by kind)
+
+**Зависимости:** Нужна `python-multipart` (уже есть в requirements).
+
+**Тесты:**
+- Upload PNG → проверить файл создан в filesystem + row в БД
+- GET asset → правильный bytes + MIME
+- DELETE → файл удалён + row deleted
+- Auth: 401 для unauthorized
+- Validation: 413 для слишком большого файла, 415 для неподдерживаемого MIME
+
+**Критерий готовности:**
+- Файлы сохраняются в Docker volume `media_storage`
+- Endpoints работают через `auth_client`
+- Volume mount survives container restart
+- 220+/220+ pytest
+
+**Зависимости:** 4.5.1.
+
+---
+
+#### Задача 4.5.3 — Frontend UI «Содержание паспорта»
+
+**Что делаем:**
+
+**Новый Tab «Содержание»** в `/projects/[id]/page.tsx` (между «Параметры»
+и «SKU и BOM»).
+
+**Компонент `frontend/components/projects/content-tab.tsx`:**
+- Секции (collapsible cards):
+  1. **Общая информация**: gate_stage (Select G0..G5), passport_date
+     (DatePicker), project_owner, description, project_goal,
+     innovation_type, geography, production_type
+  2. **Концепция продукта**: growth_opportunity, concept_text, rationale,
+     idea_short, target_audience, replacement_target, technology,
+     rnd_progress
+  3. **Валидация**: 5 sub-fields (concept_test/naming/design/product/price)
+     с score (number) + notes (textarea)
+  4. **Риски**: dynamic list (add/remove rows, каждый — input str)
+  5. **Готовность функций**: 8 фиксированных departments × {status select
+     green/yellow/red, notes textarea}
+  6. **Дорожная карта**: dynamic list (add/remove tasks с name/dates/
+     status/owner)
+  7. **Согласующие**: dynamic list (add/remove rows: metric/approver/source)
+- Auto-save on blur для всех scalar полей (PATCH `/api/projects/{id}`)
+- Save button для JSONB полей (single PATCH с full JSONB)
+
+**Компонент `frontend/components/projects/sku-image-upload.tsx`:**
+- Используется в `bom-panel.tsx` рядом с rates editor
+- Drag-drop area + preview thumbnail
+- POST `/api/projects/{id}/media` с kind='package_image'
+- При успехе — PATCH `/api/project-skus/{id}` с `package_image_id`
+- При уже загруженной — preview + delete button
+
+**Lib:**
+- `frontend/lib/media.ts` — `uploadMedia`, `deleteMedia`,
+  `getMediaUrl(asset_id)` (для `<img src>` preview, использует Blob URL
+  через apiGetBlob)
+- `frontend/lib/projects.ts` — расширить `ProjectUpdate` для всех новых
+  полей
+- `frontend/types/api.ts` — новые типы `MediaAssetRead`, `Project*`
+  расширить scalar/JSONB полями, `FunctionReadinessStatus` enum,
+  `RoadmapTask`, `Approver` interfaces
+
+**Критерий готовности:**
+- Все поля редактируются в UI
+- Auto-save работает (без явного "Save")
+- Image upload + preview работают
+- 0 ошибок `npx tsc --noEmit`
+- HTTP 200 на /projects/N → таб «Содержание» рендерится
+
+**Зависимости:** 4.5.1, 4.5.2.
+
+---
+
+#### Задача 4.5.4 — Tests + commit
+
+**Что делаем:**
+- Backend tests для extended Project schema (PATCH с JSONB roundtrip)
+- Backend tests для media upload/download (создание реального файла
+  в test storage path)
+- Frontend tsc check
+- Visual check всех секций content tab
+
+**Критерий готовности:**
+- Все тесты зелёные
+- Коммит `feat(content): фаза 4.5 паспорт content fields + media storage`
+
+**Зависимости:** 4.5.3.
+
+---
+
 ### Фаза 5 — Экспорт
 
 #### ✅ Задача 5.1 — Экспорт XLSX (F-08)
@@ -1333,6 +1550,110 @@ GitHub Secrets).
 
 ---
 
+#### Задача 7.6 — AI генерация text content fields паспорта
+
+**Что делаем:**
+- `POST /api/projects/{id}/ai/generate-content`
+  - Body: `{ "field": "executive_summary" | "project_goal" | "target_audience" | "concept_text" | "rationale" | "growth_opportunity" | ..., "context": "freeform user prompt" }`
+  - Reads: project params + KPI + content fields (для context)
+  - Returns: `{ "field": str, "generated_text": str, "tokens_used": int, "cost_rub": float }`
+- Промпты в `ai_prompts.py`:
+  - `EXECUTIVE_SUMMARY_GENERATION` — на основе KPI + context
+  - `PROJECT_GOAL_GENERATION` — на основе innovation_type, geography, etc
+  - `TARGET_AUDIENCE_GENERATION` — на основе SKU profile + concept
+  - и т.д. для остальных text полей (15-16 промптов)
+- Frontend: рядом с каждым text field в content tab — кнопка
+  «✨ Сгенерировать AI» → opens modal с user prompt input → POST →
+  preview generated text → "Применить" (PATCH project) или "Отменить"
+- Использует `anthropic/claude-sonnet-4-6` по умолчанию, `opus-4-6` для
+  сложных полей (target_audience с глубоким анализом).
+
+**Критерий готовности:**
+- 15+ промптов покрывают все text fields из 4.5.1
+- AI генерация для каждого поля даёт осмысленный результат на GORJI
+  данных (ручная проверка)
+- Cost monitoring (D-21 → 7.5) учитывает каждый вызов
+
+**Зависимости:** 7.1, 4.5.1 (поля существуют).
+
+---
+
+#### Задача 7.7 — AI marketing research через web search
+
+**Что делаем:**
+- `POST /api/projects/{id}/ai/marketing-research`
+  - Body: `{ "topic": "competitive analysis" | "market size" | "consumer trends" | "category benchmarks", "custom_query": str | None }`
+  - Backend формирует промпт на основе project context (категория,
+    география, target audience) и **запускает web search через Polza**
+    (точный API формат: уточнить через `polza.ai/openapi.json` или
+    support — Anthropic native `web_search` tool в `tools[]` или special
+    Polza extra_body параметр)
+  - Returns: `{ "topic": str, "research_text": str, "sources": [{ "url", "title", "snippet" }], "generated_at": datetime, "cost_rub": float }`
+- Новое поле в Project (миграция): `marketing_research: JSONB`
+  - Структура: `{ topic: { text, sources, generated_at } }` (multi-topic
+    storage чтобы пользователь мог запустить несколько исследований)
+- Frontend: новая секция в content tab «Marketing research» с:
+  - Кнопка для каждого topic + custom query input
+  - Отображение research_text + список sources
+  - Кнопка «Сохранить в паспорт» → markup для PPT/PDF (5.2/5.3 включают
+    как отдельный слайд если research присутствует)
+- Использует **`anthropic/claude-opus-4-6`** (research = критическая
+  задача, цена ошибки высокая). Promt-шаблоны в `ai_prompts.py`.
+
+**Уточнение Polza API формата (до начала разработки 7.7):**
+- Прочитать `https://polza.ai/openapi.json` и найти `web_search` tool
+  или special параметр
+- Альтернатива: связаться с support@polza.ai
+- Зафиксировать в ADR-16 точный код использования
+
+**Критерий готовности:**
+- Generate research для GORJI WTR категории даёт релевантный ответ с
+  актуальными источниками (ручная проверка)
+- Sources валидные (URL открываются)
+- Cost monitoring учитывает (с web search дороже — multipliers через
+  Polza pricing)
+
+**Зависимости:** 7.1, 4.5.1 (для marketing_research field).
+
+---
+
+#### Задача 7.8 — AI генерация package mockups (image generation)
+
+**Что делаем:**
+- `POST /api/projects/{id}/skus/{psk_id}/ai/generate-package`
+  - Body: `{ "prompt": str, "style": "minimalist" | "premium" | "youth" | "natural", "n_variants": int (1-4) }`
+  - Backend формирует расширенный image prompt на основе:
+    - `prompt` (user input — например, "blue energy drink can with electrolytes")
+    - `style` (преcет промпт-добавок)
+    - SKU metadata (`brand`, `name`, `format`, `volume_l`, `package_type`)
+  - Вызывает Polza `/v1/images/generations` с моделью
+    `"black-forest-labs/flux-2-pro"` (дефолт по ADR-16)
+  - Сохраняет каждый сгенерированный image как `MediaAsset` (kind=
+    `concept_design`) в Docker volume через `media_service` (4.5.2)
+  - Returns: `{ "variants": [{ "asset_id", "url" }], "cost_rub": float }`
+- Frontend: рядом с image upload в `bom-panel.tsx` или `sku-image-upload`:
+  - Кнопка «✨ Сгенерировать AI» → modal с prompt + style + n_variants
+  - Loading state (image generation ~10-30 сек)
+  - Preview всех вариантов → пользователь выбирает один → PATCH
+    `ProjectSKU.package_image_id`
+  - Не выбранные варианты остаются как `kind=concept_design` в БД (не
+    удаляются — могут пригодиться для альтернатив в презентации)
+- **Disclaimer в UI** рядом с кнопкой: "AI-mockup для презентации,
+  не production-ready дизайн. Production дизайн делают дизайнеры."
+- Cost monitoring: image generation в 5-10x дороже chat (per call ~5-10₽
+  vs <1₽). 7.5 budget proжно considers image vs chat raтes.
+
+**Критерий готовности:**
+- Полный flow: prompt → 4 variants → выбор → linked to SKU
+- MediaAsset rows + filesystem files создаются корректно
+- AI cost logging
+- Pytest с моком Polza image API
+- Visual check generated mockups для типового SKU
+
+**Зависимости:** 7.1, 4.5.1 (поле package_image_id), 4.5.2 (media storage).
+
+---
+
 ## РАЗДЕЛ 2 — Карта зависимостей (сводная)
 
 ```
@@ -1346,25 +1667,32 @@ GitHub Secrets).
                                     ↓
            4.1 → 4.2 → 4.3 → 4.4
                                     ↓
-           5.1 → 5.2 → 5.3
-                              ↓
-                         6.1 → 6.2
-                                ↓
-                          7.1 → 7.2 → 7.3
-                                 ↓     ↓
-                                7.4 ← 5.2
-                                 ↓
-                                7.5
+                       4.5.1 → 4.5.2 → 4.5.3 → 4.5.4
+                                                  ↓
+                                  5.1 → 5.2 → 5.3
+                                          ↓
+                                       6.1 → 6.2
+                                              ↓
+                                7.1 → 7.2 → 7.3
+                                       ↓
+                                     7.4 (← 5.2)
+                                       ↓
+                                     7.5
+                                       ↓
+                                  7.6 → 7.7 → 7.8
 ```
 
 2.1–2.5 зависят от 0.4 (seed данные).  
 3.x зависят от 1.x (API готов).  
 4.x зависят от 2.4 (расчёты работают) и 3.x (UI для ввода).  
-5.x зависят от 2.4 (данные для экспорта).
+4.5 (контент паспорта) — после 4.4, перед 5.x.
+5.x зависят от 2.4 (данные для экспорта) и 4.5 (контент для PPT/PDF).
 7.x зависят от 6.2 (CI готов, секреты в GitHub Secrets).
 7.2 дополнительно от 4.2.1 (GORJI данные для ручной валидации AI).
 7.3 от 4.4 (sensitivity анализ существует).
 7.4 от 5.2 (PPT экспорт существует).
+7.6/7.7/7.8 от 4.5.1 (поля для записи AI результата).
+7.8 дополнительно от 4.5.2 (media storage).
 
 ---
 
@@ -1454,12 +1782,19 @@ GitHub Secrets).
   4 параметра × 5 уровней = 20 cells, SensitivityTab с матрицей NPV/CM,
   Base reference card. 9 backend тестов + 0 tsc errors, 217/217 pytest.)
 
-### Фаза 5 — Экспорт (← следующий шаг: задача 5.2)
+### Фаза 4.5 — Контент паспорта (← следующий шаг: задача 4.5.1)
+- [ ] 4.5.1 Расширение data model (16 scalar + 5 JSONB Project + MediaAsset + миграция)
+- [ ] 4.5.2 File storage backend (Docker volume, media_service, upload/download endpoints)
+- [ ] 4.5.3 Frontend UI «Содержание паспорта» (новый таб с 7 секциями + image upload в SKU)
+- [ ] 4.5.4 Tests + commit
+
+### Фаза 5 — Экспорт (после 4.5)
 - [x] 5.1 XLSX ✅ (2026-04-09, openpyxl 3.1, excel_exporter с 3 листами
   Вводные/PnL/KPI, GET /api/projects/{id}/export/xlsx StreamingResponse,
   кнопка «Скачать XLSX» в ResultsTab. 14 backend тестов, 231/231 pytest,
   0 tsc errors)
-- [ ] 5.2 PPT
+- [ ] 5.2 PPT (с полным контентом из 4.5: text fields, function_readiness,
+  roadmap, approvers, package images)
 - [ ] 5.3 PDF
 
 ### Фаза 6 — Интеграция
@@ -1472,3 +1807,11 @@ GitHub Secrets).
 - [ ] 7.3 AI-комментарий чувствительности (POST .../ai/explain-sensitivity)
 - [ ] 7.4 AI executive summary slide в PPT-экспорте
 - [ ] 7.5 Cost monitoring + бюджет проекта + rate limiting
+- [ ] 7.6 AI генерация text content fields паспорта (15+ промптов для
+  полей из 4.5.1, кнопка «✨ Сгенерировать AI» в content tab)
+- [ ] 7.7 AI marketing research через web search (новое поле
+  Project.marketing_research JSONB, multi-topic storage, секция в
+  content tab)
+- [ ] 7.8 AI генерация package mockups (image generation через
+  Polza /v1/images/generations с моделью flux-2-pro, сохранение как
+  MediaAsset, link to ProjectSKU.package_image_id)
