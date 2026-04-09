@@ -13,6 +13,9 @@ class ProjectSKUBase(BaseModel):
     production_cost_rate: Decimal = Field(default=Decimal("0"), ge=0, le=1)
     ca_m_rate: Decimal = Field(default=Decimal("0"), ge=0, le=1)
     marketing_rate: Decimal = Field(default=Decimal("0"), ge=0, le=1)
+    # 4.5.1: image упаковки SKU. Загружается через POST /api/projects/{id}/media
+    # затем линкуется PATCH'ем PSK с этим id. AI может генерировать в Phase 7.8.
+    package_image_id: int | None = None
 
 
 class ProjectSKUCreate(ProjectSKUBase):
@@ -26,6 +29,7 @@ class ProjectSKUUpdate(BaseModel):
     production_cost_rate: Decimal | None = Field(default=None, ge=0, le=1)
     ca_m_rate: Decimal | None = Field(default=None, ge=0, le=1)
     marketing_rate: Decimal | None = Field(default=None, ge=0, le=1)
+    package_image_id: int | None = None
 
 
 class ProjectSKURead(BaseModel):
@@ -41,6 +45,7 @@ class ProjectSKURead(BaseModel):
     production_cost_rate: Decimal
     ca_m_rate: Decimal
     marketing_rate: Decimal
+    package_image_id: int | None = None
     created_at: datetime
 
 

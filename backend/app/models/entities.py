@@ -17,6 +17,7 @@ from typing import Any
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -176,12 +177,61 @@ class Project(Base, TimestampMixin):
         nullable=True,
     )
 
+    # ============================================================
+    # Контент паспорта (Фаза 4.5)
+    # ============================================================
+    # 16 scalar text/varchar fields + 5 JSONB fields для всех текстовых
+    # блоков паспорта в стиле PASSPORT_ELEKTRA. Заполняются вручную в
+    # таб «Содержание» (4.5.3) и через AI генерацию (Phase 7.6).
+
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    gate_stage: Mapped[str | None] = mapped_column(
+        String(10), nullable=True
+    )  # G0..G5, CHECK constraint в __table_args__
+    passport_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    project_owner: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    project_goal: Mapped[str | None] = mapped_column(Text, nullable=True)
+    innovation_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    geography: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    production_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    growth_opportunity: Mapped[str | None] = mapped_column(Text, nullable=True)
+    concept_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    idea_short: Mapped[str | None] = mapped_column(Text, nullable=True)
+    target_audience: Mapped[str | None] = mapped_column(Text, nullable=True)
+    replacement_target: Mapped[str | None] = mapped_column(Text, nullable=True)
+    technology: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rnd_progress: Mapped[str | None] = mapped_column(Text, nullable=True)
+    executive_summary: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )  # AI-generated в Phase 7.6
+
+    # JSONB fields для structured content
+    risks: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
+    validation_tests: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
+    function_readiness: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
+    roadmap_tasks: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
+    approvers: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
+
     # Soft delete: устанавливается при DELETE /api/projects/{id}.
     # Все запросы фильтруют WHERE deleted_at IS NULL.
     # Финансовый продукт — данные не теряем при ошибочном удалении.
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
+    )
+
+    __table_args__ = (
+        # 4.5.1: gate_stage ограничен G0..G5 (или NULL для проектов без
+        # фиксированного гейта)
+        CheckConstraint(
+            "gate_stage IS NULL OR gate_stage IN ('G0', 'G1', 'G2', 'G3', 'G4', 'G5')",
+            name="ck_projects_gate_stage",
+        ),
     )
 
 
@@ -243,6 +293,15 @@ class ProjectSKU(Base, TimestampMixin):
     )
     marketing_rate: Mapped[Decimal] = mapped_column(
         Numeric(8, 6), nullable=False, default=Decimal("0")
+    )
+
+    # 4.5.1: изображение упаковки SKU. Загружается через media upload
+    # в `bom-panel.tsx` (4.5.3) или генерируется AI в Phase 7.8.
+    # ON DELETE SET NULL — если пользователь удалит файл, FK обнуляется,
+    # row ProjectSKU остаётся.
+    package_image_id: Mapped[int | None] = mapped_column(
+        ForeignKey("media_assets.id", ondelete="SET NULL"),
+        nullable=True,
     )
 
     # Async-safe relationship: lazy='raise_on_sql' запрещает случайные
@@ -489,5 +548,62 @@ class ScenarioResult(Base):
         UniqueConstraint(
             "scenario_id", "period_scope",
             name="uq_scenario_results_scenario_scope",
+        ),
+    )
+
+
+# ============================================================
+# Media assets (Фаза 4.5 — file storage для package images, concept designs)
+# ============================================================
+
+
+class MediaAsset(Base):
+    """Загруженный файл (изображение упаковки, концепт-дизайн, и т.д.).
+
+    Связан с проектом (CASCADE при удалении проекта). Может быть связан
+    с конкретным ProjectSKU через `ProjectSKU.package_image_id`
+    (ON DELETE SET NULL).
+
+    Файлы хранятся в Docker volume `media_storage:/media` (4.5.2),
+    путь `/media/{project_id}/{kind}/{uuid}_{filename}` записывается
+    в `storage_path`. Чтение через `media_service.read_media_file()`,
+    отдача через `GET /api/media/{id}` с правильным MIME.
+
+    Без TimestampMixin — у нас отдельная `created_at` колонка с
+    server_default (нет updated_at, asset immutable после upload).
+    """
+
+    __tablename__ = "media_assets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # Тип контента: package_image (упаковка SKU), concept_design (mockup
+    # от AI), other (прочие attachments). Расширяется при необходимости.
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    filename: Mapped[str] = mapped_column(String(500), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    uploaded_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    __table_args__ = (
+        # 4.5.1: kind ограничен whitelist
+        CheckConstraint(
+            "kind IN ('package_image', 'concept_design', 'other')",
+            name="ck_media_assets_kind",
         ),
     )

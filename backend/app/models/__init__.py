@@ -15,6 +15,7 @@ from app.models.base import (
 from app.models.entities import (
     BOMItem,
     Channel,
+    MediaAsset,
     Period,
     PeriodValue,
     Project,
@@ -42,6 +43,7 @@ __all__ = [
     # Entities
     "BOMItem",
     "Channel",
+    "MediaAsset",
     "Period",
     "PeriodValue",
     "Project",

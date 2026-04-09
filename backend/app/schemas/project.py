@@ -1,8 +1,16 @@
 """Pydantic-схемы для проекта."""
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+# ============================================================
+# Допустимые значения для content fields (4.5.1)
+# ============================================================
+
+GateStage = Literal["G0", "G1", "G2", "G3", "G4", "G5"]
 
 
 # ============================================================
@@ -15,6 +23,9 @@ class ProjectBase(BaseModel):
 
     Defaults совпадают с defaults в SQLAlchemy модели — чтобы клиент
     мог опустить параметры и получить разумные значения.
+
+    Content fields (Фаза 4.5) — все Optional (для backward compat
+    с проектами созданными до 4.5; заполняются позже через PATCH).
     """
 
     name: str = Field(..., min_length=1, max_length=500)
@@ -28,6 +39,35 @@ class ProjectBase(BaseModel):
 
     currency: str = Field(default="RUB", min_length=3, max_length=3)
     inflation_profile_id: int | None = None
+
+    # 4.5.1: контент паспорта (16 scalar полей, все Optional)
+    description: str | None = None
+    gate_stage: GateStage | None = None
+    passport_date: date | None = None
+    project_owner: str | None = Field(default=None, max_length=200)
+    project_goal: str | None = None
+    innovation_type: str | None = Field(default=None, max_length=100)
+    geography: str | None = Field(default=None, max_length=200)
+    production_type: str | None = Field(default=None, max_length=100)
+    growth_opportunity: str | None = None
+    concept_text: str | None = None
+    rationale: str | None = None
+    idea_short: str | None = None
+    target_audience: str | None = None
+    replacement_target: str | None = None
+    technology: str | None = None
+    rnd_progress: str | None = None
+    executive_summary: str | None = None  # AI-generated в Phase 7.6
+
+    # 4.5.1: 5 JSONB полей (все Optional). Используем dict[str, Any]
+    # / list[Any] — без жёсткой schema на уровне Pydantic чтобы давать
+    # frontend'у гибкость в составе подполей. Конкретные ключи зашиты
+    # в UI.
+    risks: list[Any] | None = None
+    validation_tests: dict[str, Any] | None = None
+    function_readiness: dict[str, Any] | None = None
+    roadmap_tasks: list[Any] | None = None
+    approvers: list[Any] | None = None
 
 
 class ProjectCreate(ProjectBase):
@@ -46,6 +86,30 @@ class ProjectUpdate(BaseModel):
     vat_rate: Decimal | None = Field(default=None, ge=0, le=1)
     currency: str | None = Field(default=None, min_length=3, max_length=3)
     inflation_profile_id: int | None = None
+
+    # 4.5.1: контент паспорта (PATCH с любым подмножеством полей)
+    description: str | None = None
+    gate_stage: GateStage | None = None
+    passport_date: date | None = None
+    project_owner: str | None = Field(default=None, max_length=200)
+    project_goal: str | None = None
+    innovation_type: str | None = Field(default=None, max_length=100)
+    geography: str | None = Field(default=None, max_length=200)
+    production_type: str | None = Field(default=None, max_length=100)
+    growth_opportunity: str | None = None
+    concept_text: str | None = None
+    rationale: str | None = None
+    idea_short: str | None = None
+    target_audience: str | None = None
+    replacement_target: str | None = None
+    technology: str | None = None
+    rnd_progress: str | None = None
+    executive_summary: str | None = None
+    risks: list[Any] | None = None
+    validation_tests: dict[str, Any] | None = None
+    function_readiness: dict[str, Any] | None = None
+    roadmap_tasks: list[Any] | None = None
+    approvers: list[Any] | None = None
 
 
 class ProjectRead(ProjectBase):

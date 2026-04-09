@@ -305,3 +305,201 @@ async def test_deleted_project_not_in_list(auth_client: AsyncClient) -> None:
     assert len(data) == 1
     assert data[0]["id"] == survivor_id
     assert data[0]["name"] == "Survivor"
+
+
+# ============================================================
+# 4.5.1 Контент паспорта (16 scalar + 5 JSONB полей)
+# ============================================================
+
+
+async def test_create_project_without_content_fields_returns_nulls(
+    auth_client: AsyncClient,
+) -> None:
+    """Backward compat: проект без content fields → они NULL в response."""
+    resp = await auth_client.post("/api/projects", json=VALID_BODY)
+    assert resp.status_code == 201
+    data = resp.json()
+    # Все 16 scalar полей nullable, без значений = None
+    assert data["description"] is None
+    assert data["gate_stage"] is None
+    assert data["passport_date"] is None
+    assert data["project_owner"] is None
+    assert data["project_goal"] is None
+    assert data["innovation_type"] is None
+    assert data["growth_opportunity"] is None
+    assert data["concept_text"] is None
+    assert data["target_audience"] is None
+    assert data["executive_summary"] is None
+    # JSONB
+    assert data["risks"] is None
+    assert data["validation_tests"] is None
+    assert data["function_readiness"] is None
+    assert data["roadmap_tasks"] is None
+    assert data["approvers"] is None
+
+
+async def test_create_project_with_full_content_fields(
+    auth_client: AsyncClient,
+) -> None:
+    """POST /api/projects с полным набором content полей → 201 + сохранены."""
+    body = {
+        **VALID_BODY,
+        "name": "Test ELEKTRA passport",
+        "description": "Спортивная вода с электролитами",
+        "gate_stage": "G4",
+        "passport_date": "2025-09-22",
+        "project_owner": "Иван Иванов",
+        "project_goal": "Заявить первыми новый сегмент спортивной воды",
+        "innovation_type": "Новая категория",
+        "geography": "РФ (потенциально СНГ)",
+        "production_type": "Копакинг",
+        "growth_opportunity": "Сегмент воды с электролитами растёт",
+        "concept_text": "Запустить спортивную воду с электролитами",
+        "rationale": "Спорт напитки в мире — растущая категория",
+        "idea_short": "Восполнить силы через полезную энергию",
+        "target_audience": "Активные люди, спорт, танцы",
+        "replacement_target": "Бутилированная вода и энергетики",
+        "technology": "Холодный розлив",
+        "rnd_progress": "Рецепт разработан и утверждён",
+        "executive_summary": "(будет AI-generated в Phase 7)",
+        "risks": [
+            "Скорость конкурентов",
+            "Утечка инфо по концепции",
+            "Отсутствие мощностей АОН",
+        ],
+        "validation_tests": {
+            "concept_test": {"score": 0.86, "notes": "86% попробуют"},
+            "naming_test": {"score": 0.50, "notes": ">50 нравится"},
+            "design_test": {"score": 0.60, "notes": "60% нравится"},
+            "product_test": {"score": 1.0, "notes": "Лидирует с бенчмарком"},
+            "price_test": {"score": 0.45, "notes": "45% считают приемлемой"},
+        },
+        "function_readiness": {
+            "МАРКЕТИНГ": {"status": "yellow", "notes": "Разработка комстрата"},
+            "RND": {"status": "green", "notes": "Рецепт готов"},
+            "АНАЛИТИКА": {"status": "green", "notes": ""},
+            "ФИНАНСЫ": {"status": "yellow", "notes": "Источник молдов"},
+            "ДТР": {"status": "green", "notes": ""},
+            "ЮРИДИЧЕСКИЕ": {"status": "green", "notes": ""},
+            "ЗАКУПКИ": {"status": "green", "notes": ""},
+            "ПРОИЗВОДСТВО": {"status": "yellow", "notes": "Тест ГП Мегапак"},
+        },
+        "roadmap_tasks": [
+            {
+                "name": "Согласовать копакера",
+                "start_date": "2024-12-01",
+                "end_date": "2024-12-26",
+                "status": "done",
+                "owner": "Закупки",
+            },
+            {
+                "name": "Первый розлив ПЭТ 0,5",
+                "start_date": "2025-03-01",
+                "end_date": "2025-03-06",
+                "status": "done",
+                "owner": "Производство",
+            },
+        ],
+        "approvers": [
+            {
+                "metric": "Уровень инфляции",
+                "approver": "А.Даниловский",
+                "source": "Экспертное мнение",
+            },
+            {
+                "metric": "Дистрибуция",
+                "approver": "А.Бубнов",
+                "source": "Nielsen",
+            },
+        ],
+    }
+    resp = await auth_client.post("/api/projects", json=body)
+    assert resp.status_code == 201, resp.text
+    data = resp.json()
+
+    # Scalar поля
+    assert data["description"] == "Спортивная вода с электролитами"
+    assert data["gate_stage"] == "G4"
+    assert data["passport_date"] == "2025-09-22"
+    assert data["project_owner"] == "Иван Иванов"
+    assert data["innovation_type"] == "Новая категория"
+    assert "Активные люди" in data["target_audience"]
+
+    # JSONB roundtrip
+    assert data["risks"] == [
+        "Скорость конкурентов",
+        "Утечка инфо по концепции",
+        "Отсутствие мощностей АОН",
+    ]
+    assert data["validation_tests"]["concept_test"]["score"] == 0.86
+    assert data["function_readiness"]["RND"]["status"] == "green"
+    assert len(data["roadmap_tasks"]) == 2
+    assert data["roadmap_tasks"][0]["name"] == "Согласовать копакера"
+    assert data["approvers"][1]["approver"] == "А.Бубнов"
+
+
+async def test_patch_project_content_fields(
+    auth_client: AsyncClient,
+) -> None:
+    """PATCH /api/projects/{id} с content fields → обновляет, остальное не трогает."""
+    create = await auth_client.post("/api/projects", json=VALID_BODY)
+    project_id = create.json()["id"]
+
+    # Patch только content поля
+    patch_body = {
+        "gate_stage": "G3",
+        "project_goal": "Цель: обновлённая",
+        "risks": ["Риск 1", "Риск 2"],
+    }
+    resp = await auth_client.patch(
+        f"/api/projects/{project_id}", json=patch_body
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["gate_stage"] == "G3"
+    assert data["project_goal"] == "Цель: обновлённая"
+    assert data["risks"] == ["Риск 1", "Риск 2"]
+    # Остальные поля не изменились
+    assert data["name"] == "GORJI+ NEW NRG"
+    assert data["description"] is None  # не было — осталось None
+
+
+async def test_invalid_gate_stage_returns_422(
+    auth_client: AsyncClient,
+) -> None:
+    """Pydantic Literal валидация: gate_stage='G99' → 422."""
+    body = {**VALID_BODY, "gate_stage": "G99"}
+    resp = await auth_client.post("/api/projects", json=body)
+    assert resp.status_code == 422
+
+
+async def test_gate_stage_check_constraint_db_level(
+    db_session: AsyncSession,
+) -> None:
+    """DB CHECK constraint защищает от прямого raw INSERT с invalid gate_stage.
+
+    Это второй уровень валидации (после Pydantic). Если кто-то напишет
+    raw SQL или ORM с обходом валидации — БД отбросит с IntegrityError.
+
+    Используем savepoint pattern (паттерн #2 из CLAUDE.md): begin_nested
+    создаёт savepoint, после IntegrityError outer-транзакция остаётся
+    живой для остальных тестов.
+    """
+    from datetime import date as _date
+
+    from sqlalchemy.exc import IntegrityError
+
+    try:
+        async with db_session.begin_nested():
+            project = Project(
+                name="DB constraint test",
+                start_date=_date(2025, 1, 1),
+                gate_stage="INVALID",  # обходим Pydantic
+            )
+            db_session.add(project)
+            await db_session.flush()
+        # Если flush прошёл — CHECK не сработал, тест fail
+        assert False, "CHECK constraint должен был сработать"
+    except IntegrityError as exc:
+        # Ожидаемо: PostgreSQL отверг INSERT
+        assert "ck_projects_gate_stage" in str(exc) or "check" in str(exc).lower()
