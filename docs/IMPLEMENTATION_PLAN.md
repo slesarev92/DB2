@@ -974,17 +974,66 @@ API) и 2.4 (Celery recalculate task).
 
 ---
 
-#### Задача 4.4 — Анализ чувствительности (E-09)
+#### ✅ Задача 4.4 — Анализ чувствительности (E-09)
 
-**Что делаем:**
-- Таблица: строки = сценарии изменений (-20%, -10%, Base, +10%, +20%)
-  по ND, offtake, shelf price, COGS
-- Столбцы: NPV Y1-10, CM%
-- Каждая комбинация — отдельный расчёт через pipeline
+**Что сделано:**
 
-**Критерий готовности:**
+**Backend:**
+- `backend/app/services/sensitivity_service.py`: `compute_sensitivity()`
+  - Один `build_line_inputs` из БД (тяжёлый шаг)
+  - 4 параметра × 5 уровней = 20 in-memory pipeline runs (~50-100ms total)
+  - Использует `dataclasses.replace` для immutable модификации
+    `PipelineInput` (frozen dataclass)
+  - Возвращает структуру `{base_npv_y1y10, base_cm_ratio, deltas, params, cells[]}`
+- `backend/app/schemas/sensitivity.py`: `SensitivityCell`, `SensitivityResponse`
+- `backend/app/api/projects.py`: `POST /api/projects/{id}/sensitivity`
+  - **Синхронный endpoint** (не Celery — слишком быстро для async)
+  - Опциональный `scenario_id` query param (по умолчанию Base сценарий)
+  - 404 для неизвестного project, 400 если в проекте нет PSC
+- `backend/tests/api/test_sensitivity.py`: **9 тестов** покрывают:
+  - Структура response (20 cells, правильные ключи)
+  - delta=0 для всех 4 параметров == base values
+  - COGS direction: -20% → ↑NPV, +20% → ↓NPV (валидно для любых
+    unit economics)
+  - Shelf direction: +20% → ↑NPV, -20% → ↓NPV
+  - ND/offtake: значения отличаются от base (sign зависит от unit
+    economics, в test fixture GP/unit < 0)
+  - Endpoint 200 / 401 / 404
+
+**Frontend:**
+- `frontend/lib/sensitivity.ts`: `computeSensitivity(projectId)` →
+  `SensitivityResponse`
+- `frontend/types/api.ts`: расширен `SensitivityCell` / `SensitivityResponse`
+- `frontend/components/projects/sensitivity-tab.tsx`:
+  - Авто-запуск при mount + кнопка «Пересчитать»
+  - **Base reference card**: NPV Y1-Y10 + CM% (точка отсчёта)
+  - **Матрица 5 × 4**:
+    - Строки: −20% / −10% / **Base** / +10% / +20%
+    - Колонки: ND / Off-take / Shelf price / COGS (BOM)
+    - Каждая ячейка: NPV (большой шрифт, цвет по сравнению с Base) +
+      CM% (мелким серым)
+    - Base строка подсвечена `bg-muted/30` для визуального разделения
+  - Цвет NPV: зелёный если выше Base, красный если ниже
+- Подключён в `/projects/[id]/page.tsx` как Tab "Чувствительность"
+
+**Оптимизация:** один `build_line_inputs` (тяжёлый DB query) + 20
+in-memory pipeline runs (легко), вместо 20 раздельных Celery tasks.
+
+**Параметры → модификация:**
+- `nd`: `inp.nd × (1 + delta)` per period
+- `offtake`: `inp.offtake × (1 + delta)`
+- `shelf_price`: `inp.shelf_price_reg × (1 + delta)`
+- `cogs`: `inp.bom_unit_cost × (1 + delta)` (material+package, не
+  production_rate)
+
+**Критерий готовности:** ✅
 - Таблица заполнена корректными значениями
-- Base строка совпадает с результатами KPI-экрана
+- Base строка совпадает с результатами KPI-экрана (проверено через
+  `test_delta_zero_matches_base`)
+- 9/9 sensitivity тестов
+- 217/217 backend pytest зелёные
+- 0 ошибок `npx tsc --noEmit`
+- HTTP 200 на `/projects/1`
 
 **Зависимости:** 4.3.
 
@@ -1356,8 +1405,13 @@ GitHub Secrets).
   абсолютными значениями и Δ к Base в ₽/% (NPV) или pp (IRR/ROI), Go/No-Go
   badges для Y1Y10. Кнопка "Применить и пересчитать" → PATCH дельт всех
   сценариев → POST /recalculate → polling /tasks/{id}. Backend готов из
-  1.6 + 2.4. 0 tsc errors, 207/207 pytest.)
-- [ ] 4.4 Анализ чувствительности
+  1.6 + 2.4. 0 tsc errors, 207/207 pytest. Plus regression test для
+  WTR seasonality `{"months": [12]}` parser format и docs incident
+  про stale celery-worker module cache.)
+- [x] 4.4 Анализ чувствительности ✅ (2026-04-09, sensitivity_service +
+  POST /api/projects/{id}/sensitivity синхронный endpoint (~50ms),
+  4 параметра × 5 уровней = 20 cells, SensitivityTab с матрицей NPV/CM,
+  Base reference card. 9 backend тестов + 0 tsc errors, 217/217 pytest.)
 
 ### Фаза 5 — Экспорт
 - [ ] 5.1 XLSX

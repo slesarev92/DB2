@@ -352,6 +352,25 @@ export interface TaskStatusResponse {
 }
 
 // ============================================================
+// Sensitivity analysis (4.4 / E-09)
+// ============================================================
+
+export interface SensitivityCell {
+  parameter: "nd" | "offtake" | "shelf_price" | "cogs";
+  delta: number; // -0.20, -0.10, 0.0, 0.10, 0.20
+  npv_y1y10: number | null;
+  cm_ratio: number | null;
+}
+
+export interface SensitivityResponse {
+  base_npv_y1y10: number | null;
+  base_cm_ratio: number | null;
+  deltas: number[];
+  params: ("nd" | "offtake" | "shelf_price" | "cogs")[];
+  cells: SensitivityCell[];
+}
+
+// ============================================================
 // ProjectFinancialPlan (CAPEX/OPEX по годам проекта)
 // ============================================================
 

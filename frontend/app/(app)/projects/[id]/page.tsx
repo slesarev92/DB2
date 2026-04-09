@@ -9,6 +9,7 @@ import { FinancialPlanEditor } from "@/components/projects/financial-plan-editor
 import { PeriodsTab } from "@/components/projects/periods-tab";
 import { ResultsTab } from "@/components/projects/results-tab";
 import { ScenariosTab } from "@/components/projects/scenarios-tab";
+import { SensitivityTab } from "@/components/projects/sensitivity-tab";
 import { SkusTab } from "@/components/projects/skus-tab";
 import { Button } from "@/components/ui/button";
 import {
@@ -106,6 +107,7 @@ export default function ProjectDetailPage() {
           <TabsTrigger value="periods">Периоды</TabsTrigger>
           <TabsTrigger value="results">Результаты</TabsTrigger>
           <TabsTrigger value="scenarios">Сценарии</TabsTrigger>
+          <TabsTrigger value="sensitivity">Чувствительность</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4 space-y-4">
@@ -177,6 +179,10 @@ export default function ProjectDetailPage() {
 
         <TabsContent value="scenarios" className="mt-4">
           <ScenariosTab projectId={projectId} />
+        </TabsContent>
+
+        <TabsContent value="sensitivity" className="mt-4">
+          <SensitivityTab projectId={projectId} />
         </TabsContent>
       </Tabs>
     </div>

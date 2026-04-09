@@ -13,6 +13,7 @@ from app.schemas.project import (
     ProjectRead,
     ProjectUpdate,
 )
+from app.schemas.sensitivity import SensitivityResponse
 from app.services import project_service
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -134,3 +135,71 @@ async def recalculate_project_endpoint(
         "project_id": project_id,
         "status": "PENDING",
     }
+
+
+@router.post(
+    "/{project_id}/sensitivity",
+    response_model=SensitivityResponse,
+)
+async def sensitivity_analysis_endpoint(
+    project_id: int,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    scenario_id: int | None = None,
+) -> SensitivityResponse:
+    """Sensitivity analysis для проекта (задача 4.4 / E-09).
+
+    Принимает project_id + опционально scenario_id (если не указан —
+    используется Base сценарий проекта). Считает 4 параметра ×
+    5 уровней (-20%/-10%/Base/+10%/+20%) = 20 ячеек, каждая с NPV Y1-Y10
+    и Contribution Margin ratio.
+
+    Расчёт выполняется **синхронно** в endpoint'е (не через Celery), потому
+    что 20 in-memory pipeline runs занимают ~50-100ms — нет смысла
+    городить async task. Backend возвращает готовый response.
+
+    Возможные ошибки:
+    - 404: project не найден или scenario не принадлежит проекту
+    - 400: в проекте нет PSC (NoLinesError)
+    """
+    from app.services.calculation_service import (
+        NoLinesError,
+        ProjectNotFoundError,
+    )
+    from app.services.sensitivity_service import compute_sensitivity
+    from sqlalchemy import select
+    from app.models import Scenario, ScenarioType
+
+    project = await project_service.get_project(session, project_id)
+    if project is None:
+        raise _not_found
+
+    # Если scenario_id не указан — берём Base сценарий проекта
+    if scenario_id is None:
+        base = await session.scalar(
+            select(Scenario).where(
+                Scenario.project_id == project_id,
+                Scenario.type == ScenarioType.BASE,
+            )
+        )
+        if base is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Base scenario не найден для проекта",
+            )
+        scenario_id = base.id
+
+    try:
+        result = await compute_sensitivity(session, project_id, scenario_id)
+    except NoLinesError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        )
+
+    return SensitivityResponse(**result)

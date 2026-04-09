@@ -9,6 +9,65 @@
 
 ## [Unreleased]
 
+### Added (задача 4.4 — Анализ чувствительности)
+
+**Backend:** новый sensitivity service + sync endpoint, 9 тестов.
+
+- `backend/app/services/sensitivity_service.py` — `compute_sensitivity()`
+  - Один `build_line_inputs` из БД (тяжёлый DB шаг)
+  - 4 параметра × 5 уровней (-20/-10/0/+10/+20%) = **20 in-memory pipeline
+    runs** (~50-100ms total)
+  - Использует `dataclasses.replace` для immutable модификации frozen
+    `PipelineInput` (scaling tuples factor)
+  - Возвращает `{base_npv_y1y10, base_cm_ratio, deltas, params, cells[]}`
+- `backend/app/schemas/sensitivity.py` — `SensitivityCell`, `SensitivityResponse`
+- `backend/app/api/projects.py` — `POST /api/projects/{id}/sensitivity`
+  - **Синхронный endpoint** (не Celery, расчёт быстрый)
+  - Опциональный `scenario_id` query (по умолчанию Base сценарий)
+  - 404 для неизвестного project, 400 если NoLinesError
+- `backend/tests/api/test_sensitivity.py` — 9 тестов:
+  - Структура response (20 cells, правильные keys)
+  - `delta=0` для всех 4 параметров == base values
+  - COGS direction: −20% → ↑NPV, +20% → ↓NPV (валидно при любых unit economics)
+  - Shelf direction: +20% → ↑NPV, −20% → ↓NPV
+  - ND / offtake: значения отличаются от base (sign зависит от unit
+    economics, в test fixture GP/unit < 0 для ROI overflow protection)
+  - Endpoint 200 / 401 / 404
+
+**Frontend:** новый таб "Чувствительность".
+
+- `frontend/lib/sensitivity.ts` — `computeSensitivity(projectId)`
+- `frontend/types/api.ts` — `SensitivityCell` / `SensitivityResponse`
+- `frontend/components/projects/sensitivity-tab.tsx`:
+  - Авто-запуск при mount + кнопка «Пересчитать»
+  - **Base reference card**: NPV Y1-Y10 + CM% (точка отсчёта)
+  - **Матрица 5 × 4**:
+    - Строки: −20% / −10% / **Base** / +10% / +20%
+    - Колонки: ND / Off-take / Shelf price / COGS (BOM)
+    - Каждая ячейка: NPV (большой шрифт, цвет по сравнению с Base) +
+      CM% (мелким серым под NPV)
+    - Base строка подсвечена `bg-muted/30`
+    - Цвет NPV: зелёный если > Base, красный если <
+- `frontend/app/(app)/projects/[id]/page.tsx`: добавлен Tab "Чувствительность"
+
+**Параметры → модификация:**
+- `nd`: `inp.nd × (1 + delta)` per period
+- `offtake`: `inp.offtake × (1 + delta)`
+- `shelf_price`: `inp.shelf_price_reg × (1 + delta)`
+- `cogs`: `inp.bom_unit_cost × (1 + delta)` (material+package, production_rate
+  не модифицируется — это % от ex_factory, не absolute)
+
+**Архитектурное решение:** sensitivity синхронный (не Celery) потому что
+20 in-memory pipeline runs занимают ~50-100ms. Celery overhead (broker
++ result backend + serialization) был бы дороже самого расчёта. Если в
+будущем добавим больше параметров (>50 cells) или более тяжёлый pipeline,
+можно перевести на async.
+
+**Проверки:**
+- Backend pytest **217/217** зелёные (208 + 9 sensitivity)
+- `npx tsc --noEmit` → 0 ошибок ✅
+- HTTP 200 на `/projects/1` после restart frontend+celery-worker ✅
+
 ### Added (задача 4.3 — Сравнение сценариев)
 
 **Frontend:** новый таб "Сценарии" в `/projects/[id]` для редактирования
