@@ -1520,7 +1520,12 @@ production deploy).
 
 ---
 
-### Фаза 6 — Интеграция, polish, CI/CD
+### ✅ Фаза 6 — Интеграция (E2E acceptance)
+
+**Примечание о scope:** исходный заголовок был «Интеграция, polish,
+CI/CD», но задача 6.2 (GitHub Actions CI) вынесена в «Финальный
+этап» в конец плана — см. ниже, после Phase 7. Phase 6 содержит
+только одну закрытую задачу 6.1.
 
 #### ✅ Задача 6.1 — End-to-end тест (acceptance) (2026-04-09)
 
@@ -1582,17 +1587,16 @@ inflation), это **Этап 2** — отдельная задача.
 
 ---
 
-#### Задача 6.2 — GitHub Actions CI
+#### Задача 6.2 — GitHub Actions CI (перенесена в конец плана) 🔄
 
-**Что делаем:** `.github/workflows/ci.yml`:
-- На каждый PR: `pytest` (backend), `eslint + tsc` (frontend)
-- На merge в `main`: build Docker images, push to registry, SSH deploy
+**Статус:** вынесена из Phase 6 в конец IMPLEMENTATION_PLAN.md по
+согласованию с пользователем (2026-04-09). Причина: CI/CD — это
+финальный production-step, а не блокер для Phase 7 AI-интеграции.
+Polza AI может работать локально через `.env` с API ключом,
+GitHub Secrets не требуются для разработки и тестирования Phase 7.
 
-**Критерий готовности:**
-- PR без зелёных тестов не мёрджится (branch protection rule)
-- Deploy в прод только через CI, не руками
-
-**Зависимости:** 6.1.
+**См. детали задачи:** раздел **"Финальный этап — CI/CD и production deploy"**
+в конце плана (после Phase 7 и Backlog).
 
 ---
 
@@ -1600,7 +1604,9 @@ inflation), это **Этап 2** — отдельная задача.
 
 **Цель:** добавить AI-объяснения к уже валидированным финансовым
 результатам. Не вмешивается в расчётное ядро. Стартует только после
-закрытия Фазы 6 — AI должен комментировать только проверенные числа.
+закрытия задачи 6.1 (E2E acceptance test прошёл) — AI должен
+комментировать только проверенные числа. CI/CD (6.2) на этом этапе
+не нужен — достаточно локального `.env` с POLZA_AI_API_KEY.
 
 **Архитектурная база:** ADR-16. Polza AI как OpenAI-совместимый прокси,
 `openai` Python SDK (`AsyncOpenAI`) с `base_url=POLZA_AI_BASE_URL`.
@@ -1651,8 +1657,11 @@ inflation), это **Этап 2** — отдельная задача.
 - Smoke-тест с реальным Polza (отдельный run, не в CI) проходит
 - Никакого реального ключа в репо
 
-**Зависимости:** 6.2 (CI готов, секреты POLZA_AI_API_KEY добавлены в
-GitHub Secrets).
+**Зависимости:** 6.1 (MVP acceptance test проходит — AI комментирует
+только валидированные числа). `POLZA_AI_API_KEY` на этапе разработки
+Phase 7 читается из локального `.env` (см. `.env.example`). Перенос
+секрета в GitHub Secrets — при деплое, см. «Финальный этап — CI/CD»
+в конце плана.
 
 ---
 
@@ -1869,6 +1878,88 @@ GitHub Secrets).
 
 ---
 
+### Финальный этап — CI/CD и production deploy
+
+Запускается **после того как все Phase 7 задачи закрыты** и все
+MVP+AI фичи стабилизированы. До этого момента вся разработка идёт
+локально в dev-compose — этого достаточно для Phase 6.1 acceptance
+test и Phase 7 AI работы (Polza API key читается из локального `.env`).
+
+**Обоснование переноса** (решение 2026-04-09): CI/CD — это
+production deploy step, а не блокер для разработки. Phase 7 работы
+над AI-интеграцией ничего не требуют от GitHub Actions — достаточно
+локального `.env` с `POLZA_AI_API_KEY`. Перенос в конец плана даёт
+возможность Phase 7 итерироваться быстро без промежуточного CI
+overhead и правильно настроить CI один раз, уже зная финальный
+набор фич и секретов.
+
+---
+
+#### Задача 6.2 — GitHub Actions CI (F-11)
+
+**Что делаем:** `.github/workflows/ci.yml` с двумя job'ами:
+
+**Job 1 — `test` (на каждый PR + push в main):**
+- Checkout + set up Docker Buildx
+- Spin up PostgreSQL 16 + Redis 7 service containers
+- Build backend image (через Dockerfile из Phase 5.3 — включает
+  WeasyPrint system deps: libpango, libharfbuzz, fonts-dejavu)
+- Install Python deps, run Alembic migrations
+- Seed справочники через `scripts.seed_reference_data`
+- Run `pytest -q -m "not acceptance"` (acceptance тест требует
+  GORJI Excel fixture — не раздаём публично, прогоняется локально
+  перед релизом или на self-hosted runner с mounted фикстурой)
+- Run frontend проверки: `npm ci`, `npx tsc --noEmit`, `npm run lint`
+
+**Job 2 — `deploy` (только на merge в `main`):**
+- Build production backend Dockerfile (multi-stage, non-root user,
+  gunicorn вместо uvicorn --reload — см. комментарий в текущем
+  Dockerfile)
+- Push images в registry (GitHub Container Registry / Docker Hub)
+- SSH deploy на VPS: `docker compose pull && docker compose up -d`
+- Alembic `upgrade head` после restart backend
+- Health check `curl /health` с retry
+
+**Секреты в GitHub Secrets** (перенос из локального `.env`):
+- `POLZA_AI_API_KEY` — для Phase 7.1+ AI integration
+- `SECRET_KEY` (JWT) — для prod-окружения (не тот что в dev-compose)
+- `DATABASE_URL_PROD` — prod postgres credentials
+- `VPS_SSH_HOST`, `VPS_SSH_USER`, `VPS_SSH_KEY` — деплой target
+- `REGISTRY_TOKEN` — для push images
+
+**Branch protection:** на `main` настроить:
+- Require status check `test` to pass before merge
+- Require PR review (1 approval) — для команды, не для соло-разработки
+- Disable force-push
+
+**Acceptance тест в CI:** отдельный опциональный job `acceptance`,
+запускается вручную через `workflow_dispatch` или на self-hosted
+runner где `backend/tests/fixtures/gorji_reference.xlsx` доступен
+через setup-шаг (cp из private storage).
+
+**Критерий готовности:**
+- PR без зелёного `test` job не мёрджится (branch protection rule
+  активен)
+- Merge в `main` → автоматический deploy на prod VPS
+- Prod окружение доступно по https:// (cert через Let's Encrypt
+  или nginx sidecar)
+- Rollback одной командой: `git revert` + `docker compose up -d`
+- Smoke test после deploy: `curl https://prod-domain/health` =
+  `{"status": "ok"}`
+
+**Зависимости:** все фазы 0-5 и 7 (финальный этап перед релизом).
+Порядок внутри: сначала добавляем Dockerfile.prod (multi-stage) если
+текущий dev Dockerfile не подходит; потом CI config; потом setup
+VPS + secrets; потом первый автоматический deploy.
+
+**Что НЕ входит в 6.2 (остаётся на Этап 2):**
+- Мониторинг (Sentry / Prometheus / Grafana)
+- Автоматические rolling deploys с health-gate
+- Staging окружение (deploy только на prod)
+- Backup/restore автоматизация БД
+
+---
+
 ## РАЗДЕЛ 2 — Карта зависимостей (сводная)
 
 ```
@@ -1886,8 +1977,8 @@ GitHub Secrets).
                                                   ↓
                                   5.1 → 5.2 → 5.3
                                           ↓
-                                       6.1 → 6.2
-                                              ↓
+                                         6.1
+                                          ↓
                                 7.1 → 7.2 → 7.3
                                        ↓
                                      7.4 (← 5.2)
@@ -1895,6 +1986,8 @@ GitHub Secrets).
                                      7.5
                                        ↓
                                   7.6 → 7.7 → 7.8
+                                               ↓
+                                              6.2 (CI/CD, финальный этап)
 ```
 
 2.1–2.5 зависят от 0.4 (seed данные).  
@@ -1902,11 +1995,16 @@ GitHub Secrets).
 4.x зависят от 2.4 (расчёты работают) и 3.x (UI для ввода).  
 4.5 (контент паспорта) — после 4.4, перед 5.x.
 5.x зависят от 2.4 (данные для экспорта) и 4.5 (контент для PPT/PDF).
-7.x зависят от 6.2 (CI готов, секреты в GitHub Secrets).
+7.1 зависит от 6.1 (MVP валидирован, AI комментирует проверенные числа).
+POLZA_AI_API_KEY на этапе разработки — из локального `.env`.
 7.2 дополнительно от 4.2.1 (GORJI данные для ручной валидации AI).
 7.3 от 4.4 (sensitivity анализ существует).
 7.4 от 5.2 (PPT экспорт существует).
 7.6/7.7/7.8 от 4.5.1 (поля для записи AI результата).
+**6.2 CI/CD** — вынесена в конец: запускается после того как
+Phase 7 AI полностью готов и все фичи MVP стабилизированы. Перенос
+секретов (POLZA_AI_API_KEY, DB credentials) в GitHub Secrets
+происходит в рамках 6.2.
 7.8 дополнительно от 4.5.2 (media storage).
 
 ---
@@ -1997,8 +2095,9 @@ GitHub Secrets).
   4 параметра × 5 уровней = 20 cells, SensitivityTab с матрицей NPV/CM,
   Base reference card. 9 backend тестов + 0 tsc errors, 217/217 pytest.)
 
-### Фаза 4.5 — Контент паспорта (← следующий шаг: задача 4.5.1)
-- [ ] 4.5.1 Расширение data model (16 scalar + 5 JSONB Project + MediaAsset + миграция)
+### ✅ Фаза 4.5 — Контент паспорта (закрыта 2026-04-09, 4 коммита)
+- [x] 4.5.1 Расширение data model ✅ (2026-04-09, 16 scalar + 5 JSONB
+  Project + MediaAsset + миграция 2e7b824682be + 5 тестов, 236/236 pytest)
 - [x] 4.5.2 File storage backend ✅ (2026-04-09, media-storage volume,
   media_service с validation, 4 endpoints, 16 tests, 252/252 pytest)
 - [x] 4.5.3 Frontend UI «Содержание паспорта» ✅ (2026-04-09, content-tab с
@@ -2006,8 +2105,6 @@ GitHub Secrets).
   0 tsc errors)
 - [x] 4.5.4 Tests + commit ✅ (2026-04-09, 2 новых теста PATCH JSONB roundtrip
   + PSK package_image_id, 254/254 pytest, visual check passed)
-
-### ✅ Фаза 4.5 — Контент паспорта (закрыта 2026-04-09, 4 коммита)
 
 ### ✅ Фаза 5 — Экспорт (закрыта 2026-04-09, 3 коммита, 278/278 pytest)
 - [x] 5.1 XLSX ✅ (2026-04-09, openpyxl 3.1, excel_exporter с 3 листами
@@ -2020,13 +2117,16 @@ GitHub Secrets).
 - [x] Content-Disposition RFC 5987 fix — regression на кириллических
   именах проекта, общий helper `_build_export_content_disposition`
 
-### Фаза 6 — Интеграция
+### ✅ Фаза 6 — Интеграция (закрыта 2026-04-09, 1 коммит)
 - [x] 6.1 E2E acceptance-тест ✅ (2026-04-09, tests/acceptance/test_e2e_gorji.py
   с 4 тестами, полный GORJI import + recalc + KPI drift < 5% + все 3 экспорта,
   282/282 pytest, marker `acceptance`)
-- [ ] 6.2 GitHub Actions CI
+- 🔄 6.2 GitHub Actions CI — **перенесена** в «Финальный этап» после Phase 7
+  (2026-04-09, по согласованию с пользователем). Причина: CI/CD —
+  production deploy step, а не блокер Phase 7. Для разработки AI
+  локального `.env` с POLZA_AI_API_KEY достаточно
 
-### Фаза 7 — AI-интеграция (Polza AI, post-MVP, ADR-16)
+### Фаза 7 — AI-интеграция (Polza AI, post-MVP, ADR-16) ← **следующий шаг**
 - [ ] 7.1 Polza AI client + ai_service.py + ai_usage_log таблица
 - [ ] 7.2 AI-объяснение KPI (POST /api/projects/{id}/ai/explain-kpi)
 - [ ] 7.3 AI-комментарий чувствительности (POST .../ai/explain-sensitivity)
@@ -2040,3 +2140,11 @@ GitHub Secrets).
 - [ ] 7.8 AI генерация package mockups (image generation через
   Polza /v1/images/generations с моделью flux-2-pro, сохранение как
   MediaAsset, link to ProjectSKU.package_image_id)
+
+### Финальный этап — CI/CD и production deploy (после Phase 7)
+- [ ] 6.2 GitHub Actions CI — `.github/workflows/ci.yml` (test job на PR,
+  deploy job на merge в main), Dockerfile.prod (multi-stage, non-root,
+  gunicorn), branch protection, GitHub Secrets для POLZA_AI_API_KEY +
+  SECRET_KEY + DB creds + SSH deploy target, VPS setup + первый
+  автоматический deploy, smoke test `curl /health`.
+  Перенесено из Phase 6 2026-04-09.
