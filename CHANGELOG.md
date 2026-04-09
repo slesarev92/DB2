@@ -9,6 +9,62 @@
 
 ## [Unreleased]
 
+### Changed (реструктуризация плана, 2026-04-09)
+
+**Задача 6.2 GitHub Actions CI перенесена в конец IMPLEMENTATION_PLAN.md**
+из Phase 6 в новый раздел «Финальный этап — CI/CD и production deploy»
+после Phase 7. Phase 6 теперь содержит только 6.1 E2E acceptance
+test (закрыта).
+
+Причина переноса: CI/CD — это production deploy step, а не блокер
+для Phase 7 AI-интеграции. POLZA_AI_API_KEY на этапе разработки
+читается из локального `.env`, GitHub Secrets настраиваются один
+раз в финальном этапе, когда весь функционал стабилизирован.
+
+**Также добавлены в Backlog §0.2 пять пунктов B-15..B-19**, принятых
+in-flight во время Phase 3/4/5 но зафиксированных только в описаниях
+задач: MinIO/S3 для media (P1), frontend e2e тесты (P2), batch save
+period values (P3), corporate PPT template (P2), OPEX breakdown (P3).
+Все 19 пунктов backlog'а получили приоритеты P1/P2/P3.
+
+### Added (задача 6.1 — E2E acceptance test, 2026-04-09)
+
+**Backend:** `tests/acceptance/test_e2e_gorji.py` с 4 тестами класса
+`TestE2EGorji`. Marker `acceptance` в pytest.ini — обычный pytest
+исключает через `-m "not acceptance"` (будет использоваться в CI).
+
+**Что покрывает:**
+1. Полный импорт GORJI Excel эталона: 8 SKU + 48 PSC + 6192 PeriodValue +
+   10 fin plan rows. Переиспользует helpers из `scripts/import_gorji_full`
+   (`extract_project_header`, `extract_sku_block`,
+   `extract_project_capex_opex`, `extract_kpi_reference`, `import_to_db`,
+   `cleanup_existing_project`) без дублирования логики.
+2. После `calculate_all_scenarios` — Base NPV drift < 5% для всех 3 scope
+   (Y1Y3/Y1Y5/Y1Y10). Фактический Variant B drift ≈ 0.10%.
+3. Все три экспорта генерируются с валидными сигнатурами: XLSX (PK),
+   PPTX (PK + 13 слайдов через Presentation parser), PDF (%PDF- +
+   size < 5 MB из критерия плана).
+4. 9 ScenarioResult'ов (3 × 3) с непустым `go_no_go`.
+
+**Инфраструктура:**
+- `backend/tests/acceptance/` — отдельная директория для тяжёлых E2E
+- `backend/tests/fixtures/gorji_reference.xlsx` — локальная копия
+  эталона (7.6 MB), gitignored через `.gitignore` в fixtures/.
+  Оригинал в корне репо в git. Dev setup: один раз выполнить
+  `cp PASSPORT_MODEL_GORJI_2025-09-05.xlsx backend/tests/fixtures/gorji_reference.xlsx`
+- `pytestmark = [acceptance, skipif(not fixture_exists)]` — graceful
+  skip для clean clone environment
+
+**Примечание о критерии ±0.01%:** план изначально требовал drift
+±0.01% — это aspirational и недостижимо в Variant B (реальный 0.10%).
+Тест использует практический порог 5% чтобы ловить регрессии. Для
+достижения 0.01% нужен Variant A импорт (period-by-period shift +
+per-period logistics inflation) — отложено в Этап 2.
+
+**Тесты:** 282/282 pytest при полном прогоне (278 regular + 4
+acceptance). Обычный suite `-m "not acceptance"` → 278 passed,
+4 deselected.
+
 ### Added (задача 5.3 — Экспорт PDF, 2026-04-09)
 
 **Backend:** pdf_exporter.py на базе WeasyPrint 63 + Jinja2 template.

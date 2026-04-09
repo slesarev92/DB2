@@ -296,8 +296,16 @@ Pipeline расчёта строго по шагам из Data Dictionary
 docker compose -f infra/docker-compose.dev.yml up -d
 docker compose -f infra/docker-compose.dev.yml ps        # все healthy?
 
-# Запустить тесты (66 интеграционных против реального postgres)
-docker compose -f infra/docker-compose.dev.yml exec backend pytest -v
+# Запустить тесты (282 интеграционных против реального postgres,
+# включая 4 тяжёлых E2E в tests/acceptance/ за marker `acceptance`).
+# Обычный прогон для PR/регрессии автоматически исключает acceptance:
+docker compose -f infra/docker-compose.dev.yml exec backend \
+    pytest -q -m "not acceptance"
+
+# Явный запуск E2E acceptance (требует
+# backend/tests/fixtures/gorji_reference.xlsx — см. задача 6.1):
+docker compose -f infra/docker-compose.dev.yml exec backend \
+    pytest -v -m acceptance
 
 # Применить миграции
 docker compose -f infra/docker-compose.dev.yml exec backend alembic upgrade head
