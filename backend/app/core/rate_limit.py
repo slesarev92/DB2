@@ -48,8 +48,10 @@ from app.core.config import settings
 limiter = Limiter(
     key_func=get_remote_address,  # fallback — IP. Endpoint'ы override'ят.
     storage_uri=settings.redis_url,
-    # Headers для клиента: X-RateLimit-Limit, X-RateLimit-Remaining.
-    headers_enabled=True,
+    # Headers disabled: чтобы включить, endpoint должен принимать
+    # `response: Response` параметр, что загромождает сигнатуру ради
+    # cosmetic'а. 429 JSON через дефолтный exception handler достаточен.
+    headers_enabled=False,
     # 429 вместо дефолтного. FastAPI сам отдаст это через exception_handler
     # зарегистрированный в main.py.
     default_limits=[],

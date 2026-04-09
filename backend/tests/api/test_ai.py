@@ -1,0 +1,512 @@
+"""API tests для /api/projects/{id}/ai/explain-kpi (Phase 7.2).
+
+Интеграция pytest + реальный postgres + мок Polza через monkeypatch
+`ai_service._get_client`. Реальный Polza не дёргается — это
+unit-тесты endpoint'а против мокнутого клиента и реальной БД/Redis
+слоя.
+
+Покрытие:
+1. 401 без JWT
+2. Happy path → 200 + запись в ai_usage_log + кэш записан
+3. Cache hit → cached=true, без вызова Polza
+4. Dedupe: второй запрос ждёт первый (integration-level сложно, проверяем
+   лишь что set_cached вызывается)
+5. AIServiceUnavailableError → 503 + error log
+6. Invalid scenario (не принадлежит проекту) → 404
+7. Deleted project → 404
+8. Daily budget exceeded → 429
+9. LLM возвращает corrupt JSON → 503 (через AIServiceUnavailableError)
+10. tier_override работает — другая модель
+
+Не тестируем здесь rate limit 10/min — slowapi сложно юнит-тестить
+без замусоривания окружения (нужен session-scope reset). Для Phase 7.2
+достаточно что endpoint обёрнут декоратором; реальное поведение ловим
+в staging / manual smoke.
+"""
+from __future__ import annotations
+
+import json
+from datetime import date, datetime, timezone
+from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models import (
+    AIUsageLog,
+    PeriodScope,
+    Project,
+    Scenario,
+    ScenarioResult,
+    ScenarioType,
+)
+from app.services import ai_cache, ai_service
+
+
+# ============================================================
+# Fixtures
+# ============================================================
+
+
+@pytest.fixture
+async def gorji_project(db_session: AsyncSession) -> Project:
+    """Минимальный проект с 3 сценариями + results для explain-kpi."""
+    project = Project(
+        name="Test Project for AI",
+        start_date=date(2026, 1, 1),
+        horizon_years=10,
+        wacc=Decimal("0.19"),
+        tax_rate=Decimal("0.20"),
+        wc_rate=Decimal("0.12"),
+        vat_rate=Decimal("0.20"),
+        gate_stage="G2",
+        project_goal="Вывод нового SKU в premium сегмент",
+    )
+    db_session.add(project)
+    await db_session.flush()
+
+    for s_type in [
+        ScenarioType.BASE,
+        ScenarioType.CONSERVATIVE,
+        ScenarioType.AGGRESSIVE,
+    ]:
+        scenario = Scenario(
+            project_id=project.id,
+            type=s_type,
+            delta_nd=Decimal("0"),
+            delta_offtake=Decimal("0"),
+            delta_opex=Decimal("0"),
+        )
+        db_session.add(scenario)
+        await db_session.flush()
+
+        for scope in [PeriodScope.Y1Y3, PeriodScope.Y1Y5, PeriodScope.Y1Y10]:
+            db_session.add(
+                ScenarioResult(
+                    scenario_id=scenario.id,
+                    period_scope=scope,
+                    npv=Decimal("15000000"),
+                    irr=Decimal("0.28"),
+                    payback_discounted=Decimal("4.1"),
+                    go_no_go=True,
+                )
+            )
+    await db_session.flush()
+    return project
+
+
+@pytest.fixture
+async def base_scenario(
+    db_session: AsyncSession, gorji_project: Project
+) -> Scenario:
+    """BASE сценарий тестового проекта."""
+    return (
+        await db_session.scalars(
+            select(Scenario)
+            .where(Scenario.project_id == gorji_project.id)
+            .where(Scenario.type == ScenarioType.BASE)
+        )
+    ).one()
+
+
+@pytest.fixture
+def mock_polza(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+    """Подменяет `_get_client()` → мок AsyncOpenAI client.
+
+    По умолчанию return успешный JSON ответ. Тесты override'ят
+    `.side_effect` для error-case'ов.
+    """
+    create_mock = AsyncMock()
+    # Дефолтный успешный ответ
+    llm_output = {
+        "summary": "NPV положительный во всех сценариях.",
+        "key_drivers": [
+            "WACC 19% дисконтирует Y4-Y10 в 0.35x",
+            "Offtake base 1.2M уп/год",
+            "Margin contribution ~30%",
+        ],
+        "risks": [
+            "Гипер-чувствительность к ND",
+            "Payback 4.1 года > целевых 3.5",
+        ],
+        "recommendation": "go",
+        "confidence": 0.78,
+        "rationale": "Во всех 3 сценариях NPV > 0, IRR > WACC.",
+    }
+    create_mock.return_value = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(content=json.dumps(llm_output))
+            )
+        ],
+        usage=SimpleNamespace(
+            prompt_tokens=2500, completion_tokens=400, total_tokens=2900
+        ),
+        model="anthropic/claude-sonnet-4.6",
+    )
+
+    # Сбрасываем singleton ДО подмены (после — нельзя, lambda не имеет
+    # cache_clear). Это очищает возможный кэшированный AsyncOpenAI клиент
+    # от предыдущих тестов.
+    ai_service.reset_client_cache()
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create = create_mock
+    monkeypatch.setattr(ai_service, "_get_client", lambda: fake_client)
+    monkeypatch.setattr(
+        "app.core.config.settings.polza_ai_api_key", "fake-test-key"
+    )
+    return create_mock
+
+
+@pytest.fixture
+def mock_redis(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    """Подменяет Redis клиент — cache всегда miss, SETNX всегда успех."""
+    ai_cache.reset_redis_cache()
+
+    client = MagicMock()
+    client.get = AsyncMock(return_value=None)
+    client.set = AsyncMock(return_value=True)
+    client.delete = AsyncMock(return_value=1)
+
+    monkeypatch.setattr(ai_cache, "_get_redis_client", lambda: client)
+    return client
+
+
+# ============================================================
+# Tests
+# ============================================================
+
+
+async def test_explain_kpi_requires_auth(
+    client: AsyncClient, gorji_project: Project, base_scenario: Scenario
+) -> None:
+    """401 если нет JWT."""
+    resp = await client.post(
+        f"/api/projects/{gorji_project.id}/ai/explain-kpi",
+        json={
+            "scenario_id": base_scenario.id,
+            "scope": "y1y5",
+        },
+    )
+    assert resp.status_code == 401
+
+
+async def test_explain_kpi_happy_path(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+    base_scenario: Scenario,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """Успешный вызов → 200 + правильная структура + лог в ai_usage_log."""
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/explain-kpi",
+        json={
+            "scenario_id": base_scenario.id,
+            "scope": "y1y5",
+        },
+    )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    # Структура ответа
+    assert data["summary"].startswith("NPV")
+    assert len(data["key_drivers"]) == 3
+    assert len(data["risks"]) == 2
+    assert data["recommendation"] == "go"
+    assert 0 <= data["confidence"] <= 1
+    assert data["cached"] is False
+    assert data["model"] == "anthropic/claude-sonnet-4.6"
+    # Cost: 2500 × 0.30/1k + 400 × 1.50/1k = 0.75 + 0.60 = 1.35
+    assert Decimal(data["cost_rub"]) == Decimal("1.350000")
+
+    # Polza вызван один раз
+    mock_polza.assert_awaited_once()
+
+    # ai_usage_log содержит запись explain_kpi с корректной стоимостью
+    logs = (
+        await db_session.scalars(
+            select(AIUsageLog).where(AIUsageLog.endpoint == "explain_kpi")
+        )
+    ).all()
+    assert len(logs) == 1
+    assert logs[0].model == "anthropic/claude-sonnet-4.6"
+    assert logs[0].cost_rub == Decimal("1.350000")
+    assert logs[0].error is None
+
+    # Redis set_cached был вызван
+    mock_redis.set.assert_awaited()
+
+
+async def test_explain_kpi_cache_hit_skips_polza(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+    base_scenario: Scenario,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """Если cache hit → cached=true, Polza не вызывается."""
+    cached_payload = {
+        "summary": "Cached summary",
+        "key_drivers": ["a", "b", "c"],
+        "risks": ["r1", "r2"],
+        "recommendation": "review",
+        "confidence": 0.6,
+        "rationale": "From cache",
+        "cost_rub": "2.4",
+        "model": "anthropic/claude-sonnet-4.6",
+    }
+    mock_redis.get.return_value = json.dumps(cached_payload)
+
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/explain-kpi",
+        json={
+            "scenario_id": base_scenario.id,
+            "scope": "y1y5",
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["summary"] == "Cached summary"
+    assert data["cached"] is True
+    # Polza не вызван
+    mock_polza.assert_not_awaited()
+
+    # ai_usage_log содержит запись с endpoint=explain_kpi_cache
+    logs = (
+        await db_session.scalars(
+            select(AIUsageLog).where(
+                AIUsageLog.endpoint == "explain_kpi_cache"
+            )
+        )
+    ).all()
+    assert len(logs) == 1
+    assert logs[0].cost_rub == Decimal("0")
+
+
+async def test_explain_kpi_polza_unavailable_returns_503(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+    base_scenario: Scenario,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """AIServiceUnavailableError → 503 с placeholder + error log."""
+    from openai import APIConnectionError
+
+    mock_polza.side_effect = APIConnectionError(request=MagicMock())
+
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/explain-kpi",
+        json={
+            "scenario_id": base_scenario.id,
+            "scope": "y1y5",
+        },
+    )
+
+    assert resp.status_code == 503
+    assert "Polza AI" in resp.json()["detail"]
+
+    # Error заnлогирован в ai_usage_log
+    logs = (
+        await db_session.scalars(select(AIUsageLog))
+    ).all()
+    assert len(logs) == 1
+    assert logs[0].error is not None
+    assert "подключиться" in logs[0].error
+
+
+async def test_explain_kpi_corrupt_json_returns_503(
+    auth_client: AsyncClient,
+    gorji_project: Project,
+    base_scenario: Scenario,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """LLM вернул текст вместо JSON → 503."""
+    mock_polza.return_value = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    content="Конечно, вот моё объяснение KPI..."
+                )
+            )
+        ],
+        usage=SimpleNamespace(prompt_tokens=100, completion_tokens=50),
+        model="anthropic/claude-sonnet-4.6",
+    )
+
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/explain-kpi",
+        json={
+            "scenario_id": base_scenario.id,
+            "scope": "y1y5",
+        },
+    )
+
+    assert resp.status_code == 503
+
+
+async def test_explain_kpi_deleted_project_returns_404(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+    base_scenario: Scenario,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """Soft-deleted project → 404."""
+    gorji_project.deleted_at = datetime.now(timezone.utc)
+    await db_session.flush()
+
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/explain-kpi",
+        json={
+            "scenario_id": base_scenario.id,
+            "scope": "y1y5",
+        },
+    )
+    assert resp.status_code == 404
+
+
+async def test_explain_kpi_wrong_scenario_returns_404(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """Сценарий из другого проекта → 404."""
+    other = Project(
+        name="Other",
+        start_date=date(2026, 1, 1),
+        horizon_years=10,
+    )
+    db_session.add(other)
+    await db_session.flush()
+    other_scenario = Scenario(project_id=other.id, type=ScenarioType.BASE)
+    db_session.add(other_scenario)
+    await db_session.flush()
+
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/explain-kpi",
+        json={
+            "scenario_id": other_scenario.id,
+            "scope": "y1y5",
+        },
+    )
+    assert resp.status_code == 404
+
+
+async def test_explain_kpi_invalid_scope_returns_422(
+    auth_client: AsyncClient,
+    gorji_project: Project,
+    base_scenario: Scenario,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """Невалидный scope (не из PeriodScope enum) → 422."""
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/explain-kpi",
+        json={
+            "scenario_id": base_scenario.id,
+            "scope": "y1y7",  # не существует
+        },
+    )
+    assert resp.status_code == 422
+
+
+async def test_explain_kpi_daily_budget_exceeded_returns_429(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+    base_scenario: Scenario,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """Дневной лимит 100₽ исчерпан → 429."""
+    db_session.add(
+        AIUsageLog(
+            endpoint="explain_kpi",
+            model="anthropic/claude-sonnet-4.6",
+            prompt_tokens=100000,
+            completion_tokens=20000,
+            cost_rub=Decimal("100"),
+            latency_ms=5000,
+        )
+    )
+    await db_session.flush()
+
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/explain-kpi",
+        json={
+            "scenario_id": base_scenario.id,
+            "scope": "y1y5",
+        },
+    )
+    assert resp.status_code == 429
+    assert "лимит" in resp.json()["detail"].lower()
+    # Polza не вызывался
+    mock_polza.assert_not_awaited()
+
+
+async def test_explain_kpi_tier_override_uses_heavy_model(
+    auth_client: AsyncClient,
+    gorji_project: Project,
+    base_scenario: Scenario,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """tier_override=HEAVY → вызов с claude-opus-4.6."""
+    # Override response model, чтобы соответствовать вызову на opus
+    mock_polza.return_value = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "summary": "Deep analysis says review.",
+                            "key_drivers": ["d1", "d2", "d3"],
+                            "risks": ["r1"],
+                            "recommendation": "review",
+                            "confidence": 0.55,
+                            "rationale": "Conflict between scenarios.",
+                        }
+                    )
+                )
+            )
+        ],
+        usage=SimpleNamespace(
+            prompt_tokens=3000, completion_tokens=800, total_tokens=3800
+        ),
+        model="anthropic/claude-opus-4.6",
+    )
+
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/explain-kpi",
+        json={
+            "scenario_id": base_scenario.id,
+            "scope": "y1y5",
+            "tier_override": "heavy",
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["model"] == "anthropic/claude-opus-4.6"
+    # Cost на opus выше: 3000 × 1.5/1k + 800 × 7.5/1k = 4.5 + 6.0 = 10.5
+    assert Decimal(data["cost_rub"]) == Decimal("10.500000")
+
+    # Проверяем что в Polza улетела opus модель
+    call_kwargs = mock_polza.await_args.kwargs
+    assert call_kwargs["model"] == "anthropic/claude-opus-4.6"
