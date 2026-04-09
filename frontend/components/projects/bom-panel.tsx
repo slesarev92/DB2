@@ -20,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SkuImageUpload } from "@/components/projects/sku-image-upload";
 import { ApiError } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import {
@@ -33,6 +34,7 @@ import {
 import type { BOMItemRead, ProjectSKUDetail } from "@/types/api";
 
 interface BomPanelProps {
+  projectId: number;
   pskId: number;
 }
 
@@ -73,7 +75,7 @@ function computeCogsPreview(items: BOMItemRead[]): number {
  * Persistance: каждое изменение → отдельный API call. Нет batch save —
  * MVP, можно оптимизировать позже.
  */
-export function BomPanel({ pskId }: BomPanelProps) {
+export function BomPanel({ projectId, pskId }: BomPanelProps) {
   const [psk, setPsk] = useState<ProjectSKUDetail | null>(null);
   const [bom, setBom] = useState<BOMItemRead[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -242,6 +244,19 @@ export function BomPanel({ pskId }: BomPanelProps) {
             </div>
           </div>
 
+          {/* Фаза 4.5.3: изображение упаковки SKU */}
+          <div className="mt-4 border-t pt-4">
+            <SkuImageUpload
+              projectId={projectId}
+              pskId={pskId}
+              currentImageId={psk.package_image_id}
+              onChange={(newId) => {
+                setPsk((prev) =>
+                  prev ? { ...prev, package_image_id: newId } : prev,
+                );
+              }}
+            />
+          </div>
         </CardContent>
       </Card>
 

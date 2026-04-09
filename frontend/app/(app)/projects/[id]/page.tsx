@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { ChannelsTab } from "@/components/projects/channels-tab";
+import { ContentTab } from "@/components/projects/content-tab";
 import { FinancialPlanEditor } from "@/components/projects/financial-plan-editor";
 import { PeriodsTab } from "@/components/projects/periods-tab";
 import { ResultsTab } from "@/components/projects/results-tab";
@@ -102,6 +103,7 @@ export default function ProjectDetailPage() {
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Параметры</TabsTrigger>
+          <TabsTrigger value="content">Содержание</TabsTrigger>
           <TabsTrigger value="skus">SKU и BOM</TabsTrigger>
           <TabsTrigger value="channels">Каналы</TabsTrigger>
           <TabsTrigger value="periods">Периоды</TabsTrigger>
@@ -159,6 +161,10 @@ export default function ProjectDetailPage() {
           </Card>
 
           <FinancialPlanEditor projectId={projectId} />
+        </TabsContent>
+
+        <TabsContent value="content" className="mt-4">
+          <ContentTab projectId={projectId} />
         </TabsContent>
 
         <TabsContent value="skus" className="mt-4">

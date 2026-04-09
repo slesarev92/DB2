@@ -1212,7 +1212,46 @@ production deploy).
 
 ---
 
-#### Задача 4.5.3 — Frontend UI «Содержание паспорта»
+#### ✅ Задача 4.5.3 — Frontend UI «Содержание паспорта» (2026-04-09)
+
+**Что сделано:**
+- `types/api.ts`: `ProjectContentFields` с 16 scalar + 5 JSONB (все optional
+  для create/update), `ProjectRead` через `Omit + Required<...>` — content
+  поля required-nullable в read-типе. `MediaAssetRead`, `MediaKind`,
+  `GateStage`, `FunctionReadinessStatus`, `FUNCTION_DEPARTMENTS` (8 fixed:
+  R&D, Marketing, Sales, Supply Chain, Production, Finance, Legal, Quality),
+  `FunctionReadinessEntry/Map`, `ValidationTests`, `RiskItem`, `RoadmapTask`,
+  `Approver`. `ProjectSKU*` расширены `package_image_id`
+- `lib/media.ts`: `uploadMedia` (multipart/form-data через raw fetch — 
+  apiPost форсит JSON Content-Type), `listProjectMedia`, `deleteMedia`,
+  `getMediaBlobUrl` (Blob URL для `<img src>`)
+- `components/ui/textarea.tsx`: нативный `<textarea>` со стилями Input
+- `components/projects/content-tab.tsx` (~650 строк): новый таб с 7
+  секциями — 
+  1. Общая информация (gate_stage Select G0..G5, passport_date, owner,
+     description, project_goal, innovation_type, geography, production_type)
+  2. Концепция продукта (growth_opportunity, concept_text, rationale,
+     idea_short, target_audience, replacement_target, technology, rnd_progress,
+     executive_summary — с пометкой «AI-generated в Phase 7.6»)
+  3. Валидация (5 подтестов × score + notes, Save button)
+  4. Риски (dynamic list, Save button)
+  5. Готовность функций (8 фиксированных depts × светофор + notes)
+  6. Дорожная карта (dynamic list: name/dates/status/owner)
+  7. Согласующие (dynamic list: metric/name/source)
+- **Auto-save on blur** для scalar полей, **Save button** для JSONB секций.
+  Status bar показывает `Сохранение: field...` / `✓ Сохранено` / `Ошибка`
+- `components/projects/sku-image-upload.tsx`: drag-drop/click upload с
+  client-side validation (PNG/JPEG/WebP, ≤10 MB), preview через Blob URL,
+  cleanup `URL.revokeObjectURL` в useEffect teardown, Replace/Delete кнопки.
+  Flow: POST media → PATCH PSK с `package_image_id`
+- `bom-panel.tsx`: интегрирован `SkuImageUpload` после rates editor,
+  принимает `projectId` новым prop
+- `page.tsx`: новый таб «Содержание» между «Параметры» и «SKU и BOM»
+
+**Критерий готовности:** ✅
+- 0 ошибок `npx tsc --noEmit`
+- `/projects/23` компилируется и отдаёт HTTP 200 без runtime ошибок
+- 252/252 pytest (backend не затронут)
 
 **Что делаем:**
 
@@ -1813,7 +1852,9 @@ GitHub Secrets).
 - [ ] 4.5.1 Расширение data model (16 scalar + 5 JSONB Project + MediaAsset + миграция)
 - [x] 4.5.2 File storage backend ✅ (2026-04-09, media-storage volume,
   media_service с validation, 4 endpoints, 16 tests, 252/252 pytest)
-- [ ] 4.5.3 Frontend UI «Содержание паспорта» (новый таб с 7 секциями + image upload в SKU)
+- [x] 4.5.3 Frontend UI «Содержание паспорта» ✅ (2026-04-09, content-tab с
+  7 секциями auto-save/Save JSONB, sku-image-upload drag-drop с Blob preview,
+  0 tsc errors)
 - [ ] 4.5.4 Tests + commit
 
 ### Фаза 5 — Экспорт (после 4.5)

@@ -31,7 +31,7 @@ export function SkusTab({ projectId }: SkusTabProps) {
       </div>
       <div className="md:col-span-2">
         {selectedPskId !== null ? (
-          <BomPanel pskId={selectedPskId} />
+          <BomPanel projectId={projectId} pskId={selectedPskId} />
         ) : (
           <Card>
             <CardContent className="pt-6 text-sm text-muted-foreground">

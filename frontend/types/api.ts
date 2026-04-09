@@ -24,7 +24,105 @@ export interface UserMe {
 // Project
 // ============================================================
 
-export interface ProjectBase {
+/** Gate-стадия процесса Stage-Gate (синхронизировано с backend CHECK). */
+export type GateStage = "G0" | "G1" | "G2" | "G3" | "G4" | "G5";
+
+/** Статус готовности функции. */
+export type FunctionReadinessStatus = "green" | "yellow" | "red";
+
+/** 8 фиксированных департаментов для блока «Готовность функций» (4.5). */
+export const FUNCTION_DEPARTMENTS = [
+  "R&D",
+  "Marketing",
+  "Sales",
+  "Supply Chain",
+  "Production",
+  "Finance",
+  "Legal",
+  "Quality",
+] as const;
+
+export type FunctionDepartment = (typeof FUNCTION_DEPARTMENTS)[number];
+
+/** Value в JSONB function_readiness: {department: {status, notes}}. */
+export interface FunctionReadinessEntry {
+  status: FunctionReadinessStatus;
+  notes: string;
+}
+
+export type FunctionReadinessMap = Partial<
+  Record<FunctionDepartment, FunctionReadinessEntry>
+>;
+
+/** Элемент validation_tests: 5 подтестов с score/notes. */
+export interface ValidationTestEntry {
+  score: number | null;
+  notes: string;
+}
+
+export interface ValidationTests {
+  concept_test?: ValidationTestEntry;
+  naming?: ValidationTestEntry;
+  design?: ValidationTestEntry;
+  product?: ValidationTestEntry;
+  price?: ValidationTestEntry;
+}
+
+/** Строка в risks[]: произвольный риск. */
+export interface RiskItem {
+  text: string;
+}
+
+/** Элемент roadmap_tasks[]. */
+export interface RoadmapTask {
+  name: string;
+  start_date?: string; // YYYY-MM-DD
+  end_date?: string;
+  status?: string;
+  owner?: string;
+}
+
+/** Элемент approvers[]. */
+export interface Approver {
+  metric: string;
+  name: string;
+  source?: string;
+}
+
+/**
+ * Content-поля паспорта (Фаза 4.5). Все optional на уровне input'ов
+ * (POST/PATCH), в ProjectRead переопределены как required-nullable
+ * через `Required<ProjectContentFields>`, чтобы UI мог безопасно
+ * обращаться к каждому полю без `undefined`-ветки.
+ */
+export interface ProjectContentFields {
+  // 16 scalar
+  description?: string | null;
+  gate_stage?: GateStage | null;
+  passport_date?: string | null; // ISO date
+  project_owner?: string | null;
+  project_goal?: string | null;
+  innovation_type?: string | null;
+  geography?: string | null;
+  production_type?: string | null;
+  growth_opportunity?: string | null;
+  concept_text?: string | null;
+  rationale?: string | null;
+  idea_short?: string | null;
+  target_audience?: string | null;
+  replacement_target?: string | null;
+  technology?: string | null;
+  rnd_progress?: string | null;
+  executive_summary?: string | null;
+  // 5 JSONB. Backend хранит как dict/list Any — типизируем для UI.
+  risks?: RiskItem[] | null;
+  validation_tests?: ValidationTests | null;
+  function_readiness?: FunctionReadinessMap | null;
+  roadmap_tasks?: RoadmapTask[] | null;
+  approvers?: Approver[] | null;
+}
+
+export interface ProjectBase extends ProjectContentFields {
   name: string;
   start_date: string; // ISO date "YYYY-MM-DD"
   horizon_years: number;
@@ -38,7 +136,7 @@ export interface ProjectBase {
 
 export interface ProjectCreate extends ProjectBase {}
 
-export interface ProjectUpdate {
+export interface ProjectUpdate extends ProjectContentFields {
   name?: string;
   start_date?: string;
   horizon_years?: number;
@@ -50,12 +148,20 @@ export interface ProjectUpdate {
   inflation_profile_id?: number | null;
 }
 
-export interface ProjectRead extends ProjectBase {
-  id: number;
-  created_at: string;
-  updated_at: string | null;
-  created_by: number | null;
-}
+/**
+ * ProjectRead: все content-поля — required-nullable (backend всегда
+ * сериализует их, даже если значение null). Это позволяет UI обращаться
+ * к ним без `?.` проверок. Используем type alias с intersection, потому
+ * что interface extension с conflicting optionality (optional в
+ * ProjectBase vs required в Required<>) не работает.
+ */
+export type ProjectRead = Omit<ProjectBase, keyof ProjectContentFields> &
+  Required<ProjectContentFields> & {
+    id: number;
+    created_at: string;
+    updated_at: string | null;
+    created_by: number | null;
+  };
 
 export interface ProjectListItem extends ProjectRead {
   npv_y1y10: string | null;
@@ -93,6 +199,7 @@ export interface ProjectSKUCreate {
   production_cost_rate?: string;
   ca_m_rate?: string;
   marketing_rate?: string;
+  package_image_id?: number | null;
 }
 
 export interface ProjectSKUUpdate {
@@ -100,6 +207,7 @@ export interface ProjectSKUUpdate {
   production_cost_rate?: string;
   ca_m_rate?: string;
   marketing_rate?: string;
+  package_image_id?: number | null;
 }
 
 export interface ProjectSKURead {
@@ -111,6 +219,7 @@ export interface ProjectSKURead {
   production_cost_rate: string;
   ca_m_rate: string;
   marketing_rate: string;
+  package_image_id: number | null;
   created_at: string;
 }
 
@@ -382,4 +491,21 @@ export interface FinancialPlanItem {
 
 export interface FinancialPlanRequest {
   items: FinancialPlanItem[];
+}
+
+// ============================================================
+// MediaAsset (Фаза 4.5.2 — загруженные файлы проекта)
+// ============================================================
+
+export type MediaKind = "package_image" | "concept_design" | "other";
+
+export interface MediaAssetRead {
+  id: number;
+  project_id: number;
+  kind: MediaKind;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  created_at: string;
+  uploaded_by: number | null;
 }
