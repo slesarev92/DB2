@@ -130,6 +130,8 @@ interface EditChannelDialogProps {
 function pscToFormState(psc: ProjectSKUChannelRead): ChannelFormState {
   return {
     channel_id: String(psc.channel_id),
+    launch_year: String(psc.launch_year),
+    launch_month: String(psc.launch_month),
     nd_target: psc.nd_target,
     nd_ramp_months: String(psc.nd_ramp_months),
     offtake_target: psc.offtake_target,

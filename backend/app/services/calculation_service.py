@@ -263,6 +263,10 @@ async def _build_line_input(
         offtake_arr = [v * (1.0 + delta_offtake) for v in offtake_arr]
 
     # Launch lag (D-13): обнуляем nd/offtake для periods до launch month.
+    # Excel хранит launch_year/launch_month per (SKU × Channel), не per
+    # SKU — TT/E-COM каналы запускаются раньше HM/SM/MM. Поля живут на
+    # ProjectSKUChannel, а не на ProjectSKU.
+    #
     # Pipeline считает volume = active × offtake × seasonality, поэтому
     # nd=0 ИЛИ offtake=0 → volume=0 → весь downstream автоматически = 0.
     # Не нужно трогать pipeline шаги.
@@ -271,11 +275,11 @@ async def _build_line_input(
     # - Y1 Jan → 1, Y1 Dec → 12, Y2 Jan → 13, Y2 Dec → 24, Y3 Dec → 36
     # - Y4..Y10 (yearly periods) → period_number 37..43
     # Для launch_year >= 4 month игнорируется (yearly periods нет months).
-    if psk.launch_year > 3:
+    if psc.launch_year > 3:
         # Yearly launch: M1..M36 + Y4..Y(launch_year-1) обнуляем
-        launch_period_number = 36 + (psk.launch_year - 3)
+        launch_period_number = 36 + (psc.launch_year - 3)
     else:
-        launch_period_number = (psk.launch_year - 1) * 12 + psk.launch_month
+        launch_period_number = (psc.launch_year - 1) * 12 + psc.launch_month
     # Все periods c period_number < launch_period_number → 0
     # sorted_periods отсортирован по period_number, поэтому индекс
     # совпадает с (period.period_number - 1)

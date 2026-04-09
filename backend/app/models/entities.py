@@ -234,21 +234,6 @@ class ProjectSKU(Base, TimestampMixin):
     )
     include: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    # Launch lag (D-13): SKU может быть запущен не в M1 проекта, а позже.
-    # Excel хранит ND/offtake в DASH относительно launch month каждого SKU,
-    # а в NET REVENUE/etc применяет absolute lag (нули до launch). Наша
-    # модель: launch_year (1..10) + launch_month (1..12) — относительно
-    # project.start_date. По умолчанию SKU активен с M1 (Y1 Jan).
-    # Сервис `_build_line_input` обнуляет nd[t] и offtake[t] для periods
-    # до launch, downstream pipeline автоматически даёт ноль на этих
-    # периодах.
-    launch_year: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="1", default=1
-    )
-    launch_month: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="1", default=1
-    )
-
     # Rate-параметры SKU как % от выручки (D-04 в TZ_VS_EXCEL_DISCREPANCIES).
     production_cost_rate: Mapped[Decimal] = mapped_column(
         Numeric(8, 6), nullable=False, default=Decimal("0")
@@ -283,6 +268,21 @@ class ProjectSKUChannel(Base, TimestampMixin):
     channel_id: Mapped[int] = mapped_column(
         ForeignKey("channels.id", ondelete="RESTRICT"),
         nullable=False,
+    )
+
+    # Launch lag (D-13): канал может быть запущен не в M1 проекта, а позже.
+    # Excel хранит launch_year/launch_month per (SKU × Channel), не per SKU.
+    # TT/E-COM каналы запускаются раньше HM/SM/MM для одного SKU
+    # (классические каналы дают первичную дистрибуцию для тестирования
+    # рынка, modern trade подключаются позже). По умолчанию канал активен
+    # с M1 проекта (Y1 Jan). Сервис `_build_line_input` обнуляет nd[t] и
+    # offtake[t] для periods до launch периода — downstream pipeline
+    # автоматически даёт ноль через volume = active × offtake × seasonality.
+    launch_year: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="1", default=1
+    )
+    launch_month: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="1", default=1
     )
 
     nd_target: Mapped[Decimal] = mapped_column(

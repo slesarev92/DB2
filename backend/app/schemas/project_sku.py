@@ -10,10 +10,6 @@ from app.schemas.sku import SKURead
 class ProjectSKUBase(BaseModel):
     sku_id: int
     include: bool = True
-    # Launch lag (D-13): по умолчанию SKU активен с M1 проекта (Y1 Jan).
-    # Если задан позже — pipeline обнуляет nd/offtake до launch периода.
-    launch_year: int = Field(default=1, ge=1, le=10)
-    launch_month: int = Field(default=1, ge=1, le=12)
     production_cost_rate: Decimal = Field(default=Decimal("0"), ge=0, le=1)
     ca_m_rate: Decimal = Field(default=Decimal("0"), ge=0, le=1)
     marketing_rate: Decimal = Field(default=Decimal("0"), ge=0, le=1)
@@ -27,8 +23,6 @@ class ProjectSKUUpdate(BaseModel):
     """Тело PATCH /api/project-skus/{id}. sku_id менять нельзя."""
 
     include: bool | None = None
-    launch_year: int | None = Field(default=None, ge=1, le=10)
-    launch_month: int | None = Field(default=None, ge=1, le=12)
     production_cost_rate: Decimal | None = Field(default=None, ge=0, le=1)
     ca_m_rate: Decimal | None = Field(default=None, ge=0, le=1)
     marketing_rate: Decimal | None = Field(default=None, ge=0, le=1)
@@ -44,8 +38,6 @@ class ProjectSKURead(BaseModel):
     sku_id: int
     sku: SKURead
     include: bool
-    launch_year: int
-    launch_month: int
     production_cost_rate: Decimal
     ca_m_rate: Decimal
     marketing_rate: Decimal

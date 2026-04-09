@@ -9,6 +9,54 @@
 
 ## [Unreleased]
 
+### Fixed (D-13 launch lag rollback PSK → PSC)
+
+**Архитектурный фикс — launch_year/launch_month теперь живёт на
+ProjectSKUChannel, а не ProjectSKU.** Excel хранит launch month per
+(SKU × Channel) — TT/E-COM каналы запускаются раньше HM/SM/MM для
+одного и того же SKU (классические каналы для тестирования рынка,
+modern trade позже). Первая итерация (eb8426d) поместила поля на
+ProjectSKU — это блокировало корректный полный GORJI import.
+
+**Изменения:**
+- Миграция `34aad4c7c120_rollback_launch_year_month_from_psk_to_`:
+  `op.add_column('project_sku_channels', launch_year/launch_month)` +
+  `op.drop_column('project_skus', launch_year/launch_month)`. Server
+  default `1` сохранён → backward-compat. Down-миграция симметричная.
+- `models/entities.py`: 2 mapped_column перенесены с `ProjectSKU` на
+  `ProjectSKUChannel`, обновлён комментарий
+- `schemas/project_sku.py`: launch_year/month удалены из
+  Base/Update/Read
+- `schemas/project_sku_channel.py`: launch_year/month добавлены в
+  Base/Update/Read с Field(ge=1, le=10/12)
+- `services/calculation_service.py:_build_line_input`: обнуление
+  nd[t]/offtake[t] до launch периода теперь читает `psc.launch_year/
+  month` вместо `psk.*`
+- `tests/api/test_calculation.py`: 3 launch lag теста переписаны —
+  `test_launch_lag_zeros_periods_before_launch`, `_default_y1m1_no_offset`,
+  `_yearly_y4` теперь меняют `psc.launch_year` через `db_session.get
+  (ProjectSKUChannel, psc_id)`
+- `frontend/types/api.ts`: launch_year/month убраны из ProjectSKU*,
+  добавлены в ProjectSKUChannel*
+- `frontend/components/projects/bom-panel.tsx`: 2 input'а удалены
+  (вместе с локальным state launchYear/launchMonth)
+- `frontend/components/projects/channel-form.tsx`: 2 input'а
+  добавлены в bordered секцию с пояснением, добавлены в
+  `ChannelFormState`/`EMPTY_CHANNEL_FORM`/`toPscPayload`
+- `frontend/components/projects/channel-dialogs.tsx`: `pscToFormState`
+  подхватывает `psc.launch_year/launch_month`
+- `docs/TZ_VS_EXCEL_DISCREPANCIES.md` D-13: статус ✅, история и
+  финальная реализация
+- `docs/IMPLEMENTATION_PLAN.md` 4.2.1: launch lag отмечен ✅, остался
+  только полный GORJI import
+
+**Проверки:**
+- `alembic upgrade head` + downgrade -1 + upgrade head ✅
+- Backend pytest **207/207** зелёные ✅
+- Frontend `npx tsc --noEmit` → 0 ошибок ✅
+- Pipeline (engine/) не трогали — pure functions s01..s12 не знают про
+  launch lag, обнуление в service-слое достаточно
+
 ### Added (задача 4.2 — KPI экран)
 **Сводный экран результатов расчёта с async recalculate + polling:**
 

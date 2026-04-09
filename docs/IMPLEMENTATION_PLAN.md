@@ -862,17 +862,15 @@ BOM) и ChannelsTab (для каналов) без модификации — se
 
 **Sub-task 4.2.1 — полный GORJI import (Variant 2 после Discovery V1):**
 
-**Прогресс к 2026-04-08 (handoff):**
+**Прогресс к 2026-04-09:**
 - ✅ Discovery V1: SKU_1/HM работает per-line точность 1e-6 (коммит c5cc6ab)
 - ✅ Per-period BOM inflation через `inflate_series` (коммит c5cc6ab)
-- ⚠️ Launch lag добавлен на ProjectSKU в коммите eb8426d, но **архитектурно
-  неверно** — Quick check #2 показал что Excel хранит launch per
-  (SKU × Channel), TT/E-COM запускаются на 3 месяца раньше HM/SM/MM.
-- 🔧 **Текущая задача (новая сессия):** rollback launch с ProjectSKU →
-  ProjectSKUChannel (Вариант C, одобрен пользователем). Детали в
-  TZ_VS_EXCEL_DISCREPANCIES.md D-13.
-- ⏭️ После rollback: написать `import_gorji_full.py` (8 SKU × 6 каналов
-  × 43 periods, 6192 PeriodValue + financial plan, сравнение с
+- ✅ Launch lag rollback с PSK → PSC (миграция 34aad4c7c120,
+  Вариант C). 207/207 pytest, 0 tsc, миграция up/down проверена.
+  Детали в TZ_VS_EXCEL_DISCREPANCIES.md D-13.
+- ⏭️ Следующий шаг: написать `import_gorji_full.py` (8 SKU × 6 каналов
+  × 43 periods, 6192 PeriodValue + financial plan + per-channel
+  launch_year/month из DASH row 8/9 col_base+1, сравнение с
   эталонными KPI из DATA).
 
 **Структура DASH (выяснено в Quick check #2):**

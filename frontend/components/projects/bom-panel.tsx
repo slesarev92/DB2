@@ -86,8 +86,6 @@ export function BomPanel({ pskId }: BomPanelProps) {
   const [productionCostRate, setProductionCostRate] = useState("");
   const [caMRate, setCaMRate] = useState("");
   const [marketingRate, setMarketingRate] = useState("");
-  const [launchYear, setLaunchYear] = useState<number>(1);
-  const [launchMonth, setLaunchMonth] = useState<number>(1);
 
   // Загрузка ProjectSKU + BOM при смене pskId или reload
   useEffect(() => {
@@ -104,8 +102,6 @@ export function BomPanel({ pskId }: BomPanelProps) {
         setProductionCostRate(pskData.production_cost_rate);
         setCaMRate(pskData.ca_m_rate);
         setMarketingRate(pskData.marketing_rate);
-        setLaunchYear(pskData.launch_year);
-        setLaunchMonth(pskData.launch_month);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -160,8 +156,6 @@ export function BomPanel({ pskId }: BomPanelProps) {
         production_cost_rate: productionCostRate,
         ca_m_rate: caMRate,
         marketing_rate: marketingRate,
-        launch_year: launchYear,
-        launch_month: launchMonth,
       });
       reload();
     } catch (err) {
@@ -248,44 +242,6 @@ export function BomPanel({ pskId }: BomPanelProps) {
             </div>
           </div>
 
-          {/* === Launch lag (D-13) === */}
-          <div className="mt-4 grid grid-cols-1 gap-3 border-t pt-4 sm:grid-cols-3">
-            <div className="space-y-2 sm:col-span-1">
-              <p className="text-xs text-muted-foreground">
-                Launch lag — месяц старта продаж SKU. До этого периода
-                pipeline обнуляет ND/offtake (продаж нет). По умолчанию
-                Y1 Jan = с самого начала проекта.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="launch_year">Год запуска (1-10)</Label>
-              <Input
-                id="launch_year"
-                type="number"
-                min="1"
-                max="10"
-                step="1"
-                value={launchYear}
-                onChange={(e) => setLaunchYear(Number(e.target.value) || 1)}
-                onBlur={saveRates}
-                disabled={savingRates}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="launch_month">Месяц запуска (1-12)</Label>
-              <Input
-                id="launch_month"
-                type="number"
-                min="1"
-                max="12"
-                step="1"
-                value={launchMonth}
-                onChange={(e) => setLaunchMonth(Number(e.target.value) || 1)}
-                onBlur={saveRates}
-                disabled={savingRates}
-              />
-            </div>
-          </div>
         </CardContent>
       </Card>
 

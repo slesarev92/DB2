@@ -252,11 +252,13 @@ LOGISTICS_COST = LOGISTICS_COST_PER_KG × (VOLUME_LITERS × PRODUCT_DENSITY)
 
 ### D-13 — Launch lag per (SKU × Channel): Excel хранит launch month per канал, не per SKU
 
-**Статус:** Первая итерация фикса (eb8426d) поместила `launch_year/month`
-на `ProjectSKU` — **архитектурно неверно**. Quick check #2 (2026-04-08)
-обнаружил что Excel хранит launch_year/launch_month **в DASH per
-(SKU × Channel)** — TT/E-COM каналы запускаются раньше HM/SM/MM
-для одного и того же SKU.
+**Статус:** ✅ Исправлено в коммите 34aad4c7c120 (rollback миграция,
+2026-04-09). Поля `launch_year/launch_month` живут на
+`ProjectSKUChannel`, а не на `ProjectSKU`. Первая итерация (eb8426d)
+поместила их на ProjectSKU — это было архитектурно неверно. Quick check
+#2 (2026-04-08) показал что Excel хранит launch_year/launch_month
+**в DASH per (SKU × Channel)** — TT/E-COM каналы запускаются раньше
+HM/SM/MM для одного и того же SKU.
 
 **Доказательство (DASH блок 1, SKU "Gorji Цитрус Газ Пэт 0,5"):**
 ```
@@ -273,11 +275,14 @@ E-COM_OZ_Fresh  year=2024 month=11
 позже после доказательства спроса. **Launch — это свойство ВЫХОДА в
 канал, не свойство SKU.**
 
-**Текущий статус (требуется фикс):**
+**История и финальное решение:**
 - Коммит eb8426d: `ProjectSKU.launch_year + launch_month` (НЕ ТО МЕСТО)
-- Решение C принято пользователем: drop с ProjectSKU, add на
+- Вариант C одобрен пользователем: drop с ProjectSKU, add на
   ProjectSKUChannel
-- Сделано в новой сессии после context handoff
+- Реализовано: миграция `34aad4c7c120_rollback_launch_year_month_from_psk_to_`
+  drop'нула колонки на PSK и добавила на PSC с тем же `server_default=1`,
+  service `_build_line_input` теперь читает `psc.launch_year/month`,
+  schemas/types/UI перенесены с PSK на PSC. 207/207 pytest, 0 tsc.
 
 **Контекст:** Discovery V1 для SKU_1/HM показал что наш pipeline на
 **per-unit** уровне совпадает с DASH (GP/unit = 14.43 ₽ M1-M3, 13.74
@@ -308,13 +313,13 @@ E-COM_OZ_Fresh  year=2024 month=11
 (SKU 1-8, launches в Y2 Feb..Y3+), наши NPV/IRR/ROI получились бы
 **завышенными** на сумму "выручки до launch периодов".
 
-**Решение (план — будет реализовано в новой сессии):**
+**Финальная реализация (коммит 34aad4c7c120):**
 
-1. **Schema rollback + перенос:**
+1. **Schema:**
    - Drop `project_skus.launch_year + launch_month`
-   - Add `project_sku_channels.launch_year + launch_month` (Integer, NOT NULL,
-     server_default 1)
-   - Новая миграция (или rollback eb8426d + новая)
+   - Add `project_sku_channels.launch_year + launch_month` (Integer,
+     NOT NULL, server_default 1)
+   - Миграция автогенерирована, проверена upgrade/downgrade up/down
 
 2. **Service layer (`calculation_service._build_line_input`):**
    ```python
@@ -336,15 +341,21 @@ E-COM_OZ_Fresh  year=2024 month=11
    → `volume[t] = 0` → весь downstream автоматически = 0 на этих
    периодах. Чистое разделение pipeline ↔ business logic.
 
-4. **API/UI:** перенести 2 поля из `bom-panel.tsx` (где они сейчас
-   через `ProjectSKUUpdate`) в `channel-form.tsx` (через
-   `ProjectSKUChannelUpdate`). Удалить из ProjectSKU schemas.
+4. **API/UI:**
+   - Удалены 2 поля из `ProjectSKUBase/Update/Read` (Pydantic) и
+     `ProjectSKURead/Update/Create` (TS types).
+   - Добавлены в `ProjectSKUChannelBase/Update/Read` и
+     `ProjectSKUChannelRead/Update/Create`.
+   - UI: убраны 2 input'а из `bom-panel.tsx`, добавлены в
+     `channel-form.tsx` (используется в `AddChannelDialog` и
+     `EditChannelDialog`). `pscToFormState` подхватывает значения.
 
-**Тесты** (3 теста уже написаны под PSK — нужно переписать на PSC):
-- `test_launch_lag_zeros_periods_before_launch`
-- `test_launch_lag_default_y1m1_no_offset`
-- `test_launch_lag_yearly_y4`
-Все три используют `psk.launch_year = 2` — поменять на `psc.launch_year = 2`.
+**Тесты** (3 launch-lag теста переписаны с PSK на PSC):
+- `test_launch_lag_zeros_periods_before_launch` → теперь меняет
+  `psc.launch_year = 2`
+- `test_launch_lag_default_y1m1_no_offset` → без изменений (default)
+- `test_launch_lag_yearly_y4` → теперь меняет `psc.launch_year = 4`
+207/207 pytest зелёные. tsc 0 ошибок.
 
 **Обратная совместимость:** Existing project_skus.launch_year = 1
 (default), значит ничего не теряется при drop колонок (все = default).

@@ -12,6 +12,12 @@ class ProjectSKUChannelBase(BaseModel):
 
     channel_id: int
 
+    # Launch lag (D-13): по умолчанию канал активен с M1 проекта (Y1 Jan).
+    # Если задан позже — pipeline обнуляет nd/offtake до launch периода.
+    # Excel хранит per (SKU × Channel) — TT/E-COM запускаются раньше HM/SM/MM.
+    launch_year: int = Field(default=1, ge=1, le=10)
+    launch_month: int = Field(default=1, ge=1, le=12)
+
     nd_target: Decimal = Field(default=Decimal("0"), ge=0, le=1)
     nd_ramp_months: int = Field(default=12, ge=1, le=36)
     offtake_target: Decimal = Field(default=Decimal("0"), ge=0)
@@ -33,6 +39,8 @@ class ProjectSKUChannelCreate(ProjectSKUChannelBase):
 class ProjectSKUChannelUpdate(BaseModel):
     """Тело PATCH /api/psk-channels/{id}. channel_id менять нельзя."""
 
+    launch_year: int | None = Field(default=None, ge=1, le=10)
+    launch_month: int | None = Field(default=None, ge=1, le=12)
     nd_target: Decimal | None = Field(default=None, ge=0, le=1)
     nd_ramp_months: int | None = Field(default=None, ge=1, le=36)
     offtake_target: Decimal | None = Field(default=None, ge=0)
@@ -53,6 +61,9 @@ class ProjectSKUChannelRead(BaseModel):
     project_sku_id: int
     channel_id: int
     channel: ChannelRead
+
+    launch_year: int
+    launch_month: int
 
     nd_target: Decimal
     nd_ramp_months: int

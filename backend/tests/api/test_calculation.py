@@ -226,17 +226,19 @@ class TestBuildLineInputs:
     ):
         """Launch year=2 month=2 → ND/offtake[0..12]=0, [13]+=non-zero.
 
-        Проверяет launch lag (D-13): SKU launches в Y2 Feb = M14 проекта.
+        Проверяет launch lag (D-13): канал launches в Y2 Feb = M14 проекта.
         Periods 1..13 (Y1 Jan..Y2 Jan) должны быть обнулены, period 14
         (Y2 Feb) и далее — оригинальные значения из PeriodValue.
+
+        После rollback (D-13 fix): launch живёт на ProjectSKUChannel, не
+        на ProjectSKU. Excel хранит per (SKU × Channel) — TT/E-COM
+        каналы запускаются раньше HM/SM/MM для одного SKU.
         """
-        from app.models import ProjectSKU
+        project_id, scenario_id, _, psc_id = await _seed_minimal_project(db_session)
 
-        project_id, scenario_id, psk_id, _ = await _seed_minimal_project(db_session)
-
-        psk = await db_session.get(ProjectSKU, psk_id)
-        psk.launch_year = 2
-        psk.launch_month = 2
+        psc = await db_session.get(ProjectSKUChannel, psc_id)
+        psc.launch_year = 2
+        psc.launch_month = 2
         await db_session.flush()
 
         inputs = await build_line_inputs(db_session, project_id, scenario_id)
@@ -265,12 +267,11 @@ class TestBuildLineInputs:
         self, db_session: AsyncSession
     ):
         """launch_year=4 → period_number < 37 обнулён, Y4 (37) активен."""
-        from app.models import ProjectSKU
+        project_id, scenario_id, _, psc_id = await _seed_minimal_project(db_session)
 
-        project_id, scenario_id, psk_id, _ = await _seed_minimal_project(db_session)
-        psk = await db_session.get(ProjectSKU, psk_id)
-        psk.launch_year = 4
-        psk.launch_month = 1
+        psc = await db_session.get(ProjectSKUChannel, psc_id)
+        psc.launch_year = 4
+        psc.launch_month = 1
         await db_session.flush()
 
         inputs = await build_line_inputs(db_session, project_id, scenario_id)

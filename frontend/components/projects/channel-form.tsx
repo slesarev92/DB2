@@ -27,6 +27,8 @@ const NO_SEASONALITY = "__none__";
  */
 export interface ChannelFormState {
   channel_id: string;
+  launch_year: string;
+  launch_month: string;
   nd_target: string;
   nd_ramp_months: string;
   offtake_target: string;
@@ -40,6 +42,8 @@ export interface ChannelFormState {
 
 export const EMPTY_CHANNEL_FORM: ChannelFormState = {
   channel_id: "",
+  launch_year: "1",
+  launch_month: "1",
   nd_target: "0.5",
   nd_ramp_months: "12",
   offtake_target: "10",
@@ -57,6 +61,8 @@ export function toPscPayload(
 ): ProjectSKUChannelCreate {
   return {
     channel_id: Number(state.channel_id),
+    launch_year: Number(state.launch_year) || 1,
+    launch_month: Number(state.launch_month) || 1,
     nd_target: state.nd_target,
     nd_ramp_months: Number(state.nd_ramp_months),
     offtake_target: state.offtake_target,
@@ -146,6 +152,44 @@ export function ChannelForm({
             Все каналы уже привязаны к этому SKU.
           </p>
         )}
+      </div>
+
+      {/* === Launch lag (D-13): per канал, не per SKU === */}
+      <div className="rounded-md border border-dashed p-3">
+        <p className="mb-2 text-xs text-muted-foreground">
+          Launch lag — месяц старта продаж канала. До этого периода
+          pipeline обнуляет ND/offtake (продаж нет). Excel хранит per
+          (SKU × Channel) — TT/E-COM каналы обычно запускаются раньше
+          HM/SM/MM. По умолчанию Y1 Jan = с самого начала проекта.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="launch_year">Год запуска (1-10)</Label>
+            <Input
+              id="launch_year"
+              type="number"
+              min="1"
+              max="10"
+              step="1"
+              value={state.launch_year}
+              onChange={(e) => update("launch_year", e.target.value)}
+              disabled={disabled}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="launch_month">Месяц запуска (1-12)</Label>
+            <Input
+              id="launch_month"
+              type="number"
+              min="1"
+              max="12"
+              step="1"
+              value={state.launch_month}
+              onChange={(e) => update("launch_month", e.target.value)}
+              disabled={disabled}
+            />
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">

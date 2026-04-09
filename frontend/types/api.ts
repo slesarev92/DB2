@@ -90,8 +90,6 @@ export interface SKURead extends SKUBase {
 export interface ProjectSKUCreate {
   sku_id: number;
   include?: boolean;
-  launch_year?: number;
-  launch_month?: number;
   production_cost_rate?: string;
   ca_m_rate?: string;
   marketing_rate?: string;
@@ -99,8 +97,6 @@ export interface ProjectSKUCreate {
 
 export interface ProjectSKUUpdate {
   include?: boolean;
-  launch_year?: number;
-  launch_month?: number;
   production_cost_rate?: string;
   ca_m_rate?: string;
   marketing_rate?: string;
@@ -112,8 +108,6 @@ export interface ProjectSKURead {
   sku_id: number;
   sku: SKURead;
   include: boolean;
-  launch_year: number;
-  launch_month: number;
   production_cost_rate: string;
   ca_m_rate: string;
   marketing_rate: string;
@@ -170,6 +164,8 @@ export interface Channel {
 
 export interface ProjectSKUChannelCreate {
   channel_id: number;
+  launch_year?: number;
+  launch_month?: number;
   nd_target?: string;
   nd_ramp_months?: number;
   offtake_target?: string;
@@ -182,6 +178,8 @@ export interface ProjectSKUChannelCreate {
 }
 
 export interface ProjectSKUChannelUpdate {
+  launch_year?: number;
+  launch_month?: number;
   nd_target?: string;
   nd_ramp_months?: number;
   offtake_target?: string;
@@ -198,6 +196,8 @@ export interface ProjectSKUChannelRead {
   project_sku_id: number;
   channel_id: number;
   channel: Channel;
+  launch_year: number;
+  launch_month: number;
   nd_target: string;
   nd_ramp_months: number;
   offtake_target: string;
