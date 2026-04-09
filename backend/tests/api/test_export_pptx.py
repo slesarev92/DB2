@@ -252,3 +252,35 @@ class TestExportPptxEndpoint:
     async def test_unauthorized(self, client: AsyncClient):
         resp = await client.get("/api/projects/1/export/pptx")
         assert resp.status_code == 401
+
+    async def test_cyrillic_project_name_does_not_break_header(
+        self,
+        auth_client: AsyncClient,
+        db_session: AsyncSession,
+    ):
+        """Regression: проект с кириллическим названием должен экспортиться.
+
+        HTTP headers — latin-1 only (RFC 7230). Прямое filename="{name}"
+        с русским именем даёт UnicodeEncodeError. Исправлено через RFC
+        5987 filename*=UTF-8''{percent} + ASCII fallback в filename=.
+        """
+        from app.models import Project
+
+        project_id, _, _, _ = await _seed_minimal_project(db_session)
+        project = await db_session.get(Project, project_id)
+        assert project is not None
+        project.name = "Тестовый проект с кириллицей"
+        await db_session.flush()
+        await db_session.commit()
+
+        resp = await auth_client.get(
+            f"/api/projects/{project_id}/export/pptx"
+        )
+        assert resp.status_code == 200, resp.text
+        cd = resp.headers.get("content-disposition", "")
+        # ASCII fallback в filename=
+        assert "filename=" in cd
+        # RFC 5987 UTF-8 версия — кириллица percent-encoded
+        assert "filename*=UTF-8''" in cd
+        # %D0 — первый байт кириллицы в UTF-8
+        assert "%D0" in cd

@@ -261,3 +261,32 @@ class TestExportXlsxEndpoint:
     async def test_unauthorized(self, client: AsyncClient):
         resp = await client.get("/api/projects/1/export/xlsx")
         assert resp.status_code == 401
+
+    async def test_cyrillic_project_name_does_not_break_header(
+        self,
+        auth_client: AsyncClient,
+        db_session: AsyncSession,
+    ):
+        """Regression: кириллическое имя проекта не ломает Content-Disposition.
+
+        Был баг UnicodeEncodeError 'latin-1' — Python isalnum() возвращает
+        True для кириллицы, она попадала в HTTP header и рушила экспорт.
+        Исправлено через RFC 5987 filename*=UTF-8 + ASCII fallback.
+        """
+        from app.models import Project
+
+        project_id, _, _, _ = await _seed_minimal_project(db_session)
+        project = await db_session.get(Project, project_id)
+        assert project is not None
+        project.name = "Проект на русском"
+        await db_session.flush()
+        await db_session.commit()
+
+        resp = await auth_client.get(
+            f"/api/projects/{project_id}/export/xlsx"
+        )
+        assert resp.status_code == 200, resp.text
+        cd = resp.headers.get("content-disposition", "")
+        assert "filename=" in cd
+        assert "filename*=UTF-8''" in cd
+        assert "%D0" in cd

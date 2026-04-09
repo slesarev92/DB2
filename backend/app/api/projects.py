@@ -1,5 +1,6 @@
 """Projects CRUD endpoints (защищённые JWT)."""
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
@@ -7,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.db import get_db
-from app.models import User
+from app.models import Project, User
 from app.schemas.project import (
     ProjectCreate,
     ProjectListItem,
@@ -24,6 +25,39 @@ _not_found = HTTPException(
     status_code=status.HTTP_404_NOT_FOUND,
     detail="Project not found",
 )
+
+
+def _build_export_content_disposition(
+    project: Project | None, project_id: int, extension: str
+) -> str:
+    """Формирует Content-Disposition header с поддержкой UTF-8 имён проекта.
+
+    HTTP headers по RFC 7230 — latin-1 only. Если имя проекта содержит
+    не-ASCII (кириллица), прямое `filename="{name}"` падает с
+    UnicodeEncodeError при сериализации. Решение RFC 5987:
+
+        attachment; filename="ascii-fallback"; filename*=UTF-8''{percent}
+
+    Современные браузеры используют `filename*`, старые — `filename`.
+    """
+    # ASCII fallback — сохраняем только латиницу+цифры+_
+    ascii_slug = "project"
+    if project is not None:
+        ascii_slug = "".join(
+            c if (c.isascii() and c.isalnum()) else "_" for c in project.name
+        ).strip("_")[:50] or "project"
+
+    ascii_filename = f"project_{project_id}_{ascii_slug}{extension}"
+
+    # UTF-8 версия — полное имя через percent-encoding (RFC 5987).
+    utf8_name_source = project.name if project is not None else "project"
+    utf8_raw = f"project_{project_id}_{utf8_name_source}{extension}"
+    utf8_encoded = quote(utf8_raw, safe="")
+
+    return (
+        f'attachment; filename="{ascii_filename}"; '
+        f"filename*=UTF-8''{utf8_encoded}"
+    )
 
 
 @router.get("", response_model=list[ProjectListItem])
@@ -249,21 +283,16 @@ async def export_project_xlsx_endpoint(
     except ProjectNotFoundForExport:
         raise _not_found
 
-    # Slug из имени проекта для filename
     project = await project_service.get_project(session, project_id)
-    name_slug = "project"
-    if project is not None:
-        name_slug = "".join(
-            c if c.isalnum() else "_" for c in project.name
-        )[:50]
-
-    filename = f"project_{project_id}_{name_slug}.xlsx"
+    content_disposition = _build_export_content_disposition(
+        project, project_id, ".xlsx"
+    )
 
     return StreamingResponse(
         BytesIO(xlsx_bytes),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Disposition": content_disposition,
             "Content-Length": str(len(xlsx_bytes)),
         },
     )
@@ -309,19 +338,15 @@ async def export_project_pptx_endpoint(
         raise _not_found
 
     project = await project_service.get_project(session, project_id)
-    name_slug = "project"
-    if project is not None:
-        name_slug = "".join(
-            c if c.isalnum() else "_" for c in project.name
-        )[:50]
-
-    filename = f"project_{project_id}_{name_slug}.pptx"
+    content_disposition = _build_export_content_disposition(
+        project, project_id, ".pptx"
+    )
 
     return StreamingResponse(
         BytesIO(pptx_bytes),
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Disposition": content_disposition,
             "Content-Length": str(len(pptx_bytes)),
         },
     )
