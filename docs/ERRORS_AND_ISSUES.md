@@ -25,6 +25,48 @@
 
 ## Записи
 
+## [2026-04-08] launch_year/month сначала на ProjectSKU — архитектурно неверно (Excel: per канал)
+
+**Проблема:** Discovery V1 (SKU_1/HM) показал что pipeline корректен per-line.
+Решение D-13 launch lag было первоначально реализовано как
+`ProjectSKU.launch_year + launch_month` (коммит eb8426d). Но Quick check #2
+показал что Excel хранит launch per **(SKU × Channel)**, не per SKU.
+
+**Контекст:** Quick check #2 раскрыл структуру DASH: каждый SKU блок
+содержит **6 каналов** через col_base offset (HM=2, SM=50, MM=98, TT=146,
+E-COM_OZ=194, E-COM_OZ_Fresh=242). Внутри одного SKU блока
+launch_year/launch_month в DASH **разные для разных каналов**:
+
+```
+SKU "Gorji Цитрус Газ Пэт 0,5":
+  HM              year=2025 month=2  (Y2 Feb)
+  SM              year=2025 month=2
+  MM              year=2025 month=2
+  TT              year=2024 month=11 (Y1 Nov, на 3 мес раньше HM)
+  E-COM_OZ        year=2024 month=11
+  E-COM_OZ_Fresh  year=2024 month=11
+```
+
+Бизнес-логика: классические каналы (TT, e-com) → первичная дистрибуция
+для тестирования. Modern trade (HM/SM/MM) подключаются позже.
+
+**Решение:** Вариант C (одобрен пользователем) — rollback launch с
+`ProjectSKU` на `ProjectSKUChannel`. Чистая архитектура, соответствует
+Excel. Будет реализовано в новой сессии.
+
+**Урок:** при добавлении нового поля сразу думать "это свойство ЭТОГО
+объекта или СВЯЗИ?" Launch — это свойство **выхода в канал**, не SKU.
+Quick check #1 (8 SKU блоков в DASH) дал false impression что launch
+per SKU. Только Quick check #2 (per-channel sub-blocks) выявил
+правильную структуру.
+
+**На будущее:** при моделировании поля проверять Excel **в нескольких
+точках** (не только первый блок) до commit. Я бы поймал это раньше
+если бы перед добавлением поля сравнил launch для двух разных каналов
+одного SKU.
+
+---
+
 ## [2026-04-08] ROI overflow Numeric(10,6) + test workaround вместо фикса (обнаружено в Phase 4.2)
 
 **Проблема:** Реальный Celery recalculate task падал с

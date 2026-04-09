@@ -860,9 +860,33 @@ BOM) и ChannelsTab (для каналов) без модификации — se
 
 **Зависимости:** 4.1, 2.4.
 
-**Sub-task:** 4.2.1 — полный GORJI import (Variant 2 после Discovery V1).
-Создаёт reference project из всех SKU × каналов Excel, сравнивает
-финальные KPI с эталонными NPV/IRR/ROI/Payback из DATA sheet.
+**Sub-task 4.2.1 — полный GORJI import (Variant 2 после Discovery V1):**
+
+**Прогресс к 2026-04-08 (handoff):**
+- ✅ Discovery V1: SKU_1/HM работает per-line точность 1e-6 (коммит c5cc6ab)
+- ✅ Per-period BOM inflation через `inflate_series` (коммит c5cc6ab)
+- ⚠️ Launch lag добавлен на ProjectSKU в коммите eb8426d, но **архитектурно
+  неверно** — Quick check #2 показал что Excel хранит launch per
+  (SKU × Channel), TT/E-COM запускаются на 3 месяца раньше HM/SM/MM.
+- 🔧 **Текущая задача (новая сессия):** rollback launch с ProjectSKU →
+  ProjectSKUChannel (Вариант C, одобрен пользователем). Детали в
+  TZ_VS_EXCEL_DISCREPANCIES.md D-13.
+- ⏭️ После rollback: написать `import_gorji_full.py` (8 SKU × 6 каналов
+  × 43 periods, 6192 PeriodValue + financial plan, сравнение с
+  эталонными KPI из DATA).
+
+**Структура DASH (выяснено в Quick check #2):**
+- 8 SKU блоков (rows 6, 52, 98, ..., 328 — шаг 46)
+- 6 каналов на SKU через col_base offset (CODE MENU C2..C7):
+  - HM=2, SM=50, MM=98, TT=146, E-COM_OZ=194, E-COM_OZ_Fresh=242
+- Каждый канал — 48 cols: label col_base, value col_base+1, periods col_base+2..+44
+- Per-channel параметры (launch year/month, channel margin, promo, shelf,
+  logistic) в col_base+1 на разных rows
+- Per-period nd/offtake/shelf — на period cols col_base+2..+44
+
+**Каналы в OBPPC справочнике (универсы):**
+HM=1042, SM=5567, MM=?, TT=140462, E-COM_OZ=1, E-COM_OZ_Fresh=1.
+Все 6 уже в нашем seed_reference_data.
 
 ---
 

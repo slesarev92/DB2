@@ -250,10 +250,34 @@ LOGISTICS_COST = LOGISTICS_COST_PER_KG × (VOLUME_LITERS × PRODUCT_DENSITY)
 
 ---
 
-### D-13 — Launch lag per SKU: Excel хранит ND/offtake относительно launch month каждого SKU, не относительно project start
+### D-13 — Launch lag per (SKU × Channel): Excel хранит launch month per канал, не per SKU
 
-**Статус:** ✅ Подтверждено через openpyxl анализ NET REVENUE / DASH в
-2026-04-08, фикс реализован в коммите *(этот коммит)*.
+**Статус:** Первая итерация фикса (eb8426d) поместила `launch_year/month`
+на `ProjectSKU` — **архитектурно неверно**. Quick check #2 (2026-04-08)
+обнаружил что Excel хранит launch_year/launch_month **в DASH per
+(SKU × Channel)** — TT/E-COM каналы запускаются раньше HM/SM/MM
+для одного и того же SKU.
+
+**Доказательство (DASH блок 1, SKU "Gorji Цитрус Газ Пэт 0,5"):**
+```
+HM              year=2025 month=2  ← Y2 Feb (modern trade)
+SM              year=2025 month=2
+MM              year=2025 month=2
+TT              year=2024 month=11 ← Y1 Nov (раньше HM на 3 мес)
+E-COM_OZ        year=2024 month=11
+E-COM_OZ_Fresh  year=2024 month=11
+```
+
+**Бизнес-логика:** классические каналы (TT, e-com) дают первичную
+дистрибуцию для тестирования рынка, modern trade (HM/SM/MM) подключаются
+позже после доказательства спроса. **Launch — это свойство ВЫХОДА в
+канал, не свойство SKU.**
+
+**Текущий статус (требуется фикс):**
+- Коммит eb8426d: `ProjectSKU.launch_year + launch_month` (НЕ ТО МЕСТО)
+- Решение C принято пользователем: drop с ProjectSKU, add на
+  ProjectSKUChannel
+- Сделано в новой сессии после context handoff
 
 **Контекст:** Discovery V1 для SKU_1/HM показал что наш pipeline на
 **per-unit** уровне совпадает с DASH (GP/unit = 14.43 ₽ M1-M3, 13.74
@@ -284,21 +308,20 @@ LOGISTICS_COST = LOGISTICS_COST_PER_KG × (VOLUME_LITERS × PRODUCT_DENSITY)
 (SKU 1-8, launches в Y2 Feb..Y3+), наши NPV/IRR/ROI получились бы
 **завышенными** на сумму "выручки до launch периодов".
 
-**Решение:**
+**Решение (план — будет реализовано в новой сессии):**
 
-1. **Schema:** добавлены два поля в `project_skus`:
-   - `launch_year: int 1..10` (server_default 1)
-   - `launch_month: int 1..12` (server_default 1)
-   - Миграция `a5aeae3eb4bb_add_project_sku_launch_year_month`
-   - Default Y1 Jan = "с самого начала проекта", existing rows не
-     меняют поведение.
+1. **Schema rollback + перенос:**
+   - Drop `project_skus.launch_year + launch_month`
+   - Add `project_sku_channels.launch_year + launch_month` (Integer, NOT NULL,
+     server_default 1)
+   - Новая миграция (или rollback eb8426d + новая)
 
 2. **Service layer (`calculation_service._build_line_input`):**
    ```python
-   if psk.launch_year > 3:
-       launch_period_number = 36 + (psk.launch_year - 3)
+   if psc.launch_year > 3:
+       launch_period_number = 36 + (psc.launch_year - 3)
    else:
-       launch_period_number = (psk.launch_year - 1) * 12 + psk.launch_month
+       launch_period_number = (psc.launch_year - 1) * 12 + psc.launch_month
    for i, period in enumerate(sorted_periods):
        if period.period_number < launch_period_number:
            nd_arr[i] = 0.0
@@ -313,27 +336,43 @@ LOGISTICS_COST = LOGISTICS_COST_PER_KG × (VOLUME_LITERS × PRODUCT_DENSITY)
    → `volume[t] = 0` → весь downstream автоматически = 0 на этих
    периодах. Чистое разделение pipeline ↔ business logic.
 
-4. **API/UI:** ProjectSKURead/Update схемы расширены, форма в табе
-   "SKU и BOM" `bom-panel.tsx` получила 2 input'а (launch_year/month)
-   рядом с rates editor.
+4. **API/UI:** перенести 2 поля из `bom-panel.tsx` (где они сейчас
+   через `ProjectSKUUpdate`) в `channel-form.tsx` (через
+   `ProjectSKUChannelUpdate`). Удалить из ProjectSKU schemas.
 
-**Тесты** (3 новых в test_calculation.py):
-- `test_launch_lag_zeros_periods_before_launch` — Y2/Feb (M14):
-  ND/offtake[0..12] = 0, [13]+ = original predict ramp values
-- `test_launch_lag_default_y1m1_no_offset` — Y1/Jan: нет обнуления,
-  M1 = original (backward-compat для существующих проектов)
-- `test_launch_lag_yearly_y4` — Y4 (period_number=37): M1..M36 = 0,
-  Y4 = первый non-zero
+**Тесты** (3 теста уже написаны под PSK — нужно переписать на PSC):
+- `test_launch_lag_zeros_periods_before_launch`
+- `test_launch_lag_default_y1m1_no_offset`
+- `test_launch_lag_yearly_y4`
+Все три используют `psk.launch_year = 2` — поменять на `psc.launch_year = 2`.
 
-**Обратная совместимость:** Все существующие 204 теста продолжают
-проходить. Existing проекты в БД получают launch_year=1 launch_month=1
-через server_default → behavior не меняется.
+**Обратная совместимость:** Existing project_skus.launch_year = 1
+(default), значит ничего не теряется при drop колонок (все = default).
+existing project_sku_channels.launch_year получают server_default 1
+после миграции → backward-compat сохранён.
 
 **Что это означает для GORJI reference (4.2.1):**
-Импорт-скрипт сможет читать DASH row 8/9 launch_year/launch_month
-для каждого SKU блока и сохранять в `ProjectSKU.launch_year/month`.
-Discovery V2 (полный 8 SKU × 6 каналов) даст реалистичные NPV/IRR/ROI
-которые можно сравнить с эталоном из DATA sheet.
+Импорт-скрипт после rollback сможет читать DASH **row 8/9 col_base+1**
+для каждого канала каждого SKU блока (6 каналов × 8 SKU = 48 значений
+launch_year/month) и сохранять per ProjectSKUChannel. Discovery V2
+(полный 8 SKU × 6 каналов) даст реалистичные NPV/IRR/ROI учитывая
+что каждый канал launches в свой месяц.
+
+**Структура DASH (выяснено в Quick check #2 после первой итерации D-13):**
+- Каждый SKU блок занимает 46 rows (rows 6, 52, 98, ..., 328 для 8 SKU)
+- Внутри блока — 6 каналов через col_base offset:
+  - HM: col_base=2, SM=50, MM=98, TT=146, E-COM_OZ=194, E-COM_OZ_Fresh=242
+- Каждый канал занимает 48 cols (label col_base + value cols col_base+1 +
+  43 period cols col_base+2..col_base+44)
+- Per-channel параметры: launch_year (menu+2), launch_month (menu+3),
+  channel margin (menu+21), promo discount (menu+22), promo share (menu+23),
+  shelf_price_reg (menu+24), logistic (menu+34)
+- Per-channel per-period: nd (row menu+19, cols col_base+2..+44),
+  offtake (row menu+20), shelf_price (row menu+24)
+- Material/Package cost: row menu+30/31 col_base+2..+44 (per period с инфляцией)
+- ProjectSKU rates (production_cost_rate, ca_m_rate, marketing_rate) тоже
+  per канал в DASH! (rows menu+32, 35, 36 col_base+2). Нужно проверить —
+  возможно одинаковы, но архитектурно могут отличаться
 
 ---
 
