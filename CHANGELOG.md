@@ -9,6 +9,93 @@
 
 ## [Unreleased]
 
+### Added (задача 5.3 — Экспорт PDF, 2026-04-09)
+
+**Backend:** pdf_exporter.py на базе WeasyPrint 63 + Jinja2 template.
+Endpoint `GET /api/projects/{id}/export/pdf`. 11 новых тестов.
+**Frontend:** кнопка «Скачать PDF» в results-tab, `downloadProjectPdf`.
+
+**Зависимости:**
+- `weasyprint>=63.0,<64.0` + `jinja2>=3.1.0,<4.0.0` в requirements.txt
+- `backend/Dockerfile`: apt-install `libpango-1.0-0`, `libpangoft2-1.0-0`,
+  `libharfbuzz0b`, `fontconfig`, `fonts-dejavu` (DejaVu Sans критичен
+  для рендера кириллицы)
+
+**Template:** `backend/app/export/templates/project_passport.html` (~450
+строк) — Jinja2 + встроенный CSS, A4 layout через `@page`, двух-
+колоночный grid через `display:table-cell`, footer с
+`counter(page) of counter(pages)`, page-break между секциями,
+status-бейджи для готовности функций (`.status-green/yellow/red`),
+`.images-row` для package images через `file://` URL.
+
+**Секции PDF (12):** титул, общая информация, концепция продукта,
+технология + R&D, валидация (5 подтестов), продуктовый микс с
+package images, финансовая модель, KPI сравнение сценариев (Y1-Y10),
+PnL по годам, стакан себестоимости + fin plan, риски + готовность
+функций, roadmap + согласующие, executive summary.
+
+**Pdf_exporter.py** переиспользует data-loading helpers из
+excel_exporter и `_load_package_images` из ppt_exporter — DRY без
+дублирования логики.
+
+**Jinja2 gotcha:** ключ `values` в context-dict'ах резолвится как
+`dict.values` method (attribute lookup приоритет над getitem).
+Переименован в `cells` для PnL rows, описано в ERRORS_AND_ISSUES.md.
+
+**Pytest.ini:** добавлен `log_cli_level = WARNING` — WeasyPrint тянет
+fontTools с очень шумным DEBUG/INFO логом при каждом рендере PDF.
+
+### Added (задача 5.2 — Экспорт PPTX, 2026-04-09)
+
+**Backend:** ppt_exporter.py на базе python-pptx 1.0, 13 слайдов.
+Endpoint `GET /api/projects/{id}/export/pptx`. 11 новых тестов.
+**Frontend:** кнопка «Скачать PPTX» в results-tab.
+
+**Зависимости:** `python-pptx>=1.0.0,<2.0.0` (MIT, pure Python) в
+requirements.txt. Backend + celery-worker rebuild.
+
+**Слайды (13):** титул с gate_label, общая информация (2-колонный
+layout), концепция, технология + rationale, валидация (таблица 5
+подтестов), продуктовый микс с **embedded package images** (через
+`slide.shapes.add_picture`, до 6 штук с подписями), макро-факторы
+финансовой модели, KPI 3×6 матрица, PnL по годам (Y1..Y10 из base
+pipeline aggregate), стакан себестоимости + CAPEX/OPEX fin plan,
+риски + готовность функций (8 depts), roadmap + approvers, executive
+summary (с fallback-текстом для Phase 7.6 AI).
+
+**Helpers:** `_add_text_box`, `_add_title`, `_add_field_block`,
+`_add_simple_table`, `_add_bullets`, `_fmt_money/pct/text`.
+Используются только стандартные python-pptx layouts (без corporate
+template, 16:9 Blank layout для всех слайдов).
+
+**Data loading** — переиспользование helpers из excel_exporter
+(`_load_project_full`, `_load_skus_with_bom`, `_load_psk_channels`,
+`_load_scenario_results`) + новый `_load_package_images` для чтения
+MediaAsset файлов с диска.
+
+### Fixed (экспорт — кириллица в Content-Disposition, 2026-04-09)
+
+**Regression fix:** XLSX/PPTX экспорт падал с UnicodeEncodeError
+`'latin-1'` на проектах с русскими названиями. Python `str.isalnum()`
+возвращает True для кириллицы, так что она проходила через `name_slug`
+и попадала в HTTP header. HTTP headers по RFC 7230 — latin-1 only.
+
+**Исправление:** общий helper `_build_export_content_disposition` в
+`app/api/projects.py` использует RFC 5987:
+```
+attachment; filename="ascii-fallback"; filename*=UTF-8''{percent}
+```
+Современные браузеры предпочитают `filename*`, старые — `filename`.
+Применён к обоим endpoint'ам (XLSX + PPTX), позже PDF.
+
+**Regression tests:** `test_cyrillic_project_name_does_not_break_header`
+в test_export_xlsx.py и test_export_pptx.py — проверяют что
+`filename*=UTF-8''` присутствует и `%D0` (первый байт кириллицы
+в UTF-8) есть в header.
+
+Баг существовал с Phase 5.1 (XLSX), проявился только сейчас при
+тестировании на реальном проекте с русским именем.
+
 ### Added (задача 5.1 — Экспорт XLSX)
 
 **Backend:** новый excel_exporter сервис + endpoint + 14 тестов.

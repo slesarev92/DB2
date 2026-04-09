@@ -1343,7 +1343,7 @@ production deploy).
 
 ---
 
-### Фаза 5 — Экспорт
+### ✅ Фаза 5 — Экспорт (закрыта 2026-04-09)
 
 #### ✅ Задача 5.1 — Экспорт XLSX (F-08)
 
@@ -1957,17 +1957,16 @@ GitHub Secrets).
 
 ### ✅ Фаза 4.5 — Контент паспорта (закрыта 2026-04-09, 4 коммита)
 
-### Фаза 5 — Экспорт (после 4.5)
+### ✅ Фаза 5 — Экспорт (закрыта 2026-04-09, 3 коммита, 278/278 pytest)
 - [x] 5.1 XLSX ✅ (2026-04-09, openpyxl 3.1, excel_exporter с 3 листами
   Вводные/PnL/KPI, GET /api/projects/{id}/export/xlsx StreamingResponse,
-  кнопка «Скачать XLSX» в ResultsTab. 14 backend тестов, 231/231 pytest,
-  0 tsc errors)
-- [x] 5.2 PPT ✅ (2026-04-09, python-pptx 1.0, ppt_exporter с 13 слайдами
-  включая content из 4.5 + embedded package images, 11 tests, 265/265 pytest)
+  кнопка «Скачать XLSX» в ResultsTab. 14 backend тестов)
+- [x] 5.2 PPTX ✅ (2026-04-09, python-pptx 1.0, ppt_exporter с 13 слайдами
+  включая content из 4.5 + embedded package images, 11 tests)
 - [x] 5.3 PDF ✅ (2026-04-09, WeasyPrint 63 + Jinja2 template, A4 с 12
-  секциями + package images + кириллица через DejaVu, 11 tests, 278/278 pytest)
-
-### ✅ Фаза 5 — Экспорт (закрыта 2026-04-09, 3 коммита)
+  секциями + package images + кириллица через DejaVu, 11 tests)
+- [x] Content-Disposition RFC 5987 fix — regression на кириллических
+  именах проекта, общий helper `_build_export_content_disposition`
 
 ### Фаза 6 — Интеграция
 - [ ] 6.1 E2E acceptance-тест

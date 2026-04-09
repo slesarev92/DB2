@@ -25,6 +25,35 @@
 
 ## Записи
 
+## [2026-04-09] Jinja2 template: `row.values` резолвится как метод dict, не как ключ (Phase 5.3)
+
+**Проблема:** При рендере PDF-шаблона `project_passport.html` для слайда
+«PnL по годам» Jinja2 падал с
+`TypeError: 'builtin_function_or_method' object is not iterable`
+на строке `{% for v in row.values %}`. Сам context передавался
+корректно: `{"label": "Net Revenue", "values": ["1 000", "2 000", ...]}`.
+
+**Контекст:** PnL строка конструируется в `_build_pnl_context` как
+dict с ключами `label` и `values` (список отформатированных строк).
+В template итерация `{% for v in row.values %}`.
+
+**Решение:** Переименовал ключ `values` в `cells` — и в context builder,
+и в template. Исправление в одном коммите вместе с smoke-тестом
+генерации PDF.
+
+**Урок:** Jinja2 attribute access (`obj.attr`) сначала пробует
+`getattr(obj, attr)`, потом fallback на `obj[attr]`. Для Python dict
+`getattr(d, 'values')` возвращает связанный метод `dict.values`, а
+не ключ `"values"` — и Jinja2 считает это успешным lookup'ом. Другие
+зарезервированные имена dict которые нельзя использовать как ключи в
+context: `keys`, `items`, `get`, `update`, `pop`, `copy`, `setdefault`,
+`clear`, `fromkeys`, `popitem`. Правило: не использовать имена методов
+Python dict как ключи в context-dict'ах для Jinja2 templates. Если
+поле семантически просится называться `values` — назвать `cells`,
+`entries`, `data` или явно обернуть в namespace-объект.
+
+---
+
 ## [2026-04-09] celery-worker не подхватывал fix `_load_seasonality_coefficients` (stale module cache)
 
 **Проблема:** После задачи 4.3 (визуальная проверка таба «Сценарии»)
