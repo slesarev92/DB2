@@ -25,6 +25,45 @@
 
 ## Записи
 
+## [2026-04-09] Docker Desktop Windows: file-level bind mount создаёт 0-byte marker на хосте (Phase 6.1)
+
+**Проблема:** При настройке GORJI Excel fixture для E2E acceptance
+теста попытался добавить в `infra/docker-compose.dev.yml` file-level
+read-only mount:
+```yaml
+- ../PASSPORT_MODEL_GORJI_2025-09-05.xlsx:/app/tests/fixtures/gorji_reference.xlsx:ro
+```
+
+Mount технически работал — внутри контейнера файл видим как 7.6 MB.
+Но Docker Desktop на Windows **создал 0-byte файл на хосте** в точке
+`backend/tests/fixtures/gorji_reference.xlsx`. `git status` подхватил
+его как untracked файл, при `git add` он попал в staged changes.
+
+**Контекст:** На нативном Linux Docker file-level bind mount работает
+иначе — точка монтирования живёт только в mount namespace контейнера,
+на хосте ничего не создаётся. Docker Desktop на Windows использует
+WSL2 backend, и файловые события проксируются через Virtiofs, что
+приводит к созданию markers на Windows FS.
+
+**Решение:** Отказался от file-level mount. Вместо этого:
+1. Оригинал `PASSPORT_MODEL_GORJI_2025-09-05.xlsx` по-прежнему в
+   корне репо (в git, ~7.6 MB)
+2. Один раз копируется в `backend/tests/fixtures/gorji_reference.xlsx`
+   через `cp` (dev setup шаг)
+3. `backend/tests/fixtures/.gitignore` исключает копию чтобы не было
+   дубля в git
+4. Обычный bind mount `../backend:/app` прокидывает файл внутрь
+   контейнера автоматически
+5. Тест находит его по пути `/app/tests/fixtures/gorji_reference.xlsx`
+
+**Урок:** Избегать file-level bind mount в compose на Windows.
+Directory-level mount — ок. Если нужен read-only файл из корня репо
+в контейнере — лучше **скопировать в bind-mounted директорию** через
+dev setup скрипт, чем прокидывать через file-level mount. Для CI
+(задача 6.2) этот вопрос не актуален — там Linux runners.
+
+---
+
 ## [2026-04-09] Jinja2 template: `row.values` резолвится как метод dict, не как ключ (Phase 5.3)
 
 **Проблема:** При рендере PDF-шаблона `project_passport.html` для слайда

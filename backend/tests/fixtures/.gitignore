@@ -1,0 +1,10 @@
+# Эталон GORJI Excel для E2E acceptance теста (Phase 6.1).
+# Файл-оригинал хранится в корне репо под именем
+# PASSPORT_MODEL_GORJI_2025-09-05.xlsx. Dev setup скопирует его сюда
+# командой:
+#
+#   cp PASSPORT_MODEL_GORJI_2025-09-05.xlsx \
+#     backend/tests/fixtures/gorji_reference.xlsx
+#
+# Не коммитим копию — один файл в git хватает.
+gorji_reference.xlsx
