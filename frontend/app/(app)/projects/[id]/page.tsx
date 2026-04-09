@@ -8,6 +8,7 @@ import { ChannelsTab } from "@/components/projects/channels-tab";
 import { FinancialPlanEditor } from "@/components/projects/financial-plan-editor";
 import { PeriodsTab } from "@/components/projects/periods-tab";
 import { ResultsTab } from "@/components/projects/results-tab";
+import { ScenariosTab } from "@/components/projects/scenarios-tab";
 import { SkusTab } from "@/components/projects/skus-tab";
 import { Button } from "@/components/ui/button";
 import {
@@ -104,6 +105,7 @@ export default function ProjectDetailPage() {
           <TabsTrigger value="channels">Каналы</TabsTrigger>
           <TabsTrigger value="periods">Периоды</TabsTrigger>
           <TabsTrigger value="results">Результаты</TabsTrigger>
+          <TabsTrigger value="scenarios">Сценарии</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4 space-y-4">
@@ -171,6 +173,10 @@ export default function ProjectDetailPage() {
 
         <TabsContent value="results" className="mt-4">
           <ResultsTab projectId={projectId} />
+        </TabsContent>
+
+        <TabsContent value="scenarios" className="mt-4">
+          <ScenariosTab projectId={projectId} />
         </TabsContent>
       </Tabs>
     </div>

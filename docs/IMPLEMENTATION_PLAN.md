@@ -937,16 +937,38 @@ HM=1042, SM=5567, MM=?, TT=140462, E-COM_OZ=1, E-COM_OZ_Fresh=1.
 
 ---
 
-#### Задача 4.3 — Сравнение сценариев (E-08)
+#### ✅ Задача 4.3 — Сравнение сценариев (E-08)
 
-**Что делаем:**
-- Таблица: строки = KPI, столбцы = Base / Conservative / Aggressive
-- Абсолютные значения + дельта к Base (₽ и %)
-- Форма настройки дельт сценариев (delta_nd, delta_offtake, delta_opex в %)
+**Что сделано:**
+- `frontend/components/projects/scenarios-tab.tsx` — новый компонент
+- Editor дельт: 3 inputs (ND, Off-take, OPEX в %) для Conservative и
+  Aggressive (Base всегда 0, disabled). pctToFraction/fractionToPct
+  helpers конвертируют между UI (%) и БД (доля).
+- Compare-таблица: 3 секции по scope (Y1-Y3, Y1-Y5, Y1-Y10). Строки —
+  NPV / IRR / ROI / Go-No-Go (только Y1-Y10). Колонки — Base / Cons /
+  Aggr с двумя cells на не-Base сценарий: абсолютное значение и Δ к Base.
+- Δ форматы: NPV в ₽ (+/−), IRR/ROI в pp (процентные пункты). %
+  Δ дополнительно показан мелким текстом.
+- Цветовая индикация: зелёный для positive Δ, красный для negative.
+- Кнопка «Применить и пересчитать»:
+  - PATCH дельт для всех не-base сценариев через `updateScenario`
+  - POST `/api/projects/{id}/recalculate` → task_id
+  - Polling `/api/tasks/{task_id}` каждую секунду до SUCCESS/FAILURE
+    или 60s timeout
+  - При успехе — refetch всех сценариев + результатов
+- Status: PENDING → STARTED → SUCCESS с локализованными сообщениями
+- Error handling: 404 на results = "Расчёт ещё не выполнен"
+- Подключён в `/projects/[id]/page.tsx` как новый Tab "Сценарии"
 
-**Критерий готовности:**
-- После изменения дельты → автоматический пересчёт Conservative/Aggressive
-- Таблица обновляется без перезагрузки
+**Backend:** не менялся. Все endpoints готовы из задач 1.6 (Scenarios
+API) и 2.4 (Celery recalculate task).
+
+**Критерий готовности:** ✅
+- После изменения дельты → PATCH + recalculate → таблица обновляется
+- 0 ошибок `npx tsc --noEmit`
+- 207/207 backend pytest зелёные
+- HTTP 200 на `/projects/1`
+- Compare-таблица показывает 3 scope × 3 scenario × KPI matrix
 
 **Зависимости:** 4.2, 1.6.
 
@@ -1329,7 +1351,12 @@ GitHub Secrets).
   для всех scope. Total FCF ratio=1.000. Max drift = 0.10%. ACCEPTANCE
   PASSED. 207/207 pytest. Коммиты bfab6b2/9e691d3/2680d01. Подробности
   в CHANGELOG.md и `docs/TZ_VS_EXCEL_DISCREPANCIES.md` D-14..D-22)
-- [ ] 4.3 Сравнение сценариев
+- [x] 4.3 Сравнение сценариев ✅ (2026-04-09, ScenariosTab с editor дельт
+  Conservative/Aggressive в % к Base + compare-таблица KPI × 3 scope с
+  абсолютными значениями и Δ к Base в ₽/% (NPV) или pp (IRR/ROI), Go/No-Go
+  badges для Y1Y10. Кнопка "Применить и пересчитать" → PATCH дельт всех
+  сценариев → POST /recalculate → polling /tasks/{id}. Backend готов из
+  1.6 + 2.4. 0 tsc errors, 207/207 pytest.)
 - [ ] 4.4 Анализ чувствительности
 
 ### Фаза 5 — Экспорт

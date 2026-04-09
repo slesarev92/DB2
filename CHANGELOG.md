@@ -9,6 +9,47 @@
 
 ## [Unreleased]
 
+### Added (задача 4.3 — Сравнение сценариев)
+
+**Frontend:** новый таб "Сценарии" в `/projects/[id]` для редактирования
+дельт Conservative/Aggressive и сравнения KPI всех 3 сценариев.
+
+- `frontend/components/projects/scenarios-tab.tsx` (новый компонент)
+- `frontend/app/(app)/projects/[id]/page.tsx`: добавлен Tab "Сценарии"
+
+**Editor дельт:**
+- 3 inputs (ND %, Off-take %, OPEX %) для каждого сценария
+- Base всегда 0 (disabled), Conservative/Aggressive editable
+- `pctToFraction` / `fractionToPct` helpers (UI ↔ БД конвертация)
+
+**Compare-таблица:**
+- 3 секции по scope: Y1-Y3, Y1-Y5, Y1-Y10
+- Строки: NPV / IRR / ROI / Go-No-Go (только Y1-Y10)
+- Колонки: Base / Conservative / Aggressive
+- Каждая не-Base ячейка содержит: абсолютное значение + Δ к Base
+- Δ формат: NPV в ₽ (+/−), IRR/ROI в pp (процентные пункты)
+- % Δ дополнительно мелким текстом под абсолютной Δ
+- Цветовая индикация: зелёный для positive Δ, красный для negative
+
+**Action button:**
+- "Применить и пересчитать" → последовательно:
+  1. PATCH `/api/scenarios/{id}` для всех не-base scenarios
+  2. POST `/api/projects/{id}/recalculate` → task_id
+  3. Polling `/api/tasks/{task_id}` каждую секунду до SUCCESS/FAILURE
+     или 60s timeout
+  4. После успеха — `loadAll()` refetch всех scenarios + results
+- Локализованные статусы: "В очереди..." / "Считаем..." / "Обновляем..."
+- 404 на results → placeholder "Расчёт ещё не выполнен"
+
+**Backend:** без изменений. Все endpoints готовы из задач 1.6 (Scenarios
+API: GET/PATCH /api/scenarios/{id}, GET /api/scenarios/{id}/results) и
+2.4 (POST /api/projects/{id}/recalculate, GET /api/tasks/{id}).
+
+**Проверки:**
+- `npx tsc --noEmit` → 0 ошибок ✅
+- Backend pytest 207/207 зелёные ✅
+- Frontend full restart → GET /projects/1 → HTTP 200 ✅
+
 ### Fixed (4.2.1 — Y1Y3 gap closure, D-19 revised + D-22)
 
 **После D-21 commit (drift Y1Y10 -0.7%) Y1Y3 drift +43% признан критичным
