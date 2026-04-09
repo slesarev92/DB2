@@ -860,38 +860,67 @@ BOM) и ChannelsTab (для каналов) без модификации — se
 
 **Зависимости:** 4.1, 2.4.
 
-**Sub-task 4.2.1 — полный GORJI import (Variant 2 после Discovery V1):**
+**✅ Sub-task 4.2.1 — полный GORJI import + Excel parity (закрыто 2026-04-09)**
 
-**Прогресс к 2026-04-09 — ✅ ЗАКРЫТО:**
-- ✅ Discovery V1: SKU_1/HM работает per-line точность 1e-6 (коммит c5cc6ab)
-- ✅ Per-period BOM inflation через `inflate_series` (коммит c5cc6ab)
-- ✅ Launch lag rollback с PSK → PSC (миграция 34aad4c7c120,
-  Вариант C). 207/207 pytest, 0 tsc, миграция up/down проверена.
-- ✅ **Discovery V2: полный GORJI Excel импорт + Excel parity**
-  - `scripts/import_gorji_full.py` (~700 строк): 1 проект, 8 SKU,
-    8 ProjectSKU, 48 ProjectSKUChannel, 6192 PeriodValue, 10
-    ProjectFinancialPlan записей
-  - **6 расхождений найдены и исправлены (D-14..D-21):**
-    - D-14: yearly volume × 12 в s01_volume (pipeline bug)
-    - D-15: DASH cells absolute, не relative (proven через Y4 vol точное совпадение)
-    - D-16: per-period material+package в PeriodValue (D-16 fix calc_service)
-    - D-17: per-period shelf_price (уже работало через PeriodValue)
-    - D-18: per-period logistics в pipeline (PipelineInput tuple)
-    - D-19: production -15% — намеренное Excel поведение для SKU 7-8
-    - D-20: per-period channel_margin/promo в pipeline (PipelineInput tuple)
-    - D-21: copacking Y1=2025 launch costs (импорт добавляет в opex)
-    - Plus: WTR seasonality parser fix (формат `{"months": [12]}`)
-  - **Acceptance результат (финальный после Y1Y3 closure):**
-    - **NPV Y1Y3 = −11,593,314 ₽ vs Excel −11,593,312 ₽ → drift −0.00%**
-    - **NPV Y1Y5 = 27,278,267 ₽ vs Excel 27,251,350 ₽ → drift +0.10%**
-    - **NPV Y1Y10 = 80,009,976 ₽ vs Excel 79,983,059 ₽ → drift +0.03%**
-    - **IRR Y1Y3 = −60.97% (exact), Y1Y5 = +0.06%, Y1Y10 = +0.04%**
-    - Payback simple/discounted exact для всех scope
-    - Volume / Material / Production / Logistics — точно match Excel
-    - Total FCF ratio = 1.000
-  - **Max drift по всем scope = 0.10%. ACCEPTANCE PASSED.**
-  - 207/207 pytest зелёные после всех architectural changes (D-14..D-22)
-  - Подробности: TZ_VS_EXCEL_DISCREPANCIES.md D-14..D-22 + CHANGELOG.md
+Запуск-цепочка:
+1. Discovery V1 (коммит c5cc6ab): SKU_1/HM per-line точность 1e-6
+2. D-13 launch lag rollback PSK → PSC (миграция 34aad4c7c120)
+3. Discovery V2: полный 8 SKU × 6 каналов × 43 period import через
+   `scripts/import_gorji_full.py` (~750 строк, 6192 PeriodValue +
+   10 ProjectFinancialPlan)
+4. **8 архитектурных расхождений найдены и исправлены (D-14..D-22)**:
+   - **D-14**: yearly volume × 12 в `s01_volume` (pipeline bug,
+     коммит bfab6b2)
+   - **D-15**: DASH cells absolute, не relative (опровержение
+     гипотезы — через точное совпадение Volume Y4 без shift'а)
+   - **D-16**: per-period material+package в `PeriodValue` из DASH
+     cells (Excel custom inflation, не воспроизводим стандартным
+     `inflate_series`)
+   - **D-17**: per-period shelf_price — уже работало через существующий
+     `PeriodValue.values["shelf_price"]` механизм
+   - **D-18**: per-period logistics в pipeline (`PipelineInput.logistics_cost_per_kg:
+     float → tuple`, расширение `s05_contribution`)
+   - **D-19** (revised): per-period production_cost_rate в pipeline
+     (`PipelineInput.production_cost_rate: float → tuple`, расширение
+     `s03_cogs`). Excel хранит per-period в DASH row 38 cells:
+     copacking window M17-M24 = 0, остальное 0.0778
+   - **D-20**: per-period channel_margin/promo_discount/promo_share
+     в pipeline (`PipelineInput → tuples`, расширение `s02_price`).
+     Excel меняет promo_share с 1.0 (M1..M27) до 0.8 (Y4..Y10)
+   - **D-21**: copacking Y1=2025 launch costs из DATA r22 → импорт
+     добавляет в `ProjectFinancialPlan.opex`
+   - **D-22** (КРИТИЧЕСКИЙ для Y1Y3): Working Capital на годовом
+     уровне (refactor `s10_discount` — annual recompute WC/ΔWC/Tax/
+     OCF/FCF из аннуализированных NR/CM/CAPEX). Per-period s07/s08/s09
+     не удалены, но финальные annual values вычисляются в s10
+   - **Plus**: WTR seasonality parser fix (формат `{"months": [12]}`)
+
+**Финальная таблица drift (Excel parity):**
+
+| Scope | Метрика | Excel | Наш | **Drift** |
+|---|---|---|---|---|
+| **Y1Y3** | NPV | −11,593,312 ₽ | −11,593,314 ₽ | **−0.00%** |
+| **Y1Y3** | IRR | −60.97% | −60.97% | **+0.00%** |
+| **Y1Y3** | ROI | −23.43% | −23.43% | **−0.00%** |
+| **Y1Y3** | Payback s/d | 3 / НЕ ОК | 3 / None | **exact** |
+| **Y1Y5** | NPV | 27,251,350 ₽ | 27,278,267 ₽ | **+0.10%** |
+| **Y1Y5** | IRR | 64.12% | 64.16% | **+0.06%** |
+| **Y1Y5** | ROI | 67.40% | 67.45% | **+0.07%** |
+| **Y1Y5** | Payback s/d | 3 / 4 | 3 / 4 | **exact** |
+| **Y1Y10** | NPV | 79,983,059 ₽ | 80,009,976 ₽ | **+0.03%** |
+| **Y1Y10** | IRR | 78.63% | 78.66% | **+0.04%** |
+| **Y1Y10** | ROI | 158.26% | 158.29% | **+0.02%** |
+| **Y1Y10** | Payback s/d | 3 / 4 | 3 / 4 | **exact** |
+| Total | FCF | 264,770,578 ₽ | 264,817,148 ₽ | ratio 1.000 |
+
+**Max NPV drift = 0.10%. ACCEPTANCE PASSED.**
+
+Pipeline = Excel parity достигнут полностью на всех 3 горизонтах.
+Продукт корректен для Gate-решений Y1Y3/Y1Y5/Y1Y10.
+
+- 207/207 pytest зелёные после всех architectural changes (D-14..D-22)
+- Подробности: `docs/TZ_VS_EXCEL_DISCREPANCIES.md` D-14..D-22 + CHANGELOG.md
+- Коммиты: bfab6b2 (D-14), 9e691d3 (D-15..D-21), 2680d01 (D-19 revised + D-22)
 
 **Структура DASH (выяснено в Quick check #2):**
 - 8 SKU блоков (rows 6, 52, 98, ..., 328 — шаг 46)
@@ -1294,8 +1323,12 @@ GitHub Secrets).
 - [x] 4.1 AG Grid таблица периодов ✅ (2026-04-08, AG Grid v35 + новый таб «Периоды» + GET /api/periods + cellClassRules подсветка по source_type, inline PATCH, reset overrides, 196/196 pytest)
 - [x] 4.2 KPI экран ✅ (2026-04-08, ResultsTab с Go/No-Go hero + NPV/IRR/ROI/Payback/CM/EBITDA grid + кнопка Пересчитать с polling `/api/tasks/{id}` раз в 1 сек до 60с timeout, 0 tsc errors, 196/196 pytest)
 - [x] **4.2.1 Полный GORJI импорт + Excel parity** ✅ (2026-04-09,
-  Discovery V2, NPV Y1Y10 drift −0.70%, IRR +1.73%, 6 архитектурных
-  расхождений D-14..D-21 исправлены, 207/207 pytest, см. CHANGELOG)
+  Discovery V2, **8 архитектурных расхождений D-14..D-22 исправлены**.
+  Финальный drift: NPV Y1Y3=−0.00%, Y1Y5=+0.10%, Y1Y10=+0.03%.
+  IRR Y1Y3=+0.00%, Y1Y5=+0.06%, Y1Y10=+0.04%. Payback s/d точно exact
+  для всех scope. Total FCF ratio=1.000. Max drift = 0.10%. ACCEPTANCE
+  PASSED. 207/207 pytest. Коммиты bfab6b2/9e691d3/2680d01. Подробности
+  в CHANGELOG.md и `docs/TZ_VS_EXCEL_DISCREPANCIES.md` D-14..D-22)
 - [ ] 4.3 Сравнение сценариев
 - [ ] 4.4 Анализ чувствительности
 
