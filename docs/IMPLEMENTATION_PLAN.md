@@ -1003,6 +1003,175 @@ HM=1042, SM=5567, MM=?, TT=140462, E-COM_OZ=1, E-COM_OZ_Fresh=1.
 
 ---
 
+### Фаза 7 — AI-интеграция через Polza AI (post-MVP)
+
+**Цель:** добавить AI-объяснения к уже валидированным финансовым
+результатам. Не вмешивается в расчётное ядро. Стартует только после
+закрытия Фазы 6 — AI должен комментировать только проверенные числа.
+
+**Архитектурная база:** ADR-16. Polza AI как OpenAI-совместимый прокси,
+`openai` Python SDK (`AsyncOpenAI`) с `base_url=POLZA_AI_BASE_URL`.
+Дефолт `anthropic/claude-sonnet-4-6`, опция `anthropic/claude-opus-4-6`
+для критичных задач.
+
+**Принципы Фазы 7 (применимы ко всем подзадачам):**
+- AI-модуль полностью изолирован от `engine/`. Читает только
+  сохранённые `ScenarioResult` + параметры проекта.
+- Все промпты — Python-константы в `backend/app/services/ai_prompts.py`,
+  ревьюятся через PR. Никаких "промптов из БД" в MVP.
+- Output — структурированный JSON через `response_format`. Pydantic-схемы
+  на ответ. Никаких свободных текстов в API.
+- Cost monitoring обязателен: каждый вызов логируется в `ai_usage_log`,
+  месячный бюджет на проект — параметр.
+- Тесты — мок `AsyncOpenAI.chat.completions.create` через `respx` или
+  `unittest.mock.AsyncMock`. Real Polza — отдельный
+  `tests/integration/test_polza_smoke.py` c маркером `@pytest.mark.live`,
+  не в CI.
+- Если Polza недоступен — graceful degradation: AI-фичи возвращают
+  placeholder "AI-комментарий недоступен", расчёт работает как обычно.
+
+---
+
+#### Задача 7.1 — Polza AI client + базовая инфраструктура
+
+**Что делаем:**
+- `backend/requirements.txt`: добавить `openai>=1.0`
+- `backend/app/core/config.py`: `POLZA_AI_API_KEY`, `POLZA_AI_BASE_URL`
+- `backend/app/services/ai_service.py` (новый): тонкий wrapper над
+  `AsyncOpenAI(api_key=..., base_url=...)`. Singleton клиент через
+  `lru_cache`. Метод `complete_json(system_prompt, user_prompt, schema,
+  *, model="anthropic/claude-sonnet-4-6")` возвращает валидированный
+  Pydantic-объект.
+- `backend/app/services/ai_prompts.py` (новый): пустой модуль, заполняется
+  в задачах 7.2..7.4
+- `backend/tests/services/test_ai_service.py`: моки `AsyncOpenAI`,
+  проверка retry/error handling, проверка fallback при недоступности.
+- Новая таблица `ai_usage_log` через миграцию (создаётся в 7.1, но
+  заполняется только в 7.5 когда логирование включится в endpoint'ы).
+  Колонки: `id, project_id, endpoint, model, prompt_tokens,
+  completion_tokens, cost_rub, latency_ms, error, created_at`.
+
+**Критерий готовности:**
+- `pytest tests/services/test_ai_service.py` зелёные (минимум 5 кейсов:
+  successful call, network error, invalid JSON response, schema
+  validation failure, missing API key)
+- Smoke-тест с реальным Polza (отдельный run, не в CI) проходит
+- Никакого реального ключа в репо
+
+**Зависимости:** 6.2 (CI готов, секреты POLZA_AI_API_KEY добавлены в
+GitHub Secrets).
+
+---
+
+#### Задача 7.2 — AI-объяснение KPI (NPV/IRR/Payback/Go-NoGo)
+
+**Что делаем:**
+- `backend/app/api/ai.py` (новый): `POST /api/projects/{id}/ai/explain-kpi`
+  - Body: `{ "scenario_id": int, "scope": "y1y10", "model": "default" | "complex" }`
+  - Reads: `ScenarioResult` для (scenario × scope) + project params + lines summary
+  - Returns: `AIKpiExplanationResponse` (Pydantic):
+    ```
+    {
+      "summary": str,                    # 2-3 предложения executive
+      "key_drivers": [str, ...],         # топ-3 фактора влияющих на NPV
+      "risks": [str, ...],               # 2-3 риска
+      "recommendation": "go" | "no-go" | "review",
+      "confidence": float                # 0..1
+    }
+    ```
+- Промпт в `ai_prompts.py:KPI_EXPLAIN_SYSTEM` — описывает роль (FMCG
+  финансовый аналитик), формат JSON, ограничения (не выдумывать числа,
+  опираться только на переданные данные)
+- Frontend: на `ResultsTab` добавить блок "AI-комментарий" под Go/No-Go
+  hero. Кнопка "Объяснить" → POST → отображение карточками с key_drivers
+  и risks. Селектор "Базовая модель / Углублённая (Opus)".
+- `slowapi` rate limit 10 req/min на пользователя на этот endpoint
+
+**Критерий готовности:**
+- Endpoint работает с моком в pytest (5+ кейсов)
+- На реальных GORJI данных (после 4.2.1) AI выдаёт осмысленный
+  комментарий — ручная проверка
+- В UI кнопка работает, ответ отображается, ошибки graceful
+- Cost <= 5 руб на типичный вызов (sonnet-4-6)
+
+**Зависимости:** 7.1, 4.2 (KPI экран есть), 4.2.1 (GORJI reference
+данные для ручной валидации).
+
+---
+
+#### Задача 7.3 — AI-комментарий к чувствительности (tornado interpretation)
+
+**Что делаем:**
+- `POST /api/projects/{id}/ai/explain-sensitivity`
+  - Body: `{ "scenario_id": int }`
+  - Reads: результаты sensitivity analysis из задачи 4.4 (NPV-дельты по
+    ND/offtake/shelf/COGS)
+  - Returns: `AISensitivityExplanationResponse`:
+    ```
+    {
+      "most_sensitive": str,             # параметр с макс влиянием
+      "least_sensitive": str,
+      "narrative": str,                  # 3-4 предложения интерпретации
+      "actionable_levers": [str, ...]    # что аналитик может изменить
+    }
+    ```
+- Промпт: `ai_prompts.py:SENSITIVITY_EXPLAIN_SYSTEM`
+- Frontend: блок "AI-интерпретация" под таблицей чувствительности
+
+**Критерий готовности:**
+- pytest на моках, ручная проверка на GORJI, UI работает
+
+**Зависимости:** 7.2, 4.4.
+
+---
+
+#### Задача 7.4 — AI executive summary в PPT-экспорт
+
+**Что делаем:**
+- При `POST /api/projects/{id}/export/ppt` с флагом `include_ai_summary=true`:
+  pipeline вставляет новый слайд "Executive Summary" между Титулом и
+  Макро-факторами. Контент — AI-генерация на основе всех KPI + всех
+  сценариев + чувствительности
+- Промпт: `ai_prompts.py:EXECUTIVE_SUMMARY_SYSTEM`
+- Структура слайда: заголовок, 4-5 буллетов, recommendation (Go/No-Go/Review),
+  3 ключевых числа крупно
+- Если AI недоступен — слайд пропускается, экспорт продолжает работать
+
+**Критерий готовности:**
+- PPT с AI-слайдом открывается, контент осмысленный
+- PPT без AI (флаг false) — без слайда, как было до 7.4
+- При AI failure — слайд пропускается, в логах warning
+
+**Зависимости:** 7.2, 5.2 (PPT экспорт готов).
+
+---
+
+#### Задача 7.5 — Cost monitoring + rate limiting + бюджеты
+
+**Что делаем:**
+- Включить логирование `ai_usage_log` во всех endpoint'ах из 7.2..7.4
+  (метрики: model, tokens, cost_rub, latency, error)
+- Новое поле в `Project`: `ai_budget_rub_monthly: Decimal | None`
+  (default 1000 ₽). Миграция.
+- Middleware/decorator: перед AI-вызовом проверять `SUM(cost_rub)
+  WHERE project_id=X AND created_at >= start_of_month`. Если превышен
+  бюджет — `429 Too Many Requests` с понятным сообщением "Месячный
+  AI-бюджет проекта исчерпан, обратитесь к администратору".
+- `GET /api/projects/{id}/ai/usage` — endpoint для UI: текущее
+  использование за месяц, остаток бюджета, history по дням
+- Frontend: блок "AI-бюджет" в табе "Параметры" (текущее / лимит,
+  индикатор). Поле редактирования лимита.
+- Алёрт в логи (warning) когда бюджет израсходован >80%
+
+**Критерий готовности:**
+- Симуляция превышения бюджета → 429
+- UI показывает корректный остаток
+- pytest на ai_usage_log accumulator
+
+**Зависимости:** 7.2 (есть что логировать).
+
+---
+
 ## РАЗДЕЛ 2 — Карта зависимостей (сводная)
 
 ```
@@ -1019,12 +1188,22 @@ HM=1042, SM=5567, MM=?, TT=140462, E-COM_OZ=1, E-COM_OZ_Fresh=1.
            5.1 → 5.2 → 5.3
                               ↓
                          6.1 → 6.2
+                                ↓
+                          7.1 → 7.2 → 7.3
+                                 ↓     ↓
+                                7.4 ← 5.2
+                                 ↓
+                                7.5
 ```
 
 2.1–2.5 зависят от 0.4 (seed данные).  
 3.x зависят от 1.x (API готов).  
 4.x зависят от 2.4 (расчёты работают) и 3.x (UI для ввода).  
 5.x зависят от 2.4 (данные для экспорта).
+7.x зависят от 6.2 (CI готов, секреты в GitHub Secrets).
+7.2 дополнительно от 4.2.1 (GORJI данные для ручной валидации AI).
+7.3 от 4.4 (sensitivity анализ существует).
+7.4 от 5.2 (PPT экспорт существует).
 
 ---
 
@@ -1105,3 +1284,10 @@ HM=1042, SM=5567, MM=?, TT=140462, E-COM_OZ=1, E-COM_OZ_Fresh=1.
 ### Фаза 6 — Интеграция
 - [ ] 6.1 E2E acceptance-тест
 - [ ] 6.2 GitHub Actions CI
+
+### Фаза 7 — AI-интеграция (Polza AI, post-MVP, ADR-16)
+- [ ] 7.1 Polza AI client + ai_service.py + ai_usage_log таблица
+- [ ] 7.2 AI-объяснение KPI (POST /api/projects/{id}/ai/explain-kpi)
+- [ ] 7.3 AI-комментарий чувствительности (POST .../ai/explain-sensitivity)
+- [ ] 7.4 AI executive summary slide в PPT-экспорте
+- [ ] 7.5 Cost monitoring + бюджет проекта + rate limiting
