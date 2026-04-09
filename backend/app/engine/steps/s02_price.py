@@ -1,20 +1,24 @@
 """Шаг 2 — Price waterfall и Net Revenue.
 
 Формулы (Excel: DASH rows 30-35, см. также ADR-CE-03 / D-02):
-    SHELF_PRICE_PROMO[t]    = SHELF_PRICE_REG[t] × (1 − PROMO_DISCOUNT)
-    SHELF_PRICE_WEIGHTED[t] = SHELF_PRICE_REG[t] × (1 − PROMO_SHARE)
-                              + SHELF_PRICE_PROMO[t] × PROMO_SHARE
+    SHELF_PRICE_PROMO[t]    = SHELF_PRICE_REG[t] × (1 − PROMO_DISCOUNT[t])
+    SHELF_PRICE_WEIGHTED[t] = SHELF_PRICE_REG[t] × (1 − PROMO_SHARE[t])
+                              + SHELF_PRICE_PROMO[t] × PROMO_SHARE[t]
 
     # ADR-CE-03 / D-02: VAT-стрипинг через ДЕЛЕНИЕ на (1+VAT), не умножение.
     EX_FACTORY_PRICE[t] = SHELF_PRICE_WEIGHTED[t] / (1 + VAT_RATE)
-                          × (1 − CHANNEL_MARGIN)
+                          × (1 − CHANNEL_MARGIN[t])
 
     NET_REVENUE[t] = VOLUME_UNITS[t] × EX_FACTORY_PRICE[t]
 
 ВНИМАНИЕ: формула ТЗ `× (1 − VAT_RATE)` — **неверна**. Разница для VAT=20%:
 × 0.80 vs / 1.20 = × 0.8333 (ошибка −4.17% по ex_factory). См. ADR-CE-03.
 
-Промо-скидка и promo_share — параметры канала, не зависят от периода.
+D-20: channel_margin / promo_discount / promo_share — **per-period**, не
+константы канала. GORJI снижает promo_share с 1.0 (M1..M27) до 0.8 (Y4..Y10),
+что важно для match Excel в зрелые годы. Если все periods одинаковы —
+service передаёт tuple([base]*n).
+
 `shelf_price_reg[t]` уже учитывает инфляцию по месяцам (это работа service
 при формировании input, см. D-08 + задача 2.5).
 """
@@ -31,10 +35,6 @@ def step(ctx: PipelineContext) -> PipelineContext:
         )
 
     vat_divisor = 1.0 + inp.vat_rate
-    channel_factor = 1.0 - inp.channel_margin
-    promo_factor = 1.0 - inp.promo_discount
-    promo_share = inp.promo_share
-    inv_promo_share = 1.0 - promo_share
 
     shelf_price_promo: list[float] = [0.0] * n
     shelf_price_weighted: list[float] = [0.0] * n
@@ -43,9 +43,14 @@ def step(ctx: PipelineContext) -> PipelineContext:
 
     for t in range(n):
         reg = inp.shelf_price_reg[t]
-        promo = reg * promo_factor
-        weighted = reg * inv_promo_share + promo * promo_share
-        ex_factory = (weighted / vat_divisor) * channel_factor
+        # D-20: per-period channel_margin / promo_discount / promo_share
+        cm_t = inp.channel_margin[t]
+        pd_t = inp.promo_discount[t]
+        ps_t = inp.promo_share[t]
+
+        promo = reg * (1.0 - pd_t)
+        weighted = reg * (1.0 - ps_t) + promo * ps_t
+        ex_factory = (weighted / vat_divisor) * (1.0 - cm_t)
 
         shelf_price_promo[t] = promo
         shelf_price_weighted[t] = weighted

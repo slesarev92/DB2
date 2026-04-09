@@ -173,11 +173,22 @@ async def _load_seasonality_coefficients(
         return {}
 
     raw = profile.month_coefficients or {}
-    # Поддержка двух форматов: список из 12 чисел или dict {month: coef}
+    # Поддерживаемые форматы:
+    # 1. list из 12 чисел (легаси)
+    # 2. dict {"months": [12 чисел]} — формат seed_reference_data WTR/CSD/...
+    # 3. dict {"1": coef, "2": coef, ...} — flat dict с числовыми ключами
     if isinstance(raw, list):
         return {i + 1: float(raw[i]) for i in range(min(12, len(raw)))}
     if isinstance(raw, dict):
-        return {int(k): float(v) for k, v in raw.items()}
+        # Nested format: {"months": [...]}
+        if "months" in raw and isinstance(raw["months"], list):
+            months_list = raw["months"]
+            return {i + 1: float(months_list[i]) for i in range(min(12, len(months_list)))}
+        # Flat numeric-keyed format
+        try:
+            return {int(k): float(v) for k, v in raw.items()}
+        except (ValueError, TypeError):
+            return {}
     return {}
 
 
@@ -196,7 +207,9 @@ async def _build_line_input(
     effective = await _fetch_effective_values(session, psc.id, scenario.id)
 
     # BOM unit cost: Σ(quantity × price × (1 + loss_pct)) — БАЗОВОЕ значение
-    # (на M1 до инфляции). Per-period серия строится через inflate_series ниже.
+    # (на M1 до инфляции). Per-period серия строится через inflate_series ниже,
+    # либо берётся из effective values (D-16: для GORJI Excel custom inflation
+    # logic, который не воспроизводим стандартным профилем).
     bom_rows = (
         await session.scalars(
             select(BOMItem).where(BOMItem.project_sku_id == psk.id)
@@ -213,7 +226,7 @@ async def _build_line_input(
     # Для consistency используем тот же helper из predict_service.
     from app.services.predict_service import inflate_series
 
-    bom_unit_cost_series = inflate_series(
+    bom_unit_cost_series_default = inflate_series(
         bom_unit_cost_base, sorted_periods, inflation_profile
     )
 
@@ -229,17 +242,45 @@ async def _build_line_input(
     nd_arr: list[float] = []
     offtake_arr: list[float] = []
     shelf_arr: list[float] = []
+    bom_arr: list[float] = []   # D-16: per-period bom_unit_cost
+    log_arr: list[float] = []   # D-18: per-period logistics_cost_per_kg
+    cm_arr: list[float] = []    # D-20: per-period channel_margin
+    pd_arr: list[float] = []    # D-20: per-period promo_discount
+    ps_arr: list[float] = []    # D-20: per-period promo_share
     seasonality_arr: list[float] = []
     is_monthly: list[bool] = []
     month_num: list[int | None] = []
     model_year: list[int] = []
 
-    for period in sorted_periods:
+    static_log_per_kg = float(psc.logistics_cost_per_kg)
+    static_cm = float(psc.channel_margin)
+    static_pd = float(psc.promo_discount)
+    static_ps = float(psc.promo_share)
+
+    for i, period in enumerate(sorted_periods):
         vals = effective.get(period.id, {})
         nd_arr.append(float(vals.get("nd", 0.0)))
         offtake_arr.append(float(vals.get("offtake", 0.0)))
         # shelf_price может быть в значениях, иначе берём static из PSC
         shelf_arr.append(float(vals.get("shelf_price", float(psc.shelf_price_reg))))
+
+        # D-16: bom_unit_cost из effective values если есть, иначе fallback
+        # на inflate_series от BOMItem M1 base (стандартное поведение).
+        if "bom_unit_cost" in vals:
+            bom_arr.append(float(vals["bom_unit_cost"]))
+        else:
+            bom_arr.append(float(bom_unit_cost_series_default[i]))
+
+        # D-18: logistics_cost_per_kg из effective values если есть, иначе
+        # static из PSC (текущее поведение для projects без per-period).
+        log_arr.append(float(vals.get("logistic_per_kg", static_log_per_kg)))
+
+        # D-20: channel_margin / promo_discount / promo_share per-period.
+        # Excel GORJI меняет promo_share с 1.0 (M1..M27) до 0.8 (Y4..Y10)
+        # — это влияет на ex_factory и NR на 6-8% в зрелые годы.
+        cm_arr.append(float(vals.get("channel_margin", static_cm)))
+        pd_arr.append(float(vals.get("promo_discount", static_pd)))
+        ps_arr.append(float(vals.get("promo_share", static_ps)))
 
         # Сезонность только для monthly периодов
         if period.type == PeriodType.MONTHLY and period.month_num is not None:
@@ -300,14 +341,14 @@ async def _build_line_input(
         shelf_price_reg=tuple(shelf_arr),
         seasonality=tuple(seasonality_arr),
         universe_outlets=universe,
-        channel_margin=float(psc.channel_margin),
-        promo_discount=float(psc.promo_discount),
-        promo_share=float(psc.promo_share),
+        channel_margin=tuple(cm_arr),
+        promo_discount=tuple(pd_arr),
+        promo_share=tuple(ps_arr),
         vat_rate=float(project.vat_rate),
-        bom_unit_cost=tuple(bom_unit_cost_series),
+        bom_unit_cost=tuple(bom_arr),
         production_cost_rate=float(psk.production_cost_rate),
         copacking_per_unit=0.0,  # MVP: нет поля в схеме
-        logistics_cost_per_kg=float(psc.logistics_cost_per_kg),
+        logistics_cost_per_kg=tuple(log_arr),
         sku_volume_l=float(psk.sku.volume_l) if psk.sku.volume_l else 0.0,
         ca_m_rate=float(psk.ca_m_rate),
         marketing_rate=float(psk.marketing_rate),

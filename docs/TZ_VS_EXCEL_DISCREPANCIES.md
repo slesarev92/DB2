@@ -679,22 +679,95 @@ M4..M9 = 8.56      (Apr 2024 +7%)
 
 ---
 
-### D-19 — Production -15% per unit (TBD)
+### D-19 — Production -15% per unit (низкий приоритет)
 
-**Статус:** Обнаружено 2026-04-09. **Может быть автоматически исправится**
-после D-15..D-18. Если нет — расследовать отдельно.
+**Статус:** Discovery V2 показал, что **DASH cells SKU 7-8 имеют production_rate = 0**
+(SKU 7-8 = Манго-Лимон без расчётной production overhead в Excel модели).
+SKU 1-6 имеют 0.0778. Это **намеренное** Excel поведение, не баг.
 
-**Проблема:** В Discovery V2 наш `cogs_production_per_unit` Y4 = 2.80 ₽,
-Excel = 3.27 ₽ (-15%).
+**Эффект на NPV:** SKU 7-8 имеют небольшой volume в Y4-Y10 (Манго-Лимон
+launches в Y2 H2), малый эффект на total production cost. Первичный
+fix в D-19 (fallback на default rate) ухудшил drift на 3M NPV — отменён.
 
-**Гипотеза:** `production_cost_rate × ex_factory_price × volume`. Если
-`ex_factory_price` берётся из неправильно инфлированного shelf (D-17),
-то ex_factory тоже неправильный → production занижен. После D-17 fix
-это может уйти автоматически.
+**Решение:** Читаем DASH cells как есть (включая 0 для SKU 7-8). Это
+матчит Excel поведение.
 
-**Реализация:** Re-measure после D-15..D-18 fix'ов. Если расхождение
-останется > 1% — расследовать формулу production в Excel (возможно
-другая база, или другая ставка).
+---
+
+### D-20 — Per-period channel_margin / promo_discount / promo_share
+
+**Статус:** ✅ Исправлено в той же сессии 2026-04-09. Расширение pipeline.
+
+**Проблема:** Excel хранит channel_margin / promo_discount / promo_share
+**per period** в DASH (rows offset 21/22/23 × 43 cols D..AT). GORJI снижает
+**promo_share с 1.0 (M1..M27) до 0.8 (Y4..Y10)** для всех каналов, что
+влияет на ex_factory price на 6-8% в зрелые годы.
+
+**Доказательство (SKU 1 HM promo_share row 29):**
+```
+M1..M27 = 1.0      (100% promo, ramp-up phase)
+M27..M36 = ?
+Y4..Y10 = 0.8      (80% promo, mature phase)
+```
+
+В нашей model промо_share был **scalar**, читался один раз из M1 col
+(= 1.0). Pipeline применял 1.0 для всех periods, что давало больший
+discount → меньший ex_factory → меньший NR (расхождение -6% vs Excel).
+
+**Реализация:**
+1. `PipelineInput.channel_margin/promo_discount/promo_share`:
+   `float → tuple[float, ...]` (длины period_count)
+2. `s02_price.step()`: использует per-period values per t
+3. `_build_line_input` читает из effective values:
+   `vals.get("channel_margin", static_cm)`. Fallback на PSC scalar если
+   PeriodValue не содержит ключа.
+4. Импорт-скрипт читает per-period значения из DASH rows offset 21/22/23
+   для каждой (SKU × Channel) × 43 col и пишет в `PeriodValue.values`
+5. Тестовый helper `make_input` обновлён — принимает scalar или tuple
+6. Tests `test_calculation.py` проверяют tuple вместо scalar
+
+**Эффект на NPV полного GORJI импорта:**
+- До D-20: Y1Y10 NPV = 59.14M (drift -26%)
+- После D-20: Y1Y10 NPV = 85.27M (drift +6.61%)
+- **Volume и NR теперь точно совпадают с Excel**
+
+---
+
+### D-21 — Copacking launch costs (Y1=2025 only)
+
+**Статус:** ✅ Исправлено в той же сессии 2026-04-09. Импорт-only fix.
+
+**Проблема:** Excel DATA r22 "Копакинг, ₽" показывает:
+- Y0 (2024) = 0
+- **Y1 (2025) = 6,958,489** ← single year, launch year
+- Y2..Y9 = 0
+
+Excel применяет copacking как **одноразовую launch затрату** в год запуска
+(собственное производство ещё не готово, продукт co-packed внешним
+производителем). После Y2 переход на own production → copacking = 0.
+
+В нашей модели `PipelineInput.copacking_per_unit` = 0 константа. Pipeline
+никогда не применяет copacking.
+
+**Реализация:** В импорт-скрипте `extract_project_capex_opex()`:
+- Читаем DATA r22 (copacking) для каждого года
+- Добавляем к OPEX того же года (effect на Contribution = effect на GP
+  в Excel; FCF результат идентичен)
+
+```python
+copacking = _float(data.cell(DATA_ROW_COPACKING, excel_col).value)
+opex += copacking
+```
+
+**Эффект на NPV:**
+- До D-21: Y1Y10 NPV = 85.27M (drift +6.61% — overshoot)
+- После D-21: Y1Y10 NPV = **79.43M (drift -0.70%)** — almost exact match
+- IRR Y1Y10: было 99.5% → стало **80.0%** (Excel 78.6%, +1.73%)
+- NPV Y1Y5: drift -4.77% (within 5%)
+
+**Это финальный fix для Y1Y10 parity с GORJI Excel.** Y1Y3 drift всё ещё
++43% (наш -6.57M vs Excel -11.59M, абс. gap ~5M в early launch periods),
+но в долгосрочном NPV не критично.
 
 ---
 

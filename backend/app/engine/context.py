@@ -50,11 +50,14 @@ class PipelineInput:
     shelf_price_reg: tuple[float, ...] # регулярная цена полки, ₽/unit, с инфляцией
     seasonality: tuple[float, ...]     # коэффициент сезонности для monthly, 1.0 для yearly
 
-    # --- Статические параметры канала/SKU ---
+    # --- Параметры канала/SKU ---
     universe_outlets: int           # Channel.universe_outlets
-    channel_margin: float           # ProjectSKUChannel.channel_margin (доля, 0..1)
-    promo_discount: float           # ProjectSKUChannel.promo_discount (доля, 0..1)
-    promo_share: float              # ProjectSKUChannel.promo_share (доля 0..1)
+    # Per-period: channel_margin/promo может меняться по годам в Excel
+    # (D-20: GORJI снижает promo_share с 1.0 до 0.8 в зрелые годы Y4-Y10).
+    # Длины period_count. Если custom не нужно — передавать tuple([base]*n).
+    channel_margin: tuple[float, ...]    # доля, 0..1
+    promo_discount: tuple[float, ...]    # доля, 0..1
+    promo_share: tuple[float, ...]       # доля, 0..1
 
     vat_rate: float                 # Project.vat_rate (доля)
 
@@ -70,7 +73,10 @@ class PipelineInput:
     copacking_per_unit: float       # ₽/unit. В MVP всегда 0.0 (нет поля в схеме).
 
     # --- Логистика ---
-    logistics_cost_per_kg: float    # ProjectSKUChannel.logistics_cost_per_kg, ₽/кг
+    # Per-period: длины period_count, чтобы поддерживать инфляцию на
+    # логистику (Excel DASH row 40 растёт по апрельскому/октябрьскому профилю,
+    # D-18). Если custom inflation не нужна — передавать tuple([base]*n).
+    logistics_cost_per_kg: tuple[float, ...]
     sku_volume_l: float             # SKU.volume_l, литров на единицу
 
     # --- EBITDA-компоненты (% от Net Revenue, ProjectSKU level) ---
@@ -110,6 +116,10 @@ class PipelineInput:
             ("shelf_price_reg", self.shelf_price_reg),
             ("seasonality", self.seasonality),
             ("bom_unit_cost", self.bom_unit_cost),
+            ("logistics_cost_per_kg", self.logistics_cost_per_kg),
+            ("channel_margin", self.channel_margin),
+            ("promo_discount", self.promo_discount),
+            ("promo_share", self.promo_share),
         ]:
             if len(seq) != n:
                 raise ValueError(

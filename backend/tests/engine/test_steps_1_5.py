@@ -30,8 +30,9 @@ def make_input(**overrides) -> PipelineInput:
     По умолчанию — один период, нейтральные значения, без инфляции,
     без сезонности. Переопределяй нужные поля через kwargs.
 
-    `bom_unit_cost` принимает либо float (для удобства тестов — будет
-    раскрыт в tuple длины period_count), либо tuple напрямую.
+    `bom_unit_cost` и `logistics_cost_per_kg` принимают либо float (для
+    удобства тестов — будет раскрыт в tuple длины period_count), либо
+    tuple напрямую.
     """
     n = overrides.pop("period_count", 1)
 
@@ -45,6 +46,28 @@ def make_input(**overrides) -> PipelineInput:
     else:
         bom_unit_cost = tuple(bom_override)
 
+    # Аналогично для logistics_cost_per_kg (D-18: per-period в pipeline).
+    log_override = overrides.pop("logistics_cost_per_kg", None)
+    if log_override is None:
+        log_per_kg: tuple[float, ...] = (0.0,) * n
+    elif isinstance(log_override, (int, float)):
+        log_per_kg = (float(log_override),) * n
+    else:
+        log_per_kg = tuple(log_override)
+
+    # D-20: channel_margin/promo_discount/promo_share per-period.
+    def _to_tuple(name: str, default: float) -> tuple[float, ...]:
+        v = overrides.pop(name, None)
+        if v is None:
+            return (default,) * n
+        if isinstance(v, (int, float)):
+            return (float(v),) * n
+        return tuple(v)
+
+    cm_tuple = _to_tuple("channel_margin", 0.30)
+    pd_tuple = _to_tuple("promo_discount", 0.0)
+    ps_tuple = _to_tuple("promo_share", 0.0)
+
     defaults: dict = {
         "project_sku_channel_id": 1,
         "scenario_id": 1,
@@ -57,14 +80,14 @@ def make_input(**overrides) -> PipelineInput:
         "shelf_price_reg": (100.0,) * n,
         "seasonality": (1.0,) * n,
         "universe_outlets": 1000,
-        "channel_margin": 0.30,
-        "promo_discount": 0.0,
-        "promo_share": 0.0,
+        "channel_margin": cm_tuple,
+        "promo_discount": pd_tuple,
+        "promo_share": ps_tuple,
         "vat_rate": 0.20,
         "bom_unit_cost": bom_unit_cost,
         "production_cost_rate": 0.0,
         "copacking_per_unit": 0.0,
-        "logistics_cost_per_kg": 0.0,
+        "logistics_cost_per_kg": log_per_kg,
         "sku_volume_l": 0.5,
         "ca_m_rate": 0.0,
         "marketing_rate": 0.0,
@@ -418,14 +441,14 @@ class TestPipelineSmoke:
                 shelf_price_reg=(100.0, 100.0, 100.0),
                 seasonality=(1.0, 1.0, 1.0),
                 universe_outlets=1000,
-                channel_margin=0.30,
-                promo_discount=0.0,
-                promo_share=0.0,
+                channel_margin=(0.30, 0.30, 0.30),
+                promo_discount=(0.0, 0.0, 0.0),
+                promo_share=(0.0, 0.0, 0.0),
                 vat_rate=0.20,
                 bom_unit_cost=(10.0, 10.0, 10.0),
                 production_cost_rate=0.0,
                 copacking_per_unit=0.0,
-                logistics_cost_per_kg=0.0,
+                logistics_cost_per_kg=(0.0, 0.0, 0.0),
                 sku_volume_l=0.5,
                 ca_m_rate=0.0,
                 marketing_rate=0.0,

@@ -197,7 +197,9 @@ class TestBuildLineInputs:
         assert sum(1 for x in inp.period_is_monthly if not x) == 7
         # Параметры из БД
         assert inp.universe_outlets == 822  # HM seed
-        assert inp.channel_margin == pytest.approx(0.4)
+        # D-20: channel_margin теперь tuple per-period
+        assert all(v == pytest.approx(0.4) for v in inp.channel_margin)
+        assert len(inp.channel_margin) == 43
         assert inp.vat_rate == pytest.approx(0.20)  # default Project
         assert inp.wacc == pytest.approx(0.19)
         assert inp.wc_rate == pytest.approx(0.12)

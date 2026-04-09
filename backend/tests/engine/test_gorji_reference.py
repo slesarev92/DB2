@@ -193,9 +193,9 @@ def _build_input_for_range(
     bom_per_period = tuple(
         GORJI_MATERIAL[i] + GORJI_PACKAGE[i] for i in range(start, end)
     )
-    # logistics_cost_per_kg тоже меняется по апрельской инфляции, но в нашей
-    # текущей PipelineInput модели это константа. Для теста берём первый период.
-    logistic_kg = GORJI_LOGISTIC_KG[start]
+    # logistics_cost_per_kg per-period после D-18 fix. Для этого acceptance
+    # теста используем точные DASH значения с April-инфляцией (M4+).
+    logistic_kg_series = tuple(GORJI_LOGISTIC_KG[start:end])
 
     inp = PipelineInput(
         project_sku_channel_id=1,
@@ -209,14 +209,14 @@ def _build_input_for_range(
         shelf_price_reg=tuple(GORJI_SHELF_REG[start:end]),
         seasonality=tuple(GORJI_SEASONALITY[start:end]),
         universe_outlets=GORJI_UNIVERSE_HM,
-        channel_margin=GORJI_CHANNEL_MARGIN,
-        promo_discount=GORJI_PROMO_DISCOUNT,
-        promo_share=GORJI_PROMO_SHARE,
+        channel_margin=tuple([GORJI_CHANNEL_MARGIN] * n),
+        promo_discount=tuple([GORJI_PROMO_DISCOUNT] * n),
+        promo_share=tuple([GORJI_PROMO_SHARE] * n),
         vat_rate=GORJI_VAT_RATE,
         bom_unit_cost=bom_per_period,
         production_cost_rate=GORJI_PROD_RATE,
         copacking_per_unit=0.0,
-        logistics_cost_per_kg=logistic_kg,
+        logistics_cost_per_kg=logistic_kg_series,
         sku_volume_l=GORJI_VOLUME_L,
         ca_m_rate=GORJI_CA_M_RATE,
         marketing_rate=GORJI_MARKETING_RATE,

@@ -31,14 +31,16 @@ def step(ctx: PipelineContext) -> PipelineContext:
     logistics: list[float] = [0.0] * n
     contribution: list[float] = [0.0] * n
 
-    log_per_kg = inp.logistics_cost_per_kg
     density = inp.product_density
     # project_opex может быть пустым (≈ нули по всему горизонту).
     opex = inp.project_opex if inp.project_opex else (0.0,) * n
 
     for t in range(n):
         kg = ctx.volume_liters[t] * density
-        l_cost = log_per_kg * kg
+        # D-18: per-period logistics_cost_per_kg (Excel DASH row 40 имеет
+        # custom Apr/Oct +N% inflation). PipelineInput.logistics_cost_per_kg
+        # — tuple длины period_count.
+        l_cost = inp.logistics_cost_per_kg[t] * kg
         logistics[t] = l_cost
         contribution[t] = ctx.gross_profit[t] - l_cost - opex[t]
 

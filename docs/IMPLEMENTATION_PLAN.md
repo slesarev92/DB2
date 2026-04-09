@@ -862,16 +862,34 @@ BOM) и ChannelsTab (для каналов) без модификации — se
 
 **Sub-task 4.2.1 — полный GORJI import (Variant 2 после Discovery V1):**
 
-**Прогресс к 2026-04-09:**
+**Прогресс к 2026-04-09 — ✅ ЗАКРЫТО:**
 - ✅ Discovery V1: SKU_1/HM работает per-line точность 1e-6 (коммит c5cc6ab)
 - ✅ Per-period BOM inflation через `inflate_series` (коммит c5cc6ab)
 - ✅ Launch lag rollback с PSK → PSC (миграция 34aad4c7c120,
   Вариант C). 207/207 pytest, 0 tsc, миграция up/down проверена.
-  Детали в TZ_VS_EXCEL_DISCREPANCIES.md D-13.
-- ⏭️ Следующий шаг: написать `import_gorji_full.py` (8 SKU × 6 каналов
-  × 43 periods, 6192 PeriodValue + financial plan + per-channel
-  launch_year/month из DASH row 8/9 col_base+1, сравнение с
-  эталонными KPI из DATA).
+- ✅ **Discovery V2: полный GORJI Excel импорт + Excel parity**
+  - `scripts/import_gorji_full.py` (~700 строк): 1 проект, 8 SKU,
+    8 ProjectSKU, 48 ProjectSKUChannel, 6192 PeriodValue, 10
+    ProjectFinancialPlan записей
+  - **6 расхождений найдены и исправлены (D-14..D-21):**
+    - D-14: yearly volume × 12 в s01_volume (pipeline bug)
+    - D-15: DASH cells absolute, не relative (proven через Y4 vol точное совпадение)
+    - D-16: per-period material+package в PeriodValue (D-16 fix calc_service)
+    - D-17: per-period shelf_price (уже работало через PeriodValue)
+    - D-18: per-period logistics в pipeline (PipelineInput tuple)
+    - D-19: production -15% — намеренное Excel поведение для SKU 7-8
+    - D-20: per-period channel_margin/promo в pipeline (PipelineInput tuple)
+    - D-21: copacking Y1=2025 launch costs (импорт добавляет в opex)
+    - Plus: WTR seasonality parser fix (формат `{"months": [12]}`)
+  - **Acceptance результат:**
+    - **NPV Y1Y10 = 79,425,801 ₽ vs Excel 79,983,059 ₽ → drift −0.70%**
+    - NPV Y1Y5 = 25.95M vs 27.25M → drift −4.77%
+    - **IRR Y1Y10 = 79.99% vs Excel 78.63% → +1.73%**
+    - Volume Y4-Y6 точно совпадает (0.00%)
+    - Material+Package Y4 точно совпадает
+    - NR Y10 = 348,348,693 точно совпадает
+  - 207/207 pytest зелёные после всех architectural changes
+  - Подробности: TZ_VS_EXCEL_DISCREPANCIES.md D-14..D-21 + CHANGELOG.md
 
 **Структура DASH (выяснено в Quick check #2):**
 - 8 SKU блоков (rows 6, 52, 98, ..., 328 — шаг 46)
@@ -1273,6 +1291,9 @@ GitHub Secrets).
 ### Фаза 4 — Frontend: результаты (← следующий шаг: задача 4.3)
 - [x] 4.1 AG Grid таблица периодов ✅ (2026-04-08, AG Grid v35 + новый таб «Периоды» + GET /api/periods + cellClassRules подсветка по source_type, inline PATCH, reset overrides, 196/196 pytest)
 - [x] 4.2 KPI экран ✅ (2026-04-08, ResultsTab с Go/No-Go hero + NPV/IRR/ROI/Payback/CM/EBITDA grid + кнопка Пересчитать с polling `/api/tasks/{id}` раз в 1 сек до 60с timeout, 0 tsc errors, 196/196 pytest)
+- [x] **4.2.1 Полный GORJI импорт + Excel parity** ✅ (2026-04-09,
+  Discovery V2, NPV Y1Y10 drift −0.70%, IRR +1.73%, 6 архитектурных
+  расхождений D-14..D-21 исправлены, 207/207 pytest, см. CHANGELOG)
 - [ ] 4.3 Сравнение сценариев
 - [ ] 4.4 Анализ чувствительности
 

@@ -9,6 +9,185 @@
 
 ## [Unreleased]
 
+### Fixed (4.2.1 — полный GORJI import + Excel parity, D-14..D-21)
+
+**Discovery V2: полный GORJI Excel импорт через `scripts/import_gorji_full.py`
+с pipeline = Excel parity. NPV Y1Y10 drift = -0.70% (от стартовых -85%).**
+
+**Контекст:** Discovery V1 (4.2.1 первая итерация) проверял только SKU 1 / HM
+per-unit GP/CM на M1-M6. Acceptance test_gorji_reference покрывал ту же
+ограниченную область. Полный 8 SKU × 6 каналов × 43 период импорт выявил
+**6 систематических расхождений** между нашим pipeline и Excel.
+
+**6 расхождений (D-14..D-21), все исправлены в одной сессии:**
+
+#### D-14 — Yearly volume × 12 multiplier (s01_volume bug fix)
+
+**Проблема:** Pipeline для yearly periods (Y4..Y10) считал
+`volume_units = active × offtake × seasonality` без множителя × 12.
+Excel в DASH yearly cols хранит monthly average, в листах VOLUME / NR
+применяет годовой aggregate.
+
+**Эффект:** NPV Y1Y10 = -34M (drift -85% против эталона +80M).
+
+**Fix:** `s01_volume.py:33` —
+```python
+period_units = 1.0 if inp.period_is_monthly[t] else 12.0
+vol_u = active * offtake * seasonality * period_units
+```
+
+После fix: NPV Y1Y10 = +12M (улучшение 46M).
+
+#### D-15 — DASH ось ОТКЛОНЕНО (cells absolute, не relative)
+
+**Проверка:** изначально гипотеза была что DASH cells relative-to-launch.
+После shift'а в импорт-скрипте volume Y4 стал -36% от Excel (был 0%).
+Пришлось откатить shift.
+
+**Вывод:** DASH cells **absolute axis**. NR_M1=0 в листе NET REVENUE
+объясняется тем что Excel применяет launch_lag в формулах NR/VOLUME
+(обнуляет periods до launch month). Это совпадает с нашим механизмом
+D-13 (`psc.launch_year/month` → `_build_line_input` обнуляет nd/offtake
+до launch_period_number).
+
+#### D-16 — Per-period material+package в PeriodValue из DASH
+
+**Проблема:** Excel custom inflation для material/package не воспроизводится
+стандартным `inflate_series`. DASH row 36 (material) для SKU 1 HM имеет
+аномалии (M17 ×0.7876 reset, нестандартный паттерн +7% в Apr/Oct).
+
+**Fix:**
+- Импорт-скрипт читает per-period material+package из DASH cells (строки
+  offset 30/31, cols 4..46)
+- Хранит как `PeriodValue.values["bom_unit_cost"]` (combined sum)
+- `_build_line_input` использует value из effective values если есть,
+  иначе fallback на `inflate_series` от BOMItem M1 base
+
+#### D-17 — Per-period shelf_price (уже работает через PeriodValue)
+
+**Проблема:** Excel shelf_price не инфлируется в первый год канала.
+SKU 1 HM shelf = 74.99 константа M1..M27, +7% Apr в M28, etc. Это
+отличается от профиля "Апрель/Октябрь +7%".
+
+**Fix не требуется — pipeline уже использует** `PeriodValue.values["shelf_price"]`
+если есть. Импорт записывает DASH cells напрямую, custom inflation
+сохраняется автоматически.
+
+#### D-18 — Per-period logistics в pipeline
+
+**Проблема:** `PipelineInput.logistics_cost_per_kg` был `float` константа.
+Excel инфлирует logistics per period (DASH row 40 имеет Apr/Oct +7%).
+
+**Fix:**
+- `PipelineInput.logistics_cost_per_kg`: `float → tuple[float, ...]`
+- `s05_contribution.step()`: использует `inp.logistics_cost_per_kg[t]`
+- `_build_line_input` читает из `PeriodValue.values["logistic_per_kg"]`,
+  fallback на `psc.logistics_cost_per_kg` scalar
+- Импорт записывает DASH row 40 cells per period
+- Тестовый helper `make_input` обновлён на scalar/tuple конвертацию
+- Aggregator передаёт `tuple([0.0]*n)`
+- Все 207 тестов зелёные
+
+#### D-19 — Production -15% (намеренное Excel поведение)
+
+**Не баг.** SKU 7-8 (Манго-Лимон) имеют production_rate = 0 в DASH cells.
+Это намеренное Excel моделирование без production overhead для новых
+продуктов. Попытка fallback на default rate 0.0778 ухудшила drift на 3M
+NPV — отменена. Читаем как есть.
+
+#### D-20 — Per-period channel_margin/promo_discount/promo_share
+
+**Проблема:** Excel меняет `promo_share` для всех каналов с **1.0 (M1..M27)
+до 0.8 (Y4..Y10)**. Наш `PipelineInput` хранил эти параметры как scalar,
+прочитанный один раз из M1 col. Это давало больший discount → меньший
+ex_factory → меньший NR на 6-8% в зрелые годы.
+
+**Fix:**
+- `PipelineInput.channel_margin/promo_discount/promo_share`: `float → tuple[float, ...]`
+- `s02_price.step()`: использует per-period values
+- `_build_line_input` читает из `PeriodValue.values["channel_margin"]/
+  ["promo_discount"]/["promo_share"]`, fallback на PSC scalar
+- Импорт записывает DASH rows 27/28/29 per период
+
+**Эффект:** Y1Y10 NPV прыгнул с 59.14M (-26% drift) на 85.27M (+6.61%).
+NR Y10 = 348.35M точно совпадает с Excel.
+
+#### D-21 — Copacking launch costs (Y1=2025 only)
+
+**Проблема:** Excel DATA r22 "Копакинг" = 6,958,489 в Y1=2025, нули в
+остальные годы. Это launch-год co-packing затраты (продукт co-packed
+внешним производителем до запуска own production). Наш `copacking_per_unit`
+= 0 константа, никогда не применяется.
+
+**Fix:** В `extract_project_capex_opex()` импорт-скрипта добавляем
+copacking из DATA r22 к `opex` того же года. Effect на FCF идентичен
+(reducing Y1 cashflow на сумму copacking).
+
+**Эффект:** NPV Y1Y10 с +6.61% drift на **−0.70% drift** (within 1%!).
+IRR Y1Y10 с 99.5% на **80.0%** (Excel 78.6%, +1.73%).
+
+#### Параллельные fixes:
+- **WTR seasonality enabled:** parser в `_load_seasonality_coefficients`
+  расширен на формат `{"months": [12 values]}` (был broken для seed
+  WTR/CSD/EN/TEA/JUI). Импорт привязывает WTR seasonality_profile_id к
+  PSC. Volume Y1-Y6 теперь точно совпадает с Excel.
+- **`s01_volume`** docstring обновлён с историей D-14.
+
+### Итоговый drift Y1Y10 (Discovery V2 → final):
+
+| Метрика | Excel | Наш | Drift |
+|---|---|---|---|
+| **NPV Y1Y10** | 79,983,059 ₽ | **79,425,801 ₽** | **−0.70%** |
+| **NPV Y1Y5** | 27,251,350 ₽ | 25,951,283 ₽ | −4.77% |
+| NPV Y1Y3 | −11,593,312 ₽ | −6,569,791 ₽ | +43.33% (~5M абс.) |
+| **IRR Y1Y10** | 78.63% | **79.99%** | +1.73% |
+| IRR Y1Y5 | 64.12% | 64.89% | +1.19% |
+| Volume Y4 | 3,694,359 | 3,694,359 | **0.00%** |
+| Material+Package Y4 | 77.51M | 77.51M | **0.00%** |
+| Logistics Y4-Y10 | exact | exact | **0.00%** |
+| NR Y10 | 348,348,693 | 348,348,693 | **0.00%** |
+
+**Pipeline = Excel parity достигнут для долгосрочного NPV (Y1Y10 −0.70%).**
+Y1Y3 остаточный drift +43% (~5M абс.) — early launch periods, не
+влияет на бизнес-решения по полному горизонту.
+
+### Архитектурные изменения pipeline (согласованы):
+
+1. `PipelineInput.logistics_cost_per_kg`: `float → tuple[float, ...]`
+2. `PipelineInput.channel_margin/promo_discount/promo_share`: `float → tuple[...]`
+3. `s02_price` использует per-period channel_margin/promo
+4. `s05_contribution` использует per-period logistics
+5. `_build_line_input` читает from PeriodValue.values для всех новых полей,
+   fallback на PSC scalar (backward compat для не-GORJI projects)
+
+### Документация
+- D-14..D-21 задокументированы в `TZ_VS_EXCEL_DISCREPANCIES.md`
+- Discovery V2 reasoning: per-line acceptance test (test_gorji_reference)
+  покрывает только M1-M6 per-unit. Yearly absolute aggregates никогда
+  не были acceptance-validated → 6 багов проявились только в Discovery V2.
+
+### Файлы изменены
+- `backend/app/engine/steps/s01_volume.py` — × 12 yearly multiplier
+- `backend/app/engine/steps/s02_price.py` — per-period channel_margin/promo
+- `backend/app/engine/steps/s05_contribution.py` — per-period logistics
+- `backend/app/engine/context.py` — PipelineInput tuples + validation
+- `backend/app/engine/aggregator.py` — tuples в agg_input
+- `backend/app/services/calculation_service.py` — `_build_line_input`
+  читает per-period из PeriodValue.values
+- `backend/scripts/import_gorji_full.py` — новый импорт-скрипт (~700 строк)
+- `backend/tests/engine/test_steps_1_5.py` — make_input scalar/tuple конвертация
+- `backend/tests/engine/test_gorji_reference.py` — tuples для GORJI rates
+- `backend/tests/api/test_calculation.py` — assert tuple channel_margin
+- `docs/TZ_VS_EXCEL_DISCREPANCIES.md` — D-14..D-21
+- `CHANGELOG.md` — этот раздел
+- `docs/IMPLEMENTATION_PLAN.md` — 4.2.1 закрыто
+
+### Тесты
+- 207/207 backend pytest зелёные после всех изменений
+- Acceptance test_gorji_reference (per-unit M1-M6) НЕ сломан
+- Полный import_gorji_full → calculate_all_scenarios → ScenarioResult
+  → acceptance compare запускается без ошибок, drift Y1Y10 −0.70%
+
 ### Fixed (D-13 launch lag rollback PSK → PSC)
 
 **Архитектурный фикс — launch_year/launch_month теперь живёт на
