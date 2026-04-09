@@ -733,7 +733,7 @@ BOM) и ChannelsTab (для каналов) без модификации — se
 
 ---
 
-### Фаза 4 — Frontend: результаты и анализ
+### ✅ Фаза 4 — Frontend: результаты и анализ (закрыта 2026-04-09)
 
 **Цель:** пользователь видит KPI, редактирует данные, сравнивает сценарии.
 
@@ -1390,7 +1390,7 @@ GitHub Secrets).
 - [x] 3.3 SKU и BOM ✅ (2026-04-08, sku-panel + bom-panel + add-sku-dialog в табе SKU и BOM, live COGS preview, PATCH rates on blur, E2E COGS=12.18₽ совпал)
 - [x] 3.4 Каналы ✅ (2026-04-08, channels-panel + channel-dialogs в табе Каналы, GET /api/ref-seasonality, E2E auto-fill predict 129 PeriodValue, 192/192 pytest)
 
-### Фаза 4 — Frontend: результаты (← следующий шаг: задача 4.3)
+### ✅ Фаза 4 — Frontend: результаты и анализ (закрыта 2026-04-09, 5 коммитов, 217/217 pytest)
 - [x] 4.1 AG Grid таблица периодов ✅ (2026-04-08, AG Grid v35 + новый таб «Периоды» + GET /api/periods + cellClassRules подсветка по source_type, inline PATCH, reset overrides, 196/196 pytest)
 - [x] 4.2 KPI экран ✅ (2026-04-08, ResultsTab с Go/No-Go hero + NPV/IRR/ROI/Payback/CM/EBITDA grid + кнопка Пересчитать с polling `/api/tasks/{id}` раз в 1 сек до 60с timeout, 0 tsc errors, 196/196 pytest)
 - [x] **4.2.1 Полный GORJI импорт + Excel parity** ✅ (2026-04-09,
