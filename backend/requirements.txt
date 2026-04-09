@@ -42,3 +42,7 @@ httpx>=0.27.0,<1.0.0
 # (5.1). Mature, pure Python, Apache 2.0. Используется и в read, и в write —
 # единый инструмент для всех XLSX операций в проекте.
 openpyxl>=3.1.0,<4.0.0
+# python-pptx: генерация PPTX паспорта проекта (5.2). Pure Python,
+# MIT license. Работает на standard layouts python-pptx; corporate
+# template (PASSPORT_ELEKTRA стиль) может быть добавлен позже.
+python-pptx>=1.0.0,<2.0.0

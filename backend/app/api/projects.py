@@ -267,3 +267,61 @@ async def export_project_xlsx_endpoint(
             "Content-Length": str(len(xlsx_bytes)),
         },
     )
+
+
+@router.get(
+    "/{project_id}/export/pptx",
+    responses={
+        200: {
+            "content": {
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation": {}
+            },
+            "description": "PPTX файл с 13 слайдами паспорта проекта",
+        },
+        404: {"description": "Project не найден"},
+    },
+)
+async def export_project_pptx_endpoint(
+    project_id: int,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> StreamingResponse:
+    """Экспорт проекта в PPTX (задача 5.2, F-09).
+
+    13 слайдов: титул / общая / концепция / технология / валидация /
+    продуктовый микс (с package images) / макро-факторы / KPI /
+    PnL по годам / стакан+fin plan / риски+функции / roadmap+согласующие /
+    executive summary.
+
+    Включает content fields из Фазы 4.5 + расчётные KPI/PnL (если
+    `POST /api/projects/{id}/recalculate` был выполнен). Если content
+    поля или расчёт отсутствуют — секции показывают «—» / placeholder.
+
+    Filename: `project_{id}_{name_slug}.pptx`. Stream без temp files.
+    """
+    from io import BytesIO
+    from app.export.excel_exporter import ProjectNotFoundForExport
+    from app.export.ppt_exporter import generate_project_pptx
+
+    try:
+        pptx_bytes = await generate_project_pptx(session, project_id)
+    except ProjectNotFoundForExport:
+        raise _not_found
+
+    project = await project_service.get_project(session, project_id)
+    name_slug = "project"
+    if project is not None:
+        name_slug = "".join(
+            c if c.isalnum() else "_" for c in project.name
+        )[:50]
+
+    filename = f"project_{project_id}_{name_slug}.pptx"
+
+    return StreamingResponse(
+        BytesIO(pptx_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(pptx_bytes)),
+        },
+    )

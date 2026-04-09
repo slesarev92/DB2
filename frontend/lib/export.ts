@@ -25,3 +25,23 @@ export async function downloadProjectXlsx(projectId: number): Promise<void> {
   // Освобождаем object URL после клика (через таймаут чтобы браузер успел)
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+/**
+ * Скачивает PPTX экспорт паспорта проекта (задача 5.2).
+ *
+ * Backend: GET /api/projects/{id}/export/pptx → 13 слайдов (title,
+ * content sections из 4.5, KPI, PnL, BOM, roadmap, risks, approvers,
+ * executive summary). Package images из MediaAsset embedded в слайд
+ * «Продуктовый микс».
+ */
+export async function downloadProjectPptx(projectId: number): Promise<void> {
+  const blob = await apiGetBlob(`/api/projects/${projectId}/export/pptx`);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `project_${projectId}.pptx`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

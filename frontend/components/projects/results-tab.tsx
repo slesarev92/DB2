@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import { ApiError } from "@/lib/api";
 import { getTaskStatus, recalculateProject } from "@/lib/calculation";
-import { downloadProjectXlsx } from "@/lib/export";
+import { downloadProjectPptx, downloadProjectXlsx } from "@/lib/export";
 import { formatMoney, formatPercent } from "@/lib/format";
 import {
   listProjectScenarios,
@@ -213,6 +213,20 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
     }
   }
 
+  async function handleExportPptx() {
+    setExportError(null);
+    setExporting(true);
+    try {
+      await downloadProjectPptx(projectId);
+    } catch (err) {
+      setExportError(
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка экспорта",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
+
   // --- Рендеринг ---
 
   if (error !== null) {
@@ -279,6 +293,13 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
             variant="outline"
           >
             {exporting ? "Экспорт..." : "Скачать XLSX"}
+          </Button>
+          <Button
+            onClick={handleExportPptx}
+            disabled={exporting || recalculating}
+            variant="outline"
+          >
+            {exporting ? "Экспорт..." : "Скачать PPTX"}
           </Button>
           <Button onClick={handleRecalculate} disabled={recalculating}>
             {recalculating ? "Пересчитываем..." : "Пересчитать"}

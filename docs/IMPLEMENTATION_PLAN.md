@@ -1402,23 +1402,57 @@ production deploy).
 
 ---
 
-#### Задача 5.2 — Экспорт PPT (F-09)
+#### ✅ Задача 5.2 — Экспорт PPT (F-09) (2026-04-09)
 
-**Что делаем:** `backend/app/export/ppt_exporter.py` — 9 слайдов по структуре из `Passport_Examples.pptx`:
-1. Титул (название, SKU, каналы, дата)
-2. Макро-факторы / вводные
-3–4. Сводный лист финансовых метрик
-5. Продуктовый микс
-6. Ключевые KPI
-7. Анализ чувствительности NPV
-8. Стакан себестоимости
-9. Бюджет проекта
+**Что сделано:**
+- `requirements.txt`: добавлен `python-pptx>=1.0.0,<2.0.0` (MIT, pure Python),
+  backend + celery-worker rebuild'ены
+- `backend/app/export/ppt_exporter.py` (~950 строк) — 13 слайдов:
+  1. Титул: название + gate_stage + owner + passport_date + start_date
+  2. Общая информация (2-колонный layout, 8 scalar полей)
+  3. Концепция продукта (growth_opportunity, concept_text, idea_short,
+     target_audience, replacement_target)
+  4. Технология + R&D + rationale
+  5. Результаты валидации (таблица 5 подтестов × score + notes)
+  6. Продуктовый микс: SKU таблица + **package images embedded**
+     (до 6 изображений из MediaAsset через `slide.shapes.add_picture`)
+  7. Макро-факторы финансовой модели (WACC/tax/WC/VAT/horizon/inflation)
+  8. Ключевые KPI: 3 сценария × (NPV/IRR/ROI/Payback/Go-NoGo) Y1-Y10
+  9. PnL по годам: 5 метрик (NR/CM/FCF/DCF/Cumulative) × Y1..Y10
+     из base pipeline aggregate
+  10. Стакан себестоимости (топ-10 ингредиентов) + financial plan
+      CAPEX/OPEX по годам (агрегация через period_by_id.model_year)
+  11. Риски (bullet-список) + готовность функций (таблица 8 depts)
+  12. Дорожная карта (таблица) + согласующие (таблица)
+  13. Executive summary (с fallback-текстом для Phase 7.6 AI)
+- Helpers: `_add_text_box`, `_add_title`, `_add_field_block`,
+  `_add_simple_table`, `_add_bullets`, `_fmt_money/pct/text`
+- Используются только стандартные python-pptx layouts (без corporate
+  template). 16:9, Blank layout для всех слайдов чтобы иметь полный
+  контроль позиционирования
+- Переиспользование data-loading helpers из `excel_exporter.py`
+  (`_load_project_full`, `_load_skus_with_bom`, `_load_psk_channels`,
+  `_load_scenario_results`)
+- Новый helper `_load_package_images` — читает `MediaAsset.storage_path`
+  с диска для embedding'а в слайд
+- `app/api/projects.py`: `GET /api/projects/{id}/export/pptx` →
+  StreamingResponse с правильным MIME
+- `frontend/lib/export.ts`: `downloadProjectPptx(projectId)`
+- `frontend/components/projects/results-tab.tsx`: вторая кнопка
+  «Скачать PPTX» рядом с «Скачать XLSX»
+- 11 тестов (`tests/api/test_export_pptx.py`): service-level
+  (returns_bytes / 13_slides / slide_titles / content_fields_appear_in_slides
+  с Фазы 4.5 полями / handles_empty_content_fields / 404) + endpoint-level
+  (correct_mime / valid_pptx / filename_in_disposition / 404 / 401)
 
-**Критерий готовности:**
-- PPT открывается в PowerPoint/LibreOffice без ошибок
-- Все 9 слайдов содержат данные (не пустые placeholder'ы)
+**Критерий готовности:** ✅
+- PPTX валиден (ZIP-сигнатура + парсится через python-pptx)
+- Все 13 слайдов содержат данные (или placeholder «—» если поле пусто)
+- Content fields из Phase 4.5 проявляются в слайдах
+- **265/265 pytest** (254 + 11 новых PPTX)
+- 0 tsc errors
 
-**Зависимости:** 2.4.
+**Зависимости:** 2.4, 4.5 (контент из паспорта).
 
 ---
 
@@ -1886,8 +1920,8 @@ GitHub Secrets).
   Вводные/PnL/KPI, GET /api/projects/{id}/export/xlsx StreamingResponse,
   кнопка «Скачать XLSX» в ResultsTab. 14 backend тестов, 231/231 pytest,
   0 tsc errors)
-- [ ] 5.2 PPT (с полным контентом из 4.5: text fields, function_readiness,
-  roadmap, approvers, package images)
+- [x] 5.2 PPT ✅ (2026-04-09, python-pptx 1.0, ppt_exporter с 13 слайдами
+  включая content из 4.5 + embedded package images, 11 tests, 265/265 pytest)
 - [ ] 5.3 PDF
 
 ### Фаза 6 — Интеграция
