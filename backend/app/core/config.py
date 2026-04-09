@@ -57,7 +57,12 @@ class Settings(BaseSettings):
     # Пустое значение = AI-модуль отключён, ai_service поднимает
     # AIServiceUnavailableError, endpoint'ы в 7.2..7.8 отдают placeholder.
     polza_ai_api_key: str = ""
-    polza_ai_base_url: str = "https://polza.ai/v1"
+    # ВАЖНО: URL должен быть именно `/api/v1`, не `/v1` — живой smoke-тест
+    # Phase 7.1 показал что `polza.ai/v1` возвращает HTML 404 лендинг (не
+    # JSON), и SDK падает с нечитаемой ошибкой. Верифицировано через
+    # curl-пример в polza.ai/docs/api-reference/chat/completions.md.
+    # См. ERRORS_AND_ISSUES.md "Polza AI base URL and model naming".
+    polza_ai_base_url: str = "https://polza.ai/api/v1"
     # Timeout на один Polza вызов. ADR-16 фиксирует верхний лимит
     # Polza 600 сек; 60 сек — разумный дефолт для chat completions,
     # image generation (7.8) поднимет до 300 сек локально.

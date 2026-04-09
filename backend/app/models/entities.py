@@ -650,7 +650,8 @@ class AIUsageLog(Base):
     # расходов по фичам в 7.5 (например, 'explain_kpi', 'marketing_research').
     endpoint: Mapped[str] = mapped_column(String(100), nullable=False)
     # Модель в Polza-формате "<provider>/<model_id>", например
-    # "anthropic/claude-sonnet-4-6".
+    # "anthropic/claude-sonnet-4.6" (с точкой — формат Polza, см.
+    # reference_polza_ai_gotchas memory + ERRORS_AND_ISSUES запись).
     model: Mapped[str] = mapped_column(String(100), nullable=False)
     prompt_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     completion_tokens: Mapped[int] = mapped_column(

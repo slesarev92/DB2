@@ -4,7 +4,11 @@
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
+from app.api import ai as ai_router
 from app.api import auth as auth_router
 from app.api import bom as bom_router
 from app.api import channels as channels_router
@@ -19,6 +23,7 @@ from app.api import scenarios as scenarios_router
 from app.api import skus as skus_router
 from app.api import tasks as tasks_router
 from app.core.config import settings
+from app.core.rate_limit import limiter
 
 app = FastAPI(
     title="Цифровой паспорт проекта",
@@ -28,6 +33,13 @@ app = FastAPI(
         "См. docs/ADR.md и docs/IMPLEMENTATION_PLAN.md."
     ),
 )
+
+# slowapi integration (Phase 7.2). `app.state.limiter` — конвенция
+# slowapi: Limiter ищется через request.app.state.limiter в decorator'е.
+# SlowAPIMiddleware перехватывает RateLimitExceeded → handler → 429.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -50,6 +62,7 @@ app.include_router(reference_router.router)
 app.include_router(financial_plan_router.router)
 app.include_router(media_router.router)
 app.include_router(tasks_router.router)
+app.include_router(ai_router.router)
 
 
 @app.get("/health", tags=["system"])

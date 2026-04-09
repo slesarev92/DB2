@@ -1,4 +1,4 @@
-"""Тесты Polza AI клиента (Phase 7.1).
+"""Тесты Polza AI клиента (Phase 7.1 + 7.2 tier registry).
 
 Все вызовы мокаются на уровне `AsyncOpenAI.chat.completions.create`:
 реальный Polza не дёргается (см. `tests/integration/test_polza_smoke.py`
@@ -14,9 +14,19 @@
    создании клиента, без обращения к Polza.
 6. `APITimeoutError` → `AIServiceUnavailableError` (graceful degradation).
 7. `AuthenticationError` → `AIServiceUnavailableError`.
+8. Backward compat `model=` (Phase 7.1 путь).
+
+Phase 7.2 scaffolding:
+9. `resolve_model(feature)` — дефолт из FEATURE_DEFAULT_TIER.
+10. `resolve_model(feature, tier_override)` — override работает.
+11. `complete_json(feature=...)` — резолвит модель из feature без model=.
+12. `complete_json(feature=..., tier_override=...)` — override работает.
+13. `calculate_cost` — правильная арифметика per-1k-tokens.
+14. `calculate_cost` — unknown model → Decimal("0").
 """
 from __future__ import annotations
 
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -32,8 +42,12 @@ from app.core.config import settings
 from app.services import ai_service
 from app.services.ai_service import (
     AICallResult,
+    AIFeature,
+    AIModelTier,
     AIServiceUnavailableError,
+    calculate_cost,
     complete_json,
+    resolve_model,
     reset_client_cache,
 )
 
@@ -278,3 +292,129 @@ async def test_complete_json_respects_custom_model(
     assert result.model == "anthropic/claude-opus-4.6"
     call_kwargs = _mock_openai_create.await_args.kwargs
     assert call_kwargs["model"] == "anthropic/claude-opus-4.6"
+
+
+# ============================================================
+# Phase 7.2 — Model tier registry
+# ============================================================
+
+
+def test_resolve_model_uses_feature_default_tier() -> None:
+    """`resolve_model(EXPLAIN_KPI)` возвращает модель BALANCED tier'а.
+
+    FEATURE_DEFAULT_TIER[EXPLAIN_KPI] = BALANCED = claude-sonnet-4.6.
+    Это критично: endpoint'ы получают стабильное имя модели без
+    hard-code'а и без знания tier'ов.
+    """
+    assert resolve_model(AIFeature.EXPLAIN_KPI) == "anthropic/claude-sonnet-4.6"
+    assert resolve_model(AIFeature.CONTENT_FIELD) == "anthropic/claude-haiku-4.5"
+    assert resolve_model(AIFeature.EXECUTIVE_SUMMARY) == "anthropic/claude-opus-4.6"
+
+
+def test_resolve_model_tier_override() -> None:
+    """`tier_override` перекрывает default для фичи.
+
+    UI Standard/Deep toggle: пользователь кликнул Deep → endpoint
+    передал `tier_override=HEAVY` → модель claude-opus-4.6 вместо
+    дефолтной claude-sonnet-4.6.
+    """
+    # Default — BALANCED → sonnet
+    default = resolve_model(AIFeature.EXPLAIN_KPI)
+    # Deep override — HEAVY → opus
+    override = resolve_model(AIFeature.EXPLAIN_KPI, AIModelTier.HEAVY)
+
+    assert default == "anthropic/claude-sonnet-4.6"
+    assert override == "anthropic/claude-opus-4.6"
+    assert default != override
+
+
+async def test_complete_json_accepts_feature(
+    _mock_openai_create: AsyncMock,
+) -> None:
+    """`complete_json(feature=EXPLAIN_KPI)` резолвит модель из tier registry."""
+    _mock_openai_create.return_value = _make_chat_response(
+        '{"summary": "ok", "confidence": 0.9}',
+        model="anthropic/claude-sonnet-4.6",
+    )
+
+    result = await complete_json(
+        system_prompt="sys",
+        user_prompt="usr",
+        schema=_DummyResponse,
+        feature=AIFeature.EXPLAIN_KPI,
+    )
+
+    assert result.model == "anthropic/claude-sonnet-4.6"
+    # Клиенту передана резолвленная модель, не None
+    call_kwargs = _mock_openai_create.await_args.kwargs
+    assert call_kwargs["model"] == "anthropic/claude-sonnet-4.6"
+
+
+async def test_complete_json_feature_with_tier_override(
+    _mock_openai_create: AsyncMock,
+) -> None:
+    """`tier_override=HEAVY` → opus, даже для EXPLAIN_KPI где default BALANCED."""
+    _mock_openai_create.return_value = _make_chat_response(
+        '{"summary": "deep analysis", "confidence": 0.95}',
+        model="anthropic/claude-opus-4.6",
+    )
+
+    result = await complete_json(
+        system_prompt="sys",
+        user_prompt="usr",
+        schema=_DummyResponse,
+        feature=AIFeature.EXPLAIN_KPI,
+        tier_override=AIModelTier.HEAVY,
+    )
+
+    assert result.model == "anthropic/claude-opus-4.6"
+    call_kwargs = _mock_openai_create.await_args.kwargs
+    assert call_kwargs["model"] == "anthropic/claude-opus-4.6"
+
+
+# ============================================================
+# Phase 7.2 — Pricing / cost calculation
+# ============================================================
+
+
+def test_calculate_cost_sonnet() -> None:
+    """claude-sonnet-4.6: 0.30₽/1k prompt + 1.50₽/1k completion.
+
+    2500 prompt tokens × 0.30 = 0.75₽
+    400 completion tokens × 1.50 = 0.60₽
+    ИТОГО: 1.35₽
+    """
+    cost = calculate_cost("anthropic/claude-sonnet-4.6", 2500, 400)
+    assert cost == Decimal("1.350000")
+
+
+def test_calculate_cost_haiku() -> None:
+    """claude-haiku-4.5: самый дешёвый, ~0.5₽ для типичного content-field."""
+    # 1500 prompt + 300 completion
+    cost = calculate_cost("anthropic/claude-haiku-4.5", 1500, 300)
+    # 1.5 × 0.08 + 0.3 × 0.40 = 0.12 + 0.12 = 0.24₽
+    assert cost == Decimal("0.240000")
+
+
+def test_calculate_cost_opus() -> None:
+    """claude-opus-4.6 для executive summary — дороже sonnet в 5 раз."""
+    cost = calculate_cost("anthropic/claude-opus-4.6", 3000, 800)
+    # 3 × 1.50 + 0.8 × 7.50 = 4.5 + 6.0 = 10.5₽
+    assert cost == Decimal("10.500000")
+
+
+def test_calculate_cost_unknown_model_returns_zero() -> None:
+    """Модель не в таблице → 0₽ + caller должен залогировать warning.
+
+    Conservative: мы не падаем, не угадываем цену — просто отдаём 0,
+    чтобы cost_rub в ai_usage_log был сигналом для investigation
+    (строки с 0₽ при непустых токенах = модель не в MODEL_PRICING).
+    """
+    cost = calculate_cost("openai/gpt-4.2-new-unknown", 1000, 500)
+    assert cost == Decimal("0")
+
+
+def test_calculate_cost_zero_tokens() -> None:
+    """Пограничный кейс — 0 токенов = 0₽, без ZeroDivisionError."""
+    cost = calculate_cost("anthropic/claude-sonnet-4.6", 0, 0)
+    assert cost == Decimal("0.000000")

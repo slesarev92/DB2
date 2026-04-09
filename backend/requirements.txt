@@ -62,3 +62,10 @@ jinja2>=3.1.0,<4.0.0
 # Apache-2.0. Включает встроенный retry с exponential backoff и
 # rate-limit handling — не пишем свой HTTP-клиент (см. ADR-16).
 openai>=1.54.0,<2.0.0
+
+# slowapi: rate limiting для AI endpoint'ов (Phase 7.2). Декоратор-based,
+# `@limiter.limit("10/minute")` на endpoint'ах в api/ai.py. MIT license.
+# Используется только для system-level safety net (10 req/min/user/feature);
+# cost-based лимиты (daily 100₽/user) — отдельный middleware в ai_service,
+# т.к. slowapi не умеет cost-based.
+slowapi>=0.1.9,<1.0.0
