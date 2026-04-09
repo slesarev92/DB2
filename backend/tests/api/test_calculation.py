@@ -326,6 +326,62 @@ class TestBuildLineInputs:
         # ND[M1] (start of ramp) = nd_target × 0.20 × 0.90 = 0.00018
         assert inputs[0].nd[0] == pytest.approx(0.00018, rel=1e-9)
 
+    async def test_seasonality_profile_months_format(
+        self, db_session: AsyncSession
+    ):
+        """Regression: parser должен поддерживать формат `{"months": [12]}`.
+
+        Bug найден в Discovery V2: WTR / CSD / EN / TEA / JUI seasonality
+        профили в seed_reference_data хранятся как
+        `{"month_coefficients": {"months": [12 значений]}}`. Парсер
+        `_load_seasonality_coefficients` ранее делал `int(k)` без try/except,
+        что приводило к `ValueError: invalid literal for int() with base 10:
+        'months'` при попытке использовать любой профиль из seed.
+
+        Фикс в `calculation_service._load_seasonality_coefficients` — добавлена
+        ветка для nested format `{"months": [...]}`.
+
+        Этот тест:
+        1. Создаёт проект с минимальным PSC
+        2. Привязывает реальный seed профиль "WTR" (формат с "months")
+        3. Запускает build_line_inputs → проверяет что seasonality
+           правильно применён в monthly periods
+        """
+        from app.models import RefSeasonality, ProjectSKUChannel
+
+        project_id, scenario_id, _, psc_id = await _seed_minimal_project(
+            db_session
+        )
+
+        # Привязываем WTR seasonality (seed format: {"months": [12 vals]})
+        wtr = await db_session.scalar(
+            select(RefSeasonality).where(RefSeasonality.profile_name == "WTR")
+        )
+        assert wtr is not None, "WTR seed профиль должен быть в seed_reference_data"
+        # Verify раздел формата (sanity check)
+        assert isinstance(wtr.month_coefficients, dict)
+        assert "months" in wtr.month_coefficients
+
+        psc = await db_session.get(ProjectSKUChannel, psc_id)
+        psc.seasonality_profile_id = wtr.id
+        await db_session.flush()
+
+        # build_line_inputs не должен падать с int("months") ValueError.
+        # Это главное assertion — успешный вызов.
+        inputs = await build_line_inputs(db_session, project_id, scenario_id)
+        assert len(inputs) == 1
+        inp = inputs[0]
+
+        # Дополнительно: seasonality применён к monthly periods
+        # WTR Jan = 0.876010, Feb = 0.796770, ..., июль = 1.369261, etc.
+        # M1 = период month_num=1 = январь = 0.876
+        assert inp.seasonality[0] == pytest.approx(0.876010, rel=1e-5)
+        # M7 = июль = 1.369
+        assert inp.seasonality[6] == pytest.approx(1.369261, rel=1e-5)
+        # Yearly periods Y4..Y10 — seasonality = 1.0 (контракт PipelineInput)
+        for i in range(36, 43):
+            assert inp.seasonality[i] == pytest.approx(1.0)
+
 
 # ============================================================
 # 2. calculate_and_save_scenario

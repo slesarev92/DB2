@@ -25,6 +25,69 @@
 
 ## Записи
 
+## [2026-04-09] celery-worker не подхватывал fix `_load_seasonality_coefficients` (stale module cache)
+
+**Проблема:** После задачи 4.3 (визуальная проверка таба «Сценарии»)
+пользователь увидел в pipeline ошибку
+`ValueError: invalid literal for int() with base 10: 'months'` при
+recalculate проектов с привязанной WTR seasonality.
+
+**Контекст:** Background — в Discovery V2 я уже поправил
+`_load_seasonality_coefficients` в `calculation_service.py` чтобы
+поддерживать nested format `{"months": [12 vals]}` (формат seed
+для WTR/CSD/EN/TEA/JUI). Backend pytest 207/207 проходил, GORJI
+acceptance с WTR seasonality прошёл с drift -0.70% (потом 0.10%).
+
+При визуальной проверке 4.3 пользователь нажал «Применить и
+пересчитать» на проект GORJI (привязанный WTR). Backend получил
+PATCH+POST recalculate, ответил 202 Accepted, но Celery worker
+крашнулся с `int("months")` error.
+
+**Корневая причина:** **Stale module cache в celery-worker контейнере.**
+
+`backend` контейнер запускается с `uvicorn --reload` и подхватывает
+изменения в коде через bind mount. **`celery-worker` контейнер
+такой watch-restart НЕ имеет** — Celery prefork запускает воркер один
+раз, импортирует все модули в memory, и держит их до явного restart.
+
+При editing `calculation_service.py` (например fix
+`_load_seasonality_coefficients`), backend service сразу подхватывает,
+но celery-worker продолжает использовать **старую** версию модуля,
+загруженную при старте контейнера.
+
+Pytest проходил потому что pytest запускается в **backend** контейнере,
+не в celery-worker.
+
+**Решение:**
+1. `docker compose -f infra/docker-compose.dev.yml restart celery-worker`
+   подхватил новый код. Recalculate работает.
+2. **Regression test добавлен** в `tests/api/test_calculation.py::
+   TestBuildLineInputs::test_seasonality_profile_months_format` —
+   создаёт проект, привязывает WTR seed профиль, вызывает
+   `build_line_inputs`, проверяет что seasonality правильно применён
+   к monthly periods. Если parser снова сломается, тест упадёт.
+
+**Урок:**
+- При любом изменении в `app/services/`, `app/engine/`, `app/tasks/` —
+  **обязательно** restart celery-worker, иначе recalculate использует
+  старый код. Это уже задокументировано в CLAUDE.md в разделе команды
+  разработки, но я его пропустил при D-22 commit (тогда тоже надо было
+  restart, но recalculate происходил через pytest eager mode и багов
+  не вылезло).
+- При написании тестов для service-кода, который использует JSONB
+  данные из seed — **всегда** проверять с реальным seed профилем, не
+  только синтетическим. test_calculation `_seed_minimal_project`
+  не привязывал seasonality (default None), поэтому покрытие парсера
+  было дырой.
+- При архитектурных изменениях, затрагивающих pipeline, — **прогонять
+  через реальный recalculate проект**, не только pytest.
+
+**Профилактика:** Добавить hooks в `update-config` skill чтобы при
+изменении в `backend/app/services|engine|tasks/` автоматически
+перезапускать celery-worker. Или просто помнить.
+
+---
+
 ## [2026-04-08] launch_year/month сначала на ProjectSKU — архитектурно неверно (Excel: per канал)
 
 **Проблема:** Discovery V1 (SKU_1/HM) показал что pipeline корректен per-line.
