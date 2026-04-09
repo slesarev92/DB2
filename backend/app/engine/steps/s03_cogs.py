@@ -38,13 +38,14 @@ def step(ctx: PipelineContext) -> PipelineContext:
     copacking: list[float] = [0.0] * n
     total: list[float] = [0.0] * n
 
-    rate = inp.production_cost_rate
     copack_unit = inp.copacking_per_unit
 
     for t in range(n):
         vol = ctx.volume_units[t]
         m = inp.bom_unit_cost[t] * vol
-        p = ctx.ex_factory_price[t] * rate * vol
+        # D-19: per-period production_cost_rate (Excel переключает rate
+        # по периодам — copacking window для own production downtime).
+        p = ctx.ex_factory_price[t] * inp.production_cost_rate[t] * vol
         c = copack_unit * vol
 
         material[t] = m

@@ -178,14 +178,21 @@ def extract_sku_block(wb, sku_idx: int) -> dict[str, Any]:
     }
 
     # Per-SKU rates (одинаковы для всех каналов, читаем из M1 col HM)
-    # D-19 NOTE: SKU 7-8 (Манго-Лимон) имеют production_cost_rate = 0 в
-    # DASH cells. Это **намеренно** в Excel модели — SKU 7-8 это новые
-    # продукты без расчётной production overhead в этой версии модели.
-    # Берём как есть из DASH (без fallback).
+    # D-19: production_cost_rate теперь per-period в DASH (Excel switches
+    # off rate during copacking window). Static значение в ProjectSKU
+    # остаётся как fallback для UI и проектов без per-period override.
+    # Берём максимум из ряда per-period rates как "стандартное" значение.
+    prod_rate_raw = dash.cell(base + OFFSET_PROD_RATE, hm_period_col_m1).value
+    if not prod_rate_raw:  # SKU 7-8 имеют 0 в M1 col, ищем максимум по периодам
+        max_rate = 0.0
+        for c in range(hm_period_col_m1, hm_period_col_m1 + 43):
+            v = dash.cell(base + OFFSET_PROD_RATE, c).value or 0
+            if v > max_rate:
+                max_rate = v
+        prod_rate_raw = max_rate
+
     sku_rates = {
-        "production_cost_rate": _dec(
-            dash.cell(base + OFFSET_PROD_RATE, hm_period_col_m1).value
-        ),
+        "production_cost_rate": _dec(prod_rate_raw),
         "ca_m_rate": _dec(
             dash.cell(base + OFFSET_CAM_RATE, hm_period_col_m1).value
         ),
@@ -290,6 +297,16 @@ def extract_sku_block(wb, sku_idx: int) -> dict[str, Any]:
             _float(dash.cell(base + OFFSET_PROMO_SHARE, m1_col + 36 + i).value)
             for i in range(7)
         ]
+        # D-19: production_cost_rate per-period (Excel переключает rate
+        # по периодам — copacking window для own production downtime)
+        prod_rate_monthly = [
+            _float(dash.cell(base + OFFSET_PROD_RATE, m1_col + i).value)
+            for i in range(36)
+        ]
+        prod_rate_yearly = [
+            _float(dash.cell(base + OFFSET_PROD_RATE, m1_col + 36 + i).value)
+            for i in range(7)
+        ]
 
         ch_data = {
             "code": code,
@@ -335,6 +352,8 @@ def extract_sku_block(wb, sku_idx: int) -> dict[str, Any]:
             "pd_yearly": pd_yearly,
             "ps_monthly": ps_monthly,
             "ps_yearly": ps_yearly,
+            "prod_rate_monthly": prod_rate_monthly,
+            "prod_rate_yearly": prod_rate_yearly,
         }
         channels.append(ch_data)
 
@@ -702,6 +721,7 @@ async def import_to_db(
             cm_abs = ch_data["cm_monthly"] + ch_data["cm_yearly"]
             pd_abs = ch_data["pd_monthly"] + ch_data["pd_yearly"]
             ps_abs = ch_data["ps_monthly"] + ch_data["ps_yearly"]
+            prod_rate_abs = ch_data["prod_rate_monthly"] + ch_data["prod_rate_yearly"]
 
             # Создаём PSC БЕЗ auto_fill_predict (мы пишем свои PREDICT)
             psc = await create_psk_channel(
@@ -752,6 +772,8 @@ async def import_to_db(
                             "channel_margin": cm_abs[i],
                             "promo_discount": pd_abs[i],
                             "promo_share": ps_abs[i],
+                            # D-19: production_cost_rate per-period
+                            "production_cost_rate": prod_rate_abs[i],
                         },
                     )
                     session.add(pv)

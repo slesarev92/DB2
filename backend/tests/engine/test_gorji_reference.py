@@ -214,7 +214,7 @@ def _build_input_for_range(
         promo_share=tuple([GORJI_PROMO_SHARE] * n),
         vat_rate=GORJI_VAT_RATE,
         bom_unit_cost=bom_per_period,
-        production_cost_rate=GORJI_PROD_RATE,
+        production_cost_rate=tuple([GORJI_PROD_RATE] * n),
         copacking_per_unit=0.0,
         logistics_cost_per_kg=logistic_kg_series,
         sku_volume_l=GORJI_VOLUME_L,

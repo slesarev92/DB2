@@ -67,6 +67,7 @@ def make_input(**overrides) -> PipelineInput:
     cm_tuple = _to_tuple("channel_margin", 0.30)
     pd_tuple = _to_tuple("promo_discount", 0.0)
     ps_tuple = _to_tuple("promo_share", 0.0)
+    prod_rate_tuple = _to_tuple("production_cost_rate", 0.0)
 
     defaults: dict = {
         "project_sku_channel_id": 1,
@@ -85,7 +86,7 @@ def make_input(**overrides) -> PipelineInput:
         "promo_share": ps_tuple,
         "vat_rate": 0.20,
         "bom_unit_cost": bom_unit_cost,
-        "production_cost_rate": 0.0,
+        "production_cost_rate": prod_rate_tuple,
         "copacking_per_unit": 0.0,
         "logistics_cost_per_kg": log_per_kg,
         "sku_volume_l": 0.5,
@@ -446,7 +447,7 @@ class TestPipelineSmoke:
                 promo_share=(0.0, 0.0, 0.0),
                 vat_rate=0.20,
                 bom_unit_cost=(10.0, 10.0, 10.0),
-                production_cost_rate=0.0,
+                production_cost_rate=(0.0, 0.0, 0.0),
                 copacking_per_unit=0.0,
                 logistics_cost_per_kg=(0.0, 0.0, 0.0),
                 sku_volume_l=0.5,

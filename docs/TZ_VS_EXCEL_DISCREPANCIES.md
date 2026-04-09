@@ -679,18 +679,119 @@ M4..M9 = 8.56      (Apr 2024 +7%)
 
 ---
 
-### D-19 — Production -15% per unit (низкий приоритет)
+### D-19 — Per-period production_cost_rate (revised)
 
-**Статус:** Discovery V2 показал, что **DASH cells SKU 7-8 имеют production_rate = 0**
-(SKU 7-8 = Манго-Лимон без расчётной production overhead в Excel модели).
-SKU 1-6 имеют 0.0778. Это **намеренное** Excel поведение, не баг.
+**Статус:** ✅ Исправлено финально 2026-04-09. Расширение pipeline.
 
-**Эффект на NPV:** SKU 7-8 имеют небольшой volume в Y4-Y10 (Манго-Лимон
-launches в Y2 H2), малый эффект на total production cost. Первичный
-fix в D-19 (fallback на default rate) ухудшил drift на 3M NPV — отменён.
+**Проблема (углублённая после Y1Y3 investigation):** Excel хранит
+`production_cost_rate` **per period** в DASH row 38 cols D..AT. Для
+SKU 1 HM rate = 0.0778 в M1..M16 и M25..Y10, но **0 в M17..M24** —
+**copacking window** (own production downtime). Для SKU 7-8 rate = 0
+до M24, потом 0.08 от M25.
 
-**Решение:** Читаем DASH cells как есть (включая 0 для SKU 7-8). Это
-матчит Excel поведение.
+Наш `PipelineInput.production_cost_rate` был `float` константа,
+прочитанный один раз из M1 col HM. Эффект:
+- SKU 1-6: применяли 0.0778 в periods M17-M24 (где Excel = 0) → переплата
+- SKU 7-8: применяли 0 на все periods (где Excel = 0.08 от M25) → недоплата
+- Net эффект: Y2 production у нас 2.94M vs Excel 0.246M (наш в 12x больше),
+  Y3-Y10 production у нас стабильно -10% от Excel
+
+**Доказательство (DASH SKU 1 HM row 38):**
+```
+M1..M16  = 0.0778  (own production)
+M17..M24 = 0       (copacking window — внешнее производство)
+M25..Y10 = 0.0778  (own production resumed)
+```
+
+**Реализация:**
+1. `PipelineInput.production_cost_rate`: `float → tuple[float, ...]`
+2. `s03_cogs.step()`: использует `inp.production_cost_rate[t]` per period
+3. `_build_line_input` читает из `PeriodValue.values["production_cost_rate"]`,
+   fallback на `psk.production_cost_rate` scalar
+4. Импорт-скрипт читает DASH row 38 cells per период per канал и пишет
+   в `PeriodValue.values`. Static `psk.production_cost_rate` = max из ряда
+   (для UI/fallback)
+5. Тестовый helper `make_input` обновлён — scalar/tuple конвертация
+6. test_gorji_reference обновлён на tuple
+
+**Эффект на NPV:**
+- До D-19 (revised): Y1Y10 NPV = 79.43M (drift -0.7%, но Y3-Y10 production
+  understated)
+- После D-19 (revised): Y3-Y10 production = exactly Excel
+- Y3 GP exact match: 42,380,591 vs Excel 42,380,597
+- Y10 GP exact match: 146,504,177 vs Excel 146,504,177
+
+---
+
+### D-22 — Working Capital на годовом уровне (Excel D-01)
+
+**Статус:** ✅ Исправлено финально 2026-04-09. Refactor s10_discount.
+
+**Проблема (КРИТИЧЕСКАЯ для Y1Y3):** Excel формула WC[year] = annual_NR[year]
+× wc_rate. Наш `s07_working_capital` использует ту же формулу, но **на
+per-period основе**: WC[t] = NR[t] × wc_rate. Для monthly periods это
+даёт 1/12 от annual scale.
+
+Sum of monthly ΔWC ≠ annual ΔWC, потому что:
+- Monthly ΔWC[t] = WC[t-1] - WC[t] = (NR[t-1] - NR[t]) × wc_rate (monthly NR diff)
+- Annual ΔWC[year] = WC[year-1] - WC[year] = (NR[year-1] - NR[year]) × wc_rate
+  (annual NR diff = sum_monthly_NR_prev - sum_monthly_NR_curr)
+
+Эти **несопоставимы по scale** (annual ≈ 12x monthly).
+
+**Доказательство (Excel DATA r38 WC vs r18 NR):**
+```
+Y0: WC=30,892   / NR=257,429    = 0.1200 ✓
+Y1: WC=4,669,923 / NR=38,916,021 = 0.1200 ✓
+...
+Y10: WC=41,801,843 / NR=348,348,693 = 0.1200 ✓
+```
+
+Все ratios = 0.12. Excel WC = annual_NR × wc_rate ровно.
+
+**Эффект до fix:** Y1Y3 NPV drift +43-55% (большая часть из-за неправильного
+WC/Tax/OCF/FCF на annual level). После fix → drift **−0.00%** (exact match).
+
+**Реализация:** В `s10_discount.step()`, после аннуализации NR/CM, **пересчитываем**
+annual WC/ΔWC/Tax/OCF/FCF на годовом уровне:
+
+```python
+# D-22: Annual WC/ΔWC/Tax/OCF/FCF (Excel D-01 formula)
+annual_wc = [nr * wc_rate for nr in annual_nr]
+annual_delta_wc = []
+for i, wc in enumerate(annual_wc):
+    prev_wc = annual_wc[i - 1] if i > 0 else 0.0
+    annual_delta_wc.append(prev_wc - wc)  # WC[t-1] - WC[t]
+annual_tax = [-(cm * tax_rate) if cm > 0 else 0.0 for cm in annual_cm]
+annual_ocf = [annual_cm[i] + annual_delta_wc[i] + annual_tax[i] for i in range(N)]
+annual_fcf = [annual_ocf[i] - annual_capex[i] for i in range(N)]
+```
+
+`annual_capex` собирается из `ctx.investing_cash_flow` (sum по году = -CAPEX).
+
+**Per-period s07/s08/s09 НЕ удалены** — они продолжают работать для
+intermediate values (debugging, UI). Но финальные annual values для KPI
+вычисляются в s10 на годовом уровне.
+
+**Тесты обновлены:** `test_steps_10_12.py:_build_gorji_ctx` теперь передаёт
+`investing_cash_flow = [-x for x in GORJI_ANNUAL_CAPEX]`. `test_monthly_periods_aggregated_into_yearly`
+обновлён с явными вычислениями WC/ΔWC/Tax/OCF/FCF expectations.
+
+**Эффект на NPV (финальный):**
+
+| Scope | Excel | Наш | Drift |
+|---|---|---|---|
+| **NPV Y1Y3** | -11,593,312 | -11,593,314 | **-0.00%** |
+| **NPV Y1Y5** | 27,251,350 | 27,278,267 | **+0.10%** |
+| **NPV Y1Y10** | 79,983,059 | 80,009,976 | **+0.03%** |
+| **IRR Y1Y3** | -60.97% | -60.97% | **+0.00%** |
+| **IRR Y1Y5** | 64.12% | 64.16% | **+0.06%** |
+| **IRR Y1Y10** | 78.63% | 78.66% | **+0.04%** |
+| **ROI Y1Y10** | 158.26% | 158.29% | **+0.02%** |
+| Payback simple | 3/3/3 | 3/3/3 | exact |
+| Payback discounted | НЕ ОК/4/4 | НЕ ОК/4/4 | exact |
+
+**Pipeline = Excel parity достигнут.**
 
 ---
 

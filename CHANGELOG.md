@@ -9,6 +9,100 @@
 
 ## [Unreleased]
 
+### Fixed (4.2.1 — Y1Y3 gap closure, D-19 revised + D-22)
+
+**После D-21 commit (drift Y1Y10 -0.7%) Y1Y3 drift +43% признан критичным
+для Gate-решений. Расследование показало два дополнительных bug:**
+
+#### D-19 (revised) — Per-period production_cost_rate
+
+**Проблема:** Я ошибочно считал что production_cost_rate per-SKU
+(scalar). Excel хранит **per-period per-channel** в DASH row 38 cells.
+Для SKU 1 HM rate = 0.0778 в M1..M16 и M25..Y10, но **0 в M17..M24** —
+это **copacking window** (own production downtime, продукт co-packed
+извне). Для SKU 7-8 (Манго-Лимон) rate = 0 до M24, потом 0.08 от M25.
+
+Эффект: Y2 production у нас 2.94M vs Excel 0.246M (12x overcharge),
+Y3-Y10 production -10% от Excel.
+
+**Реализация:**
+- `PipelineInput.production_cost_rate`: `float → tuple[float, ...]`
+- `s03_cogs.step()` использует per-period rate
+- `_build_line_input` читает `PeriodValue.values["production_cost_rate"]`,
+  fallback на `psk.production_cost_rate` scalar
+- Импорт читает DASH row 38 per channel per period
+- Test fixtures обновлены (scalar/tuple)
+
+**Эффект:** Production Y2-Y10 теперь **точно совпадает** с Excel.
+GP Y3-Y10 точно: 42,380,591 vs 42,380,597 (Y3), 146,504,177 (Y10).
+
+#### D-22 — Working Capital на годовом уровне
+
+**Проблема (КРИТИЧЕСКАЯ):** Excel формула WC[year] = annual_NR[year] ×
+0.12 — на **годовом** уровне. Наш `s07_working_capital` использовал ту
+же формулу но **per-period** (monthly NR). Sum monthly ΔWC ≠ annual ΔWC
+из-за разных scales (annual ≈ 12x monthly).
+
+Excel ratio WC/NR_annual = 0.12 для **всех** years (verified DATA r38/r18).
+
+Эффект до fix: Y3 наш CM = 23.21M (matches Excel) но FCF = 11.6M vs
+Excel 4.97M (+6.6M overshoot). CM matches, FCF не matches → проблема в
+WC/Tax/OCF formula scale.
+
+**Реализация:** Refactor `s10_discount.step()`:
+- После аннуализации NR/CM, **пересчитываем** annual WC/ΔWC/Tax/OCF/FCF:
+  ```python
+  annual_wc = [nr * wc_rate for nr in annual_nr]
+  annual_delta_wc[t] = annual_wc[t-1] - annual_wc[t]  # WC[t-1] - WC[t]
+  annual_tax[t] = -(cm * tax_rate) if cm > 0 else 0
+  annual_ocf[t] = annual_cm[t] + annual_delta_wc[t] + annual_tax[t]
+  annual_fcf[t] = annual_ocf[t] - annual_capex[t]
+  ```
+- `annual_capex` собирается из `ctx.investing_cash_flow` (sum за год)
+- Per-period s07/s08/s09 НЕ удалены — продолжают работать для intermediate
+  values (UI/debug). Финальные annual values вычисляются в s10.
+
+**Тесты обновлены:**
+- `test_steps_10_12.py:_build_gorji_ctx` теперь передаёт
+  `investing_cash_flow = [-x for x in GORJI_ANNUAL_CAPEX]`
+- `test_monthly_periods_aggregated_into_yearly` обновлён с явными
+  WC/ΔWC/Tax/OCF/FCF expectations
+- 207/207 pytest зелёные
+
+### Финальный acceptance — GORJI Excel parity ✅
+
+| Scope | Excel | Наш | Drift |
+|---|---|---|---|
+| **NPV Y1Y3** | −11,593,312 ₽ | −11,593,314 ₽ | **−0.00%** |
+| **NPV Y1Y5** | 27,251,350 ₽ | 27,278,267 ₽ | **+0.10%** |
+| **NPV Y1Y10** | 79,983,059 ₽ | 80,009,976 ₽ | **+0.03%** |
+| **IRR Y1Y3** | −60.97% | −60.97% | **+0.00%** |
+| **IRR Y1Y5** | 64.12% | 64.16% | **+0.06%** |
+| **IRR Y1Y10** | 78.63% | 78.66% | **+0.04%** |
+| **ROI Y1Y10** | 158.26% | 158.29% | **+0.02%** |
+| **Payback simple** | 3/3/3 | 3/3/3 | exact |
+| **Payback discounted** | НЕ ОКУПАЕТСЯ/4/4 | None/4/4 | exact |
+| **Total FCF** | 264,770,578 ₽ | 264,817,148 ₽ | ratio 1.000 |
+
+**Max NPV drift: 0.10%. ACCEPTANCE PASSED.**
+
+Pipeline = Excel parity достигнут полностью. Все 8 расхождений (D-14..D-22)
+исправлены. Продукт корректен с самого начала, готов к Gate-решениям.
+
+### Файлы изменены (D-19 revised + D-22)
+- `backend/app/engine/context.py` — `production_cost_rate`: float → tuple
+- `backend/app/engine/steps/s03_cogs.py` — per-period production rate
+- `backend/app/engine/steps/s10_discount.py` — annual WC/Tax/OCF/FCF recompute
+- `backend/app/engine/aggregator.py` — production_cost_rate tuple
+- `backend/app/services/calculation_service.py` — `_build_line_input`
+  читает production_cost_rate per period
+- `backend/scripts/import_gorji_full.py` — DASH row 38 per period
+- `backend/tests/engine/test_steps_1_5.py` — make_input scalar/tuple
+- `backend/tests/engine/test_steps_10_12.py` — fixtures with CAPEX
+- `backend/tests/engine/test_gorji_reference.py` — production_cost_rate tuple
+- `docs/TZ_VS_EXCEL_DISCREPANCIES.md` — D-19 revised + D-22 detailed
+- `CHANGELOG.md` — этот раздел
+
 ### Fixed (4.2.1 — полный GORJI import + Excel parity, D-14..D-21)
 
 **Discovery V2: полный GORJI Excel импорт через `scripts/import_gorji_full.py`

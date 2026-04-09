@@ -881,15 +881,17 @@ BOM) и ChannelsTab (для каналов) без модификации — se
     - D-20: per-period channel_margin/promo в pipeline (PipelineInput tuple)
     - D-21: copacking Y1=2025 launch costs (импорт добавляет в opex)
     - Plus: WTR seasonality parser fix (формат `{"months": [12]}`)
-  - **Acceptance результат:**
-    - **NPV Y1Y10 = 79,425,801 ₽ vs Excel 79,983,059 ₽ → drift −0.70%**
-    - NPV Y1Y5 = 25.95M vs 27.25M → drift −4.77%
-    - **IRR Y1Y10 = 79.99% vs Excel 78.63% → +1.73%**
-    - Volume Y4-Y6 точно совпадает (0.00%)
-    - Material+Package Y4 точно совпадает
-    - NR Y10 = 348,348,693 точно совпадает
-  - 207/207 pytest зелёные после всех architectural changes
-  - Подробности: TZ_VS_EXCEL_DISCREPANCIES.md D-14..D-21 + CHANGELOG.md
+  - **Acceptance результат (финальный после Y1Y3 closure):**
+    - **NPV Y1Y3 = −11,593,314 ₽ vs Excel −11,593,312 ₽ → drift −0.00%**
+    - **NPV Y1Y5 = 27,278,267 ₽ vs Excel 27,251,350 ₽ → drift +0.10%**
+    - **NPV Y1Y10 = 80,009,976 ₽ vs Excel 79,983,059 ₽ → drift +0.03%**
+    - **IRR Y1Y3 = −60.97% (exact), Y1Y5 = +0.06%, Y1Y10 = +0.04%**
+    - Payback simple/discounted exact для всех scope
+    - Volume / Material / Production / Logistics — точно match Excel
+    - Total FCF ratio = 1.000
+  - **Max drift по всем scope = 0.10%. ACCEPTANCE PASSED.**
+  - 207/207 pytest зелёные после всех architectural changes (D-14..D-22)
+  - Подробности: TZ_VS_EXCEL_DISCREPANCIES.md D-14..D-22 + CHANGELOG.md
 
 **Структура DASH (выяснено в Quick check #2):**
 - 8 SKU блоков (rows 6, 52, 98, ..., 328 — шаг 46)

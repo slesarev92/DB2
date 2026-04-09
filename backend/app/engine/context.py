@@ -69,7 +69,9 @@ class PipelineInput:
     # на накопительный inflation_profile через `inflate_series` в
     # `calculation_service.build_line_inputs`.
     bom_unit_cost: tuple[float, ...]
-    production_cost_rate: float     # ProjectSKU.production_cost_rate (доля от ex_factory)
+    # Per-period: D-19 — Excel переключает production rate по периодам
+    # (M17-M24 для SKU 1 HM = 0, copacking window). Длины period_count.
+    production_cost_rate: tuple[float, ...]
     copacking_per_unit: float       # ₽/unit. В MVP всегда 0.0 (нет поля в схеме).
 
     # --- Логистика ---
@@ -120,6 +122,7 @@ class PipelineInput:
             ("channel_margin", self.channel_margin),
             ("promo_discount", self.promo_discount),
             ("promo_share", self.promo_share),
+            ("production_cost_rate", self.production_cost_rate),
         ]:
             if len(seq) != n:
                 raise ValueError(

@@ -66,6 +66,22 @@ GORJI_ANNUAL_FCF = [
     60586701.27051398,
 ]
 
+# Из DATA r33 — годовой CAPEX (Excel применяет полный CAPEX в первый
+# месяц года, в нашей модели это ICF = -CAPEX). После D-22 s10
+# пересчитывает FCF из аннуализированных CM/NR + CAPEX.
+GORJI_ANNUAL_CAPEX = [
+    6602348.0,
+    5440000.0,
+    5659500.0,
+    5942475.0,
+    6239598.75,
+    6551578.6875,
+    6879157.621875,
+    7223115.502968751,
+    7584271.278117189,
+    7963484.842023049,
+]
+
 # Из DATA row 44 — для сверки результата s10
 GORJI_ANNUAL_DCF = [
     -6546718.438654163,
@@ -105,8 +121,11 @@ GORJI_PAYBACK_DISC = {"y1y3": None, "y1y5": 4, "y1y10": 4}
 def _build_gorji_ctx() -> PipelineContext:
     """Подсовывает агрегаты GORJI прямо в контекст, минуя s01..s09.
 
-    В s10 нужны NR, CM, FCF (per-period). Подаём 10 годовых периодов
-    как model_year=1..10 и подменяем выходы s02/s05/s09 нашими агрегатами.
+    В s10 (после D-22) нужны NR, CM (per-period) + CAPEX (через
+    investing_cash_flow). s10 пересчитывает annual WC/Tax/OCF/FCF
+    на годовом уровне согласно Excel D-01 формуле. Подаём 10 годовых
+    периодов как model_year=1..10 — каждый период становится одним
+    annual buсket'ом без агрегации.
     """
     n = 10
     inp = make_input(
@@ -125,7 +144,10 @@ def _build_gorji_ctx() -> PipelineContext:
     ctx = ctx_for(inp)
     ctx.net_revenue = list(GORJI_ANNUAL_NR)
     ctx.contribution = list(GORJI_ANNUAL_CM)
-    ctx.free_cash_flow = list(GORJI_ANNUAL_FCF)
+    ctx.free_cash_flow = list(GORJI_ANNUAL_FCF)  # legacy, ignored after D-22
+    # D-22: ICF = -CAPEX per period. s10 sums по годам и использует
+    # для recompute annual FCF = OCF - CAPEX.
+    ctx.investing_cash_flow = [-c for c in GORJI_ANNUAL_CAPEX]
     return ctx
 
 
@@ -191,7 +213,16 @@ class TestDiscount:
         assert ctx.cumulative_dcf == pytest.approx(excel_cum_dcf, rel=1e-9)
 
     def test_monthly_periods_aggregated_into_yearly(self):
-        """M1..M12 (model_year=1) → один элемент в annual_* массиве."""
+        """M1..M12 (model_year=1) → один элемент в annual_* массиве.
+
+        После D-22: s10 пересчитывает annual FCF из CM/NR/CAPEX по
+        годовой формуле Excel D-01:
+            WC[year] = NR[year] × wc_rate
+            ΔWC[0] = -WC[0]
+            Tax = -CM × tax_rate если CM > 0
+            OCF = CM + ΔWC + Tax
+            FCF = OCF - CAPEX
+        """
         n = 12
         inp = make_input(
             period_count=n,
@@ -202,18 +233,28 @@ class TestDiscount:
             offtake=tuple([10.0] * n),
             shelf_price_reg=tuple([100.0] * n),
             seasonality=tuple([1.0] * n),
+            wc_rate=0.12,
+            tax_rate=0.20,
         )
         ctx = ctx_for(inp)
         # Подсовываем фейковые per-period значения: каждый месяц = 100 ₽
         ctx.net_revenue = [100.0] * n
         ctx.contribution = [50.0] * n
-        ctx.free_cash_flow = [10.0] * n
+        ctx.free_cash_flow = [10.0] * n  # legacy, ignored
+        ctx.investing_cash_flow = [0.0] * n  # без CAPEX
         s10_discount.step(ctx)
 
         assert len(ctx.annual_free_cash_flow) == 1
-        assert ctx.annual_free_cash_flow[0] == pytest.approx(120.0)  # 12 × 10
         assert ctx.annual_net_revenue[0] == pytest.approx(1200.0)
         assert ctx.annual_contribution[0] == pytest.approx(600.0)
+        # D-22: FCF = OCF - CAPEX. CAPEX = 0.
+        # Annual NR = 1200, Annual CM = 600.
+        # WC[Y1] = 1200 × 0.12 = 144
+        # ΔWC[Y1] = 0 - 144 = -144 (initial year build-up)
+        # Tax = -(600 × 0.20) = -120
+        # OCF = 600 - 144 - 120 = 336
+        # FCF = 336 - 0 = 336
+        assert ctx.annual_free_cash_flow[0] == pytest.approx(336.0)
 
     def test_terminal_value_computed_for_full_horizon(self):
         """TV = FCF_last × g / (WACC − (1 − g)) — DATA row 47 col 4."""

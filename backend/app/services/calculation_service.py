@@ -247,6 +247,7 @@ async def _build_line_input(
     cm_arr: list[float] = []    # D-20: per-period channel_margin
     pd_arr: list[float] = []    # D-20: per-period promo_discount
     ps_arr: list[float] = []    # D-20: per-period promo_share
+    prod_rate_arr: list[float] = []  # D-19: per-period production_cost_rate
     seasonality_arr: list[float] = []
     is_monthly: list[bool] = []
     month_num: list[int | None] = []
@@ -256,6 +257,7 @@ async def _build_line_input(
     static_cm = float(psc.channel_margin)
     static_pd = float(psc.promo_discount)
     static_ps = float(psc.promo_share)
+    static_prod_rate = float(psk.production_cost_rate)
 
     for i, period in enumerate(sorted_periods):
         vals = effective.get(period.id, {})
@@ -281,6 +283,10 @@ async def _build_line_input(
         cm_arr.append(float(vals.get("channel_margin", static_cm)))
         pd_arr.append(float(vals.get("promo_discount", static_pd)))
         ps_arr.append(float(vals.get("promo_share", static_ps)))
+
+        # D-19: production_cost_rate per-period (Excel переключает rate
+        # по периодам — M17-M24 для SKU 1 HM = 0, copacking window).
+        prod_rate_arr.append(float(vals.get("production_cost_rate", static_prod_rate)))
 
         # Сезонность только для monthly периодов
         if period.type == PeriodType.MONTHLY and period.month_num is not None:
@@ -346,7 +352,7 @@ async def _build_line_input(
         promo_share=tuple(ps_arr),
         vat_rate=float(project.vat_rate),
         bom_unit_cost=tuple(bom_arr),
-        production_cost_rate=float(psk.production_cost_rate),
+        production_cost_rate=tuple(prod_rate_arr),
         copacking_per_unit=0.0,  # MVP: нет поля в схеме
         logistics_cost_per_kg=tuple(log_arr),
         sku_volume_l=float(psk.sku.volume_l) if psk.sku.volume_l else 0.0,

@@ -44,18 +44,55 @@ def step(ctx: PipelineContext) -> PipelineContext:
     annual_fcf_buf: dict[int, float] = {}
     annual_nr_buf: dict[int, float] = {}
     annual_cm_buf: dict[int, float] = {}
+    annual_capex_buf: dict[int, float] = {}  # для recomputing FCF
 
     for t in range(n):
         year = inp.period_model_year[t]
         annual_fcf_buf[year] = annual_fcf_buf.get(year, 0.0) + ctx.free_cash_flow[t]
         annual_nr_buf[year] = annual_nr_buf.get(year, 0.0) + ctx.net_revenue[t]
         annual_cm_buf[year] = annual_cm_buf.get(year, 0.0) + ctx.contribution[t]
+        # CAPEX per period → sum в годовой aggregate.
+        # ICF = -CAPEX, ICF[t] хранится в ctx.investing_cash_flow.
+        if ctx.investing_cash_flow:
+            annual_capex_buf[year] = annual_capex_buf.get(year, 0.0) + (-ctx.investing_cash_flow[t])
 
     # Сортируем по году. model_year обычно 1..10 — если меньше, не страшно.
     years_sorted = sorted(annual_fcf_buf.keys())
-    annual_fcf = [annual_fcf_buf[y] for y in years_sorted]
     annual_nr = [annual_nr_buf[y] for y in years_sorted]
     annual_cm = [annual_cm_buf[y] for y in years_sorted]
+    annual_capex = [annual_capex_buf.get(y, 0.0) for y in years_sorted]
+
+    # D-22: Recompute annual WC/ΔWC/Tax/OCF/FCF на годовом уровне.
+    # Excel formula (D-01): WC[year] = annual_NR[year] × wc_rate (annual scale).
+    # Per-period s07 даёт WC по monthly NR (1/12 от annual), и sum monthly
+    # ΔWC ≠ annual ΔWC. Перевычисляем на годовом уровне для exact match.
+    wc_rate = inp.wc_rate
+    tax_rate = inp.tax_rate
+
+    annual_wc = [nr * wc_rate for nr in annual_nr]
+    annual_delta_wc: list[float] = []
+    for i, wc in enumerate(annual_wc):
+        prev_wc = annual_wc[i - 1] if i > 0 else 0.0
+        annual_delta_wc.append(prev_wc - wc)  # WC[t-1] - WC[t]
+
+    # Tax: -CM × tax_rate если CM > 0, иначе 0 (D-03 / ADR-CE-04).
+    # Знак отрицательный (отток).
+    annual_tax = [
+        -(cm * tax_rate) if cm > 0 else 0.0
+        for cm in annual_cm
+    ]
+
+    # OCF = CM + ΔWC + Tax (D-01 формула).
+    annual_ocf = [
+        annual_cm[i] + annual_delta_wc[i] + annual_tax[i]
+        for i in range(len(annual_cm))
+    ]
+
+    # FCF = OCF + ICF, ICF = -CAPEX.
+    annual_fcf = [
+        annual_ocf[i] - annual_capex[i]
+        for i in range(len(annual_ocf))
+    ]
 
     # Дисконтирование. WACC из Project, year_idx = 0, 1, ..., len-1.
     # year_idx = 0 для самого раннего модельного года (model_year=1).

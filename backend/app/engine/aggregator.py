@@ -83,7 +83,7 @@ def aggregate_lines(
         promo_share=tuple([0.0] * n),
         vat_rate=first.input.vat_rate,
         bom_unit_cost=tuple([0.0] * n),
-        production_cost_rate=0.0,
+        production_cost_rate=tuple([0.0] * n),
         copacking_per_unit=0.0,
         logistics_cost_per_kg=tuple([0.0] * n),
         sku_volume_l=0.0,
