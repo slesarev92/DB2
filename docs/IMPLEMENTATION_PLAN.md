@@ -1456,17 +1456,59 @@ production deploy).
 
 ---
 
-#### Задача 5.3 — Экспорт PDF (F-10)
+#### ✅ Задача 5.3 — Экспорт PDF (F-10) (2026-04-09)
 
-**Что делаем:** WeasyPrint рендерит HTML-шаблон паспорта → PDF.
-- HTML-шаблон: Jinja2, стилизация через CSS (без внешних шрифтов)
-- Запускается в Docker (Linux) где GTK доступен
+**Что сделано:**
+- `requirements.txt`: `weasyprint>=63.0,<64.0`, `jinja2>=3.1`
+- `backend/Dockerfile`: apt-install системных зависимостей WeasyPrint —
+  `libpango-1.0-0`, `libpangoft2-1.0-0`, `libharfbuzz0b`, `fontconfig`,
+  `fonts-dejavu` (DejaVu Sans для поддержки кириллицы). Rebuild
+  backend+celery
+- `backend/app/export/templates/project_passport.html` (~450 строк) —
+  Jinja2 template с A4 layout через CSS `@page`, встроенный `<style>`:
+  - Титульный блок (flex-центрирование, subtitle с gate_label)
+  - Двухколоночный grid (table-cell) для field-block'ов
+  - Таблицы `.data` с header цветом #2b4b80 + zebra stripes
+  - Светофор-бейджи `.status-green/yellow/red`
+  - `.images-row` таблица для package images (file:// URL)
+  - Page footer: counter(page) of counter(pages) + project.name
+  - `page-break-after: always` между секциями
+- `backend/app/export/pdf_exporter.py` (~500 строк):
+  - Jinja2 environment с `FileSystemLoader` (module-level singleton),
+    autoescape html/xml, trim/lstrip blocks
+  - Переиспользует data-loading helpers из `excel_exporter` +
+    `_load_package_images` из `ppt_exporter`
+  - Context builders: `_build_sku_rows`, `_build_kpi_rows`,
+    `_build_pnl_context`, `_build_bom_top`, `_build_fin_plan_rows`,
+    `_build_risks_list`, `_build_function_rows`, `_build_roadmap_rows`,
+    `_build_approver_rows`, `_build_package_images_context`
+  - **Важный урок:** в dict-context Jinja2 `row.values` резолвится как
+    `dict.values` method (attribute lookup приоритет). Переименовано
+    в `cells` для PnL-строк
+  - `generate_project_pdf(session, project_id) → bytes` через
+    `HTML(string=html_str, base_url=templates_dir).write_pdf()`
+- `app/api/projects.py`: `GET /api/projects/{id}/export/pdf` со
+  StreamingResponse + RFC 5987 filename (через общий helper)
+- `frontend/lib/export.ts`: `downloadProjectPdf(projectId)`
+- `results-tab.tsx`: третья кнопка «Скачать PDF» рядом с XLSX/PPTX
+- `backend/pytest.ini`: добавлен `log_cli_level = WARNING` — WeasyPrint
+  тянет fontTools с очень шумным DEBUG логом при каждом рендере
+- 11 тестов (`tests/api/test_export_pdf.py`): service-level
+  (valid_pdf_bytes / size_under_5_mb / cyrillic_project_name /
+  full_content_fields / html_template_renders_content_fields с
+  маркерами / 404) + endpoint-level (correct_mime /
+  filename_in_content_disposition / cyrillic_project_name / 404 / 401)
 
-**Критерий готовности:**
-- PDF содержит корректные данные, не PDF/A ошибок
-- Размер файла < 5MB для типичного проекта
+**Критерий готовности:** ✅
+- PDF валиден (`%PDF-` signature)
+- Размер PDF < 5 MB (тест `test_size_under_5_mb`)
+- Кириллица рендерится через DejaVu Sans (fonts-dejavu пакет)
+- Все секции из template попадают в PDF (HTML→PDF через Jinja2 +
+  test_html_template_renders_content_fields с маркерами)
+- **278/278 pytest** (267 + 11 новых PDF)
+- 0 tsc errors
 
-**Зависимости:** 5.2.
+**Зависимости:** 5.2 (переиспользование data loading + package images).
 
 ---
 
@@ -1922,7 +1964,10 @@ GitHub Secrets).
   0 tsc errors)
 - [x] 5.2 PPT ✅ (2026-04-09, python-pptx 1.0, ppt_exporter с 13 слайдами
   включая content из 4.5 + embedded package images, 11 tests, 265/265 pytest)
-- [ ] 5.3 PDF
+- [x] 5.3 PDF ✅ (2026-04-09, WeasyPrint 63 + Jinja2 template, A4 с 12
+  секциями + package images + кириллица через DejaVu, 11 tests, 278/278 pytest)
+
+### ✅ Фаза 5 — Экспорт (закрыта 2026-04-09, 3 коммита)
 
 ### Фаза 6 — Интеграция
 - [ ] 6.1 E2E acceptance-тест

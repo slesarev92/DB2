@@ -46,3 +46,12 @@ openpyxl>=3.1.0,<4.0.0
 # MIT license. Работает на standard layouts python-pptx; corporate
 # template (PASSPORT_ELEKTRA стиль) может быть добавлен позже.
 python-pptx>=1.0.0,<2.0.0
+
+# WeasyPrint: HTML/CSS → PDF рендеринг для экспорта паспорта (5.3).
+# BSD-3. Требует системных библиотек Pango/Cairo/fontconfig — они
+# ставятся в backend/Dockerfile через apt. На Windows без Docker
+# WeasyPrint запускать не стоит (GTK dependency hell).
+weasyprint>=63.0,<64.0
+# Jinja2: шаблонизатор для HTML паспорта. FastAPI уже тянет старую
+# версию как транзитивную зависимость, но закрепляем явно.
+jinja2>=3.1.0,<4.0.0

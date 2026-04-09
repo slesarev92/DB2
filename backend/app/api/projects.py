@@ -350,3 +350,52 @@ async def export_project_pptx_endpoint(
             "Content-Length": str(len(pptx_bytes)),
         },
     )
+
+
+@router.get(
+    "/{project_id}/export/pdf",
+    responses={
+        200: {
+            "content": {"application/pdf": {}},
+            "description": "PDF паспорт проекта (A4, многостраничный)",
+        },
+        404: {"description": "Project не найден"},
+    },
+)
+async def export_project_pdf_endpoint(
+    project_id: int,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> StreamingResponse:
+    """Экспорт проекта в PDF (задача 5.3, F-10).
+
+    HTML-шаблон (Jinja2) → WeasyPrint → PDF A4. 12 секций: титул,
+    общая информация, концепция, технология, валидация, продуктовый
+    микс (с package images), макро-факторы, KPI, PnL по годам, стакан
+    себестоимости + fin plan, риски + готовность функций, дорожная
+    карта + согласующие, executive summary.
+
+    Filename — RFC 5987 Content-Disposition (поддержка кириллицы).
+    """
+    from io import BytesIO
+    from app.export.excel_exporter import ProjectNotFoundForExport
+    from app.export.pdf_exporter import generate_project_pdf
+
+    try:
+        pdf_bytes = await generate_project_pdf(session, project_id)
+    except ProjectNotFoundForExport:
+        raise _not_found
+
+    project = await project_service.get_project(session, project_id)
+    content_disposition = _build_export_content_disposition(
+        project, project_id, ".pdf"
+    )
+
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": content_disposition,
+            "Content-Length": str(len(pdf_bytes)),
+        },
+    )

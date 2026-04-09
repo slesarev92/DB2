@@ -10,9 +10,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Системные зависимости: curl — для Docker healthcheck
+# Системные зависимости:
+#   curl — для Docker healthcheck
+#   libpango + libharfbuzz + fontconfig + шрифты DejaVu — для WeasyPrint
+#     (задача 5.3, HTML → PDF рендеринг). Без этих либ WeasyPrint
+#     падает с OSError при import. DejaVu — open-source шрифт с
+#     поддержкой кириллицы, используется как fallback в CSS @font-face.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends \
+        curl \
+        libpango-1.0-0 \
+        libpangoft2-1.0-0 \
+        libharfbuzz0b \
+        fontconfig \
+        fonts-dejavu \
     && rm -rf /var/lib/apt/lists/*
 
 # Python-зависимости (отдельным слоем — ускоряет rebuild при изменении кода).

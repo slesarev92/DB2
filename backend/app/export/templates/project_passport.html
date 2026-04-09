@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Паспорт проекта {{ project.name }}</title>
+  <style>
+    /* =================================================================
+       A4 страница + базовый сброс
+       ================================================================= */
+    @page {
+      size: A4;
+      margin: 20mm 15mm 20mm 15mm;
+      @bottom-right {
+        content: "Стр. " counter(page) " из " counter(pages);
+        font-family: "DejaVu Sans", sans-serif;
+        font-size: 9pt;
+        color: #888;
+      }
+      @bottom-left {
+        content: "Цифровой паспорт проекта · {{ project.name | e }}";
+        font-family: "DejaVu Sans", sans-serif;
+        font-size: 9pt;
+        color: #888;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: "DejaVu Sans", sans-serif;
+      font-size: 10pt;
+      color: #1a1a1a;
+      line-height: 1.5;
+      margin: 0;
+      padding: 0;
+    }
+
+    h1 { font-size: 24pt; margin: 0 0 12pt 0; }
+    h2 { font-size: 16pt; margin: 14pt 0 8pt 0; color: #2b4b80; border-bottom: 2px solid #2b4b80; padding-bottom: 4pt; }
+    h3 { font-size: 12pt; margin: 10pt 0 6pt 0; color: #444; }
+    p  { margin: 4pt 0; }
+
+    /* Секции с принудительным page-break */
+    .section {
+      page-break-inside: avoid;
+    }
+    .page-break {
+      page-break-after: always;
+    }
+
+    /* =================================================================
+       Титульный блок
+       ================================================================= */
+    .title-page {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 240mm;
+      text-align: center;
+    }
+    .title-page h1 {
+      font-size: 32pt;
+      color: #2b4b80;
+      margin-bottom: 16pt;
+    }
+    .title-page .subtitle {
+      font-size: 14pt;
+      color: #666;
+      margin-bottom: 40pt;
+    }
+    .title-meta {
+      font-size: 11pt;
+      color: #333;
+      line-height: 2;
+    }
+    .title-meta .label {
+      font-weight: bold;
+      display: inline-block;
+      min-width: 150pt;
+      text-align: right;
+      margin-right: 10pt;
+    }
+
+    /* =================================================================
+       Field blocks (label: value)
+       ================================================================= */
+    .field-block {
+      margin-bottom: 10pt;
+    }
+    .field-block .label {
+      font-size: 9pt;
+      color: #666;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.5pt;
+      margin-bottom: 2pt;
+    }
+    .field-block .value {
+      font-size: 10pt;
+      color: #1a1a1a;
+    }
+    .field-block .value.empty {
+      color: #aaa;
+      font-style: italic;
+    }
+
+    /* Двухколоночный grid для field blocks */
+    .two-col {
+      display: table;
+      width: 100%;
+      table-layout: fixed;
+    }
+    .two-col > .col {
+      display: table-cell;
+      width: 50%;
+      vertical-align: top;
+      padding-right: 10pt;
+    }
+    .two-col > .col + .col {
+      padding-left: 10pt;
+      padding-right: 0;
+    }
+
+    /* =================================================================
+       Таблицы
+       ================================================================= */
+    table.data {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8pt;
+      font-size: 9pt;
+    }
+    table.data th {
+      background: #2b4b80;
+      color: white;
+      font-weight: bold;
+      text-align: left;
+      padding: 6pt 8pt;
+      border: 1px solid #2b4b80;
+    }
+    table.data td {
+      padding: 5pt 8pt;
+      border: 1px solid #ccc;
+      vertical-align: top;
+    }
+    table.data tbody tr:nth-child(even) {
+      background: #f5f7fa;
+    }
+    table.data td.num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    table.data td.empty {
+      color: #aaa;
+      font-style: italic;
+    }
+
+    /* Небольшая таблица KPI — увеличенный шрифт */
+    table.kpi th, table.kpi td {
+      padding: 8pt 10pt;
+      font-size: 10pt;
+    }
+
+    /* =================================================================
+       Риски (bullet list)
+       ================================================================= */
+    ul.risks {
+      margin: 6pt 0;
+      padding-left: 18pt;
+    }
+    ul.risks li {
+      margin-bottom: 4pt;
+    }
+
+    /* =================================================================
+       Светофор (готовность функций)
+       ================================================================= */
+    .status-badge {
+      display: inline-block;
+      width: 12pt;
+      height: 12pt;
+      border-radius: 50%;
+      vertical-align: middle;
+      margin-right: 6pt;
+    }
+    .status-green  { background: #16a34a; }
+    .status-yellow { background: #eab308; }
+    .status-red    { background: #dc2626; }
+    .status-none   { background: #ccc; }
+
+    /* =================================================================
+       Package images grid (слайд SKU микс → PDF page)
+       ================================================================= */
+    .images-row {
+      display: table;
+      width: 100%;
+      margin-top: 10pt;
+    }
+    .image-cell {
+      display: table-cell;
+      text-align: center;
+      vertical-align: top;
+      padding: 6pt;
+    }
+    .image-cell img {
+      max-width: 100%;
+      max-height: 120pt;
+      border: 1px solid #ddd;
+      border-radius: 4pt;
+    }
+    .image-cell .caption {
+      font-size: 8pt;
+      color: #666;
+      margin-top: 4pt;
+    }
+
+    /* Placeholder для пустых данных */
+    .empty-hint {
+      color: #aaa;
+      font-style: italic;
+      padding: 8pt 0;
+    }
+  </style>
+</head>
+<body>
+
+{# ================================================================== #}
+{# Слайд 1: Титул                                                      #}
+{# ================================================================== #}
+<div class="title-page">
+  <h1>{{ project.name }}</h1>
+  <div class="subtitle">
+    Цифровой паспорт проекта
+    {% if project.gate_stage %}· {{ gate_label(project.gate_stage) }}{% endif %}
+  </div>
+  <div class="title-meta">
+    {% if project.project_owner %}
+      <div><span class="label">Владелец:</span>{{ project.project_owner }}</div>
+    {% endif %}
+    {% if project.passport_date %}
+      <div><span class="label">Дата паспорта:</span>{{ project.passport_date.isoformat() }}</div>
+    {% endif %}
+    <div><span class="label">Старт проекта:</span>{{ project.start_date.isoformat() }}</div>
+    <div><span class="label">Горизонт:</span>{{ project.horizon_years }} лет</div>
+  </div>
+</div>
+<div class="page-break"></div>
+
+{# ================================================================== #}
+{# 1. Общая информация                                                 #}
+{# ================================================================== #}
+<div class="section">
+  <h2>1. Общая информация</h2>
+  <div class="two-col">
+    <div class="col">
+      <div class="field-block">
+        <div class="label">Описание проекта</div>
+        <div class="value {% if not project.description %}empty{% endif %}">
+          {{ project.description or "—" }}
+        </div>
+      </div>
+      <div class="field-block">
+        <div class="label">Цель проекта</div>
+        <div class="value {% if not project.project_goal %}empty{% endif %}">
+          {{ project.project_goal or "—" }}
+        </div>
+      </div>
+      <div class="field-block">
+        <div class="label">География</div>
+        <div class="value {% if not project.geography %}empty{% endif %}">
+          {{ project.geography or "—" }}
+        </div>
+      </div>
+      <div class="field-block">
+        <div class="label">Владелец проекта</div>
+        <div class="value {% if not project.project_owner %}empty{% endif %}">
+          {{ project.project_owner or "—" }}
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="field-block">
+        <div class="label">Gate-стадия</div>
+        <div class="value {% if not project.gate_stage %}empty{% endif %}">
+          {% if project.gate_stage %}{{ gate_label(project.gate_stage) }}{% else %}—{% endif %}
+        </div>
+      </div>
+      <div class="field-block">
+        <div class="label">Дата паспорта</div>
+        <div class="value {% if not project.passport_date %}empty{% endif %}">
+          {% if project.passport_date %}{{ project.passport_date.isoformat() }}{% else %}—{% endif %}
+        </div>
+      </div>
+      <div class="field-block">
+        <div class="label">Тип инновации</div>
+        <div class="value {% if not project.innovation_type %}empty{% endif %}">
+          {{ project.innovation_type or "—" }}
+        </div>
+      </div>
+      <div class="field-block">
+        <div class="label">Тип производства</div>
+        <div class="value {% if not project.production_type %}empty{% endif %}">
+          {{ project.production_type or "—" }}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ================================================================== #}
+{# 2. Концепция продукта                                               #}
+{# ================================================================== #}
+<div class="section">
+  <h2>2. Концепция продукта</h2>
+  <div class="field-block">
+    <div class="label">Growth opportunity</div>
+    <div class="value {% if not project.growth_opportunity %}empty{% endif %}">
+      {{ project.growth_opportunity or "—" }}
+    </div>
+  </div>
+  <div class="field-block">
+    <div class="label">Концепция</div>
+    <div class="value {% if not project.concept_text %}empty{% endif %}">
+      {{ project.concept_text or "—" }}
+    </div>
+  </div>
+  <div class="field-block">
+    <div class="label">Короткая идея</div>
+    <div class="value {% if not project.idea_short %}empty{% endif %}">
+      {{ project.idea_short or "—" }}
+    </div>
+  </div>
+  <div class="field-block">
+    <div class="label">Целевая аудитория</div>
+    <div class="value {% if not project.target_audience %}empty{% endif %}">
+      {{ project.target_audience or "—" }}
+    </div>
+  </div>
+  <div class="field-block">
+    <div class="label">Кого замещаем</div>
+    <div class="value {% if not project.replacement_target %}empty{% endif %}">
+      {{ project.replacement_target or "—" }}
+    </div>
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+{# ================================================================== #}
+{# 3. Технология и обоснование                                         #}
+{# ================================================================== #}
+<div class="section">
+  <h2>3. Технология и обоснование</h2>
+  <div class="field-block">
+    <div class="label">Технология</div>
+    <div class="value {% if not project.technology %}empty{% endif %}">
+      {{ project.technology or "—" }}
+    </div>
+  </div>
+  <div class="field-block">
+    <div class="label">Прогресс R&amp;D</div>
+    <div class="value {% if not project.rnd_progress %}empty{% endif %}">
+      {{ project.rnd_progress or "—" }}
+    </div>
+  </div>
+  <div class="field-block">
+    <div class="label">Обоснование (rationale)</div>
+    <div class="value {% if not project.rationale %}empty{% endif %}">
+      {{ project.rationale or "—" }}
+    </div>
+  </div>
+</div>
+
+{# ================================================================== #}
+{# 4. Валидация                                                        #}
+{# ================================================================== #}
+<div class="section">
+  <h2>4. Результаты валидации</h2>
+  <table class="data">
+    <thead>
+      <tr>
+        <th style="width: 25%">Подтест</th>
+        <th style="width: 15%">Score</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for key, label in validation_subtests %}
+        {% set entry = (project.validation_tests or {}).get(key, {}) %}
+        <tr>
+          <td>{{ label }}</td>
+          <td class="num {% if entry.get('score') is none %}empty{% endif %}">
+            {% if entry.get('score') is not none %}{{ entry.get('score') }}{% else %}—{% endif %}
+          </td>
+          <td class="{% if not entry.get('notes') %}empty{% endif %}">
+            {{ entry.get('notes') or "—" }}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="page-break"></div>
+
+{# ================================================================== #}
+{# 5. Продуктовый микс + package images                                #}
+{# ================================================================== #}
+<div class="section">
+  <h2>5. Продуктовый микс</h2>
+  <table class="data">
+    <thead>
+      <tr>
+        <th>SKU</th>
+        <th>Формат</th>
+        <th>Объём</th>
+        <th>Prod cost rate</th>
+        <th class="num">BOM ₽/ед</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in sku_rows %}
+        <tr>
+          <td>{{ row.name }}</td>
+          <td>{{ row.format }}</td>
+          <td>{{ row.volume }}</td>
+          <td>{{ row.prod_rate }}</td>
+          <td class="num">{{ row.bom_cost }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="empty-hint">SKU не добавлены</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if package_images %}
+    <h3>Упаковки</h3>
+    <div class="images-row">
+      {% for img in package_images %}
+        <div class="image-cell">
+          <img src="file://{{ img.path }}" alt="package">
+          <div class="caption">{{ img.caption }}</div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+
+<div class="page-break"></div>
+
+{# ================================================================== #}
+{# 6. Финансовая модель — макро-факторы                                #}
+{# ================================================================== #}
+<div class="section">
+  <h2>6. Финансовая модель — макро-факторы</h2>
+  <table class="data">
+    <thead>
+      <tr><th>Параметр</th><th>Значение</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>WACC</td><td>{{ fmt_pct(project.wacc, 2) }}</td></tr>
+      <tr><td>Налог на прибыль</td><td>{{ fmt_pct(project.tax_rate, 2) }}</td></tr>
+      <tr><td>Working Capital rate</td><td>{{ fmt_pct(project.wc_rate, 2) }}</td></tr>
+      <tr><td>VAT rate</td><td>{{ fmt_pct(project.vat_rate, 2) }}</td></tr>
+      <tr><td>Валюта</td><td>{{ project.currency }}</td></tr>
+      <tr><td>Горизонт</td><td>{{ project.horizon_years }} лет</td></tr>
+      <tr><td>Профиль инфляции</td><td>{{ inflation_profile_name }}</td></tr>
+    </tbody>
+  </table>
+</div>
+
+{# ================================================================== #}
+{# 7. KPI — сравнение сценариев                                         #}
+{# ================================================================== #}
+<div class="section">
+  <h2>7. Ключевые KPI — сравнение сценариев (Y1-Y10)</h2>
+  <table class="data kpi">
+    <thead>
+      <tr>
+        <th>Сценарий</th>
+        <th class="num">NPV ₽</th>
+        <th class="num">IRR</th>
+        <th class="num">ROI</th>
+        <th class="num">Payback, лет</th>
+        <th>Go/No-Go</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in kpi_rows %}
+        <tr>
+          <td>{{ row.scenario }}</td>
+          <td class="num">{{ row.npv }}</td>
+          <td class="num">{{ row.irr }}</td>
+          <td class="num">{{ row.roi }}</td>
+          <td class="num">{{ row.payback }}</td>
+          <td>{{ row.go_no_go }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="page-break"></div>
+
+{# ================================================================== #}
+{# 8. PnL по годам                                                      #}
+{# ================================================================== #}
+<div class="section">
+  <h2>8. PnL по годам — Base сценарий</h2>
+  {% if pnl_years %}
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Метрика</th>
+          {% for y in pnl_years %}<th class="num">Y{{ y }}</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in pnl_rows %}
+          <tr>
+            <td>{{ row.label }}</td>
+            {% for v in row.cells %}<td class="num">{{ v }}</td>{% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="empty-hint">
+      Расчёт не выполнен. Запустите пересчёт проекта перед экспортом.
+    </p>
+  {% endif %}
+</div>
+
+<div class="page-break"></div>
+
+{# ================================================================== #}
+{# 9. Стакан себестоимости + финансовый план                           #}
+{# ================================================================== #}
+<div class="section">
+  <h2>9. Стакан себестоимости и финансовый план</h2>
+  <div class="two-col">
+    <div class="col">
+      <h3>Топ ингредиентов BOM</h3>
+      <table class="data">
+        <thead>
+          <tr><th>Ингредиент</th><th class="num">₽/ед</th></tr>
+        </thead>
+        <tbody>
+          {% for row in bom_top %}
+            <tr><td>{{ row.name }}</td><td class="num">{{ row.cost }}</td></tr>
+          {% else %}
+            <tr><td colspan="2" class="empty-hint">Нет данных</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="col">
+      <h3>Финансовый план (CAPEX / OPEX по годам)</h3>
+      <table class="data">
+        <thead>
+          <tr><th>Год</th><th class="num">CAPEX ₽</th><th class="num">OPEX ₽</th></tr>
+        </thead>
+        <tbody>
+          {% for row in fin_plan_rows %}
+            <tr>
+              <td>{{ row.year }}</td>
+              <td class="num">{{ row.capex }}</td>
+              <td class="num">{{ row.opex }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+{# ================================================================== #}
+{# 10. Риски и готовность функций                                       #}
+{# ================================================================== #}
+<div class="section">
+  <h2>10. Риски и готовность функций</h2>
+  <div class="two-col">
+    <div class="col">
+      <h3>Ключевые риски</h3>
+      {% if risks_list %}
+        <ul class="risks">
+          {% for r in risks_list %}<li>{{ r }}</li>{% endfor %}
+        </ul>
+      {% else %}
+        <p class="empty-hint">Риски не описаны</p>
+      {% endif %}
+    </div>
+    <div class="col">
+      <h3>Готовность функций</h3>
+      {% if function_rows %}
+        <table class="data">
+          <thead>
+            <tr><th>Функция</th><th>Статус</th><th>Notes</th></tr>
+          </thead>
+          <tbody>
+            {% for row in function_rows %}
+              <tr>
+                <td>{{ row.dept }}</td>
+                <td>
+                  <span class="status-badge status-{{ row.status_key }}"></span>
+                  {{ row.status_label }}
+                </td>
+                <td>{{ row.notes }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="empty-hint">Готовность не заполнена</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+{# ================================================================== #}
+{# 11. Дорожная карта и согласующие                                     #}
+{# ================================================================== #}
+<div class="section">
+  <h2>11. Дорожная карта и согласующие</h2>
+  <h3>Дорожная карта</h3>
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Задача</th>
+        <th>Начало</th>
+        <th>Конец</th>
+        <th>Статус</th>
+        <th>Ответственный</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in roadmap_rows %}
+        <tr>
+          <td>{{ r.name }}</td>
+          <td>{{ r.start }}</td>
+          <td>{{ r.end }}</td>
+          <td>{{ r.status }}</td>
+          <td>{{ r.owner }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="empty-hint">Дорожная карта пуста</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h3>Согласующие</h3>
+  <table class="data">
+    <thead>
+      <tr><th>Метрика</th><th>Согласующий</th><th>Источник</th></tr>
+    </thead>
+    <tbody>
+      {% for a in approver_rows %}
+        <tr>
+          <td>{{ a.metric }}</td>
+          <td>{{ a.name }}</td>
+          <td>{{ a.source }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="3" class="empty-hint">Согласующие не заданы</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="page-break"></div>
+
+{# ================================================================== #}
+{# 12. Executive summary                                                #}
+{# ================================================================== #}
+<div class="section">
+  <h2>12. Executive Summary</h2>
+  {% if project.executive_summary %}
+    <p>{{ project.executive_summary }}</p>
+  {% else %}
+    <p class="empty-hint">
+      Executive summary ещё не сгенерирован. В Phase 7.6 будет добавлена
+      AI-генерация резюме на основе всех полей паспорта.
+    </p>
+  {% endif %}
+</div>
+
+</body>
+</html>

@@ -45,3 +45,22 @@ export async function downloadProjectPptx(projectId: number): Promise<void> {
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+/**
+ * Скачивает PDF-паспорт проекта (задача 5.3).
+ *
+ * Backend: GET /api/projects/{id}/export/pdf — Jinja2 HTML template +
+ * WeasyPrint → PDF A4. Включает content fields Phase 4.5, KPI, PnL,
+ * риски, roadmap и т.д.
+ */
+export async function downloadProjectPdf(projectId: number): Promise<void> {
+  const blob = await apiGetBlob(`/api/projects/${projectId}/export/pdf`);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `project_${projectId}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
