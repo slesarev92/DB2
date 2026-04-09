@@ -1305,7 +1305,28 @@ production deploy).
 
 ---
 
-#### Задача 4.5.4 — Tests + commit
+#### ✅ Задача 4.5.4 — Tests + commit Phase 4.5 (2026-04-09)
+
+**Что сделано:**
+- 5 тестов Фазы 4.5.1 уже покрыли POST roundtrip content fields +
+  backward compat + Pydantic/DB gate_stage валидацию
+- 16 тестов Фазы 4.5.2 покрыли media upload/download/delete с
+  isolated tmp_path
+- Добавлено 2 теста для 4.5.4:
+  - `test_patch_project_full_jsonb_roundtrip` — PATCH с всеми 5 JSONB
+    полями (risks/validation_tests/function_readiness c 8 depts/
+    roadmap_tasks/approvers) одновременно, проверка nested структур
+  - `test_patch_project_sku_with_package_image_id` — PATCH PSK с
+    реальным media_id (через upload), list возвращает значение,
+    сброс в null
+- Frontend tsc: 0 ошибок
+- Visual check content-tab и sku-image-upload — подтверждено
+  пользователем в браузере
+
+**Критерий готовности:** ✅
+- **254/254 pytest** (было 252 + 2 новых в test_projects.py)
+- 0 tsc errors, visual check passed
+- Commit `feat(content): фаза 4.5 tests + finalize`
 
 **Что делаем:**
 - Backend tests для extended Project schema (PATCH с JSONB roundtrip)
@@ -1855,7 +1876,10 @@ GitHub Secrets).
 - [x] 4.5.3 Frontend UI «Содержание паспорта» ✅ (2026-04-09, content-tab с
   7 секциями auto-save/Save JSONB, sku-image-upload drag-drop с Blob preview,
   0 tsc errors)
-- [ ] 4.5.4 Tests + commit
+- [x] 4.5.4 Tests + commit ✅ (2026-04-09, 2 новых теста PATCH JSONB roundtrip
+  + PSK package_image_id, 254/254 pytest, visual check passed)
+
+### ✅ Фаза 4.5 — Контент паспорта (закрыта 2026-04-09, 4 коммита)
 
 ### Фаза 5 — Экспорт (после 4.5)
 - [x] 5.1 XLSX ✅ (2026-04-09, openpyxl 3.1, excel_exporter с 3 листами

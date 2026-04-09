@@ -503,3 +503,148 @@ async def test_gate_stage_check_constraint_db_level(
     except IntegrityError as exc:
         # Ожидаемо: PostgreSQL отверг INSERT
         assert "ck_projects_gate_stage" in str(exc) or "check" in str(exc).lower()
+
+
+# ============================================================
+# Фаза 4.5.4 — дополнительное покрытие content fields
+# ============================================================
+
+
+async def test_patch_project_full_jsonb_roundtrip(
+    auth_client: AsyncClient,
+) -> None:
+    """PATCH /api/projects/{id} с всеми 5 JSONB полями → полный roundtrip.
+
+    Важно отдельно от POST-теста: UI content-tab.tsx шлёт Save button'ом
+    именно PATCH с JSONB, не создаёт проект с нуля. Проверяем что сложные
+    nested структуры (validation_tests, function_readiness) не ломаются
+    при PATCH.
+    """
+    create = await auth_client.post("/api/projects", json=VALID_BODY)
+    project_id = create.json()["id"]
+
+    patch_body = {
+        "risks": [
+            "Конкуренты запустят раньше",
+            "Регуляторные риски по маркировке",
+        ],
+        "validation_tests": {
+            "concept_test": {"score": 85, "notes": "отзывы положительные"},
+            "naming": {"score": 62, "notes": "вариант B сильнее"},
+            "design": {"score": 70, "notes": ""},
+            "product": {"score": 90, "notes": "лидирует в blind test"},
+            "price": {"score": 55, "notes": "цена на верхней границе"},
+        },
+        "function_readiness": {
+            "R&D": {"status": "green", "notes": "рецепт финализирован"},
+            "Marketing": {"status": "yellow", "notes": "комстрат в работе"},
+            "Sales": {"status": "red", "notes": "листинги не согласованы"},
+            "Supply Chain": {"status": "green", "notes": ""},
+            "Production": {"status": "yellow", "notes": "тест на линии"},
+            "Finance": {"status": "green", "notes": ""},
+            "Legal": {"status": "green", "notes": ""},
+            "Quality": {"status": "green", "notes": ""},
+        },
+        "roadmap_tasks": [
+            {
+                "name": "Первая партия",
+                "start_date": "2025-04-01",
+                "end_date": "2025-04-15",
+                "status": "in_progress",
+                "owner": "Production",
+            },
+        ],
+        "approvers": [
+            {"metric": "NPV", "name": "CFO", "source": "Финансовая модель"},
+            {"metric": "Market size", "name": "Head of Insights", "source": "Nielsen"},
+        ],
+    }
+    resp = await auth_client.patch(
+        f"/api/projects/{project_id}", json=patch_body
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    # risks — list of strings, порядок сохраняется
+    assert data["risks"] == patch_body["risks"]
+
+    # validation_tests — nested dict с 5 подтестами
+    vt = data["validation_tests"]
+    assert vt["concept_test"]["score"] == 85
+    assert vt["naming"]["notes"] == "вариант B сильнее"
+    assert set(vt.keys()) == {"concept_test", "naming", "design", "product", "price"}
+
+    # function_readiness — 8 depts, light-values
+    fr = data["function_readiness"]
+    assert fr["R&D"]["status"] == "green"
+    assert fr["Sales"]["status"] == "red"
+    assert len(fr) == 8
+
+    # roadmap_tasks + approvers — list of objects
+    assert len(data["roadmap_tasks"]) == 1
+    assert data["roadmap_tasks"][0]["owner"] == "Production"
+    assert len(data["approvers"]) == 2
+    assert data["approvers"][1]["name"] == "Head of Insights"
+
+
+async def test_patch_project_sku_with_package_image_id(
+    auth_client: AsyncClient,
+) -> None:
+    """PATCH ProjectSKU устанавливает package_image_id, read возвращает его.
+
+    Базовый persistence тест: значение сохраняется и приходит в response.
+    Полноценный flow (upload media → PATCH с id) покрыт в test_media.py
+    на уровне media endpoint'ов; здесь проверяем только колонку PSK.
+
+    Реального media asset не создаём — схема ProjectSKUUpdate принимает
+    любой int (ссылочная целостность на DB уровне через FK ON DELETE
+    SET NULL). Но чтобы не падать на FK нарушении, сначала создаём
+    MediaAsset напрямую через API.
+    """
+    # Создаём проект + SKU + добавляем SKU в проект
+    create_resp = await auth_client.post("/api/projects", json=VALID_BODY)
+    project_id = create_resp.json()["id"]
+
+    sku_resp = await auth_client.post(
+        "/api/skus",
+        json={"brand": "TestBrand", "name": "TestSKU"},
+    )
+    sku_id = sku_resp.json()["id"]
+
+    add_resp = await auth_client.post(
+        f"/api/projects/{project_id}/skus", json={"sku_id": sku_id}
+    )
+    psk_id = add_resp.json()["id"]
+    assert add_resp.json()["package_image_id"] is None
+
+    # Загружаем реальный media asset (чтобы FK не упал)
+    fake_png = b"\x89PNG\r\n\x1a\nfake"
+    upload_resp = await auth_client.post(
+        f"/api/projects/{project_id}/media",
+        files={"file": ("pkg.png", fake_png, "image/png")},
+        data={"kind": "package_image"},
+    )
+    assert upload_resp.status_code == 201
+    media_id = upload_resp.json()["id"]
+
+    # PATCH PSK с package_image_id
+    patch_resp = await auth_client.patch(
+        f"/api/project-skus/{psk_id}",
+        json={"package_image_id": media_id},
+    )
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["package_image_id"] == media_id
+
+    # Read возвращает то же значение
+    list_resp = await auth_client.get(f"/api/projects/{project_id}/skus")
+    items = list_resp.json()
+    assert len(items) == 1
+    assert items[0]["package_image_id"] == media_id
+
+    # Сброс в null
+    clear_resp = await auth_client.patch(
+        f"/api/project-skus/{psk_id}",
+        json={"package_image_id": None},
+    )
+    assert clear_resp.status_code == 200
+    assert clear_resp.json()["package_image_id"] is None
