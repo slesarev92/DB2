@@ -492,6 +492,212 @@ SCOPE_BOUNDS = {
 
 ---
 
+## Расхождения, обнаруженные в Discovery V2 (4.2.1, 2026-04-09)
+
+Discovery V2 — полный GORJI импорт через `scripts/import_gorji_full.py`
+обнаружил **6 расхождений** между Excel и нашим pipeline. Per-line acceptance
+(test_gorji_reference) проверял только M1-M6 per-unit GP/CM — не покрывал
+yearly periods и absolute aggregates. Из-за этого Discovery V1 (только SKU 1
+HM, per-unit) дал точное совпадение, но full GORJI выявил систематические
+проблемы.
+
+---
+
+### D-14 — Yearly volume × 12 multiplier (✅ исправлено)
+
+**Статус:** ✅ Исправлено в коммите [s01_volume × 12 fix]
+(2026-04-09).
+
+**Проблема:** `s01_volume.step()` для yearly periods (Y4..Y10) считал
+`volume_units = active × offtake × seasonality` без множителя × 12.
+Excel в DASH yearly cols (AN..AT) хранит **monthly average** offtake,
+а в листах VOLUME / NET REVENUE применяет годовой aggregate (× 12).
+Это давало 12-кратное занижение нашего volume_units для yearly periods,
+и катастрофически отрицательный NPV в полном GORJI импорте (Y1Y10 = -34M
+против эталона +80M).
+
+**Доказательство:**
+- DASH SKU 1 HM offtake col M36 (col 39) = 16.8 (monthly)
+- DASH SKU 1 HM offtake col Y4 (col 40) = 17.0625 (monthly average)
+- ratio Y4/M36 = 1.016 (только годовой рост, **не × 12**)
+- Excel VOLUME лист SKU 1 HM Y4 col 47 = **13,127 литров** (annual)
+- VOLUME M36 col 46 = **949 литров** (monthly)
+- ratio = 13.83 ≈ 14 (× 12 + рост)
+
+**Реализация:**
+```python
+# s01_volume.py
+period_units = 1.0 if inp.period_is_monthly[t] else 12.0
+vol_u = active * inp.offtake[t] * inp.seasonality[t] * period_units
+```
+
+После fix volume_units Y4 для project = 3,694,359 = exactly Excel
+DATA r15 col E. test_gorji_reference (per-unit M1-M6) не сломан.
+
+**Тесты:** 207/207 зелёные после fix.
+
+---
+
+### D-15 — DASH относительная ось (relative-to-launch month канала)
+
+**Статус:** Обнаружено 2026-04-09. Исправляется в импорт-скрипте через shift.
+
+**Проблема:** DASH cols D..AT для каждой (SKU × Channel) комбинации
+хранят значения **относительно launch month канала**, не absolute periods
+проекта. Excel в листах NET REVENUE / VOLUME / RETAIL **сдвигает** DASH
+cols в absolute periods через формулы.
+
+**Доказательство:**
+- SKU 1 HM launch = 2025-02 (Y2 Feb = M14 absolute)
+- DASH col D (M1 канала) ND = 0.0384 (start ramp value)
+- NET REVENUE row 2 (SKU 1 HM) col K (M1 absolute = 2024-01) NR = **0**
+- Volume_M1 absolute = 0 (нет продаж в pre-launch period)
+- Если бы DASH absolute, ND_M1 × offtake_M1 × shelf_M1 = NR > 0
+- Но NR_M1 = 0 → DASH cells **относительные**
+
+**Маппинг:**
+- DASH col 4 (M1 канала) → absolute period N (где N = launch_period_number)
+- DASH col 5 (M2 канала) → absolute period N+1
+- DASH col 39 (M36 канала) → absolute period N+35
+- DASH col 40..46 (Y4..Y10 канала) → absolute period N+36..N+42
+
+Если N + 42 > 43 (за horizon проекта), последние DASH cols игнорируются.
+
+**Реализация:** в `scripts/import_gorji_full.py` при копировании DASH
+cols в PeriodValue применять shift по launch_period_number. Periods до
+launch остаются 0 (предусмотрено существующим launch lag механизмом D-13).
+
+**Pipeline не изменяется** — обнуление до launch period делает уже
+существующий механизм D-13 в `calculation_service._build_line_input`.
+
+---
+
+### D-16 — Material/Package per-period custom inflation в DASH
+
+**Статус:** Обнаружено 2026-04-09. Требует расширения pipeline для приёма
+per-period BOM значений из БД.
+
+**Проблема:** Excel хранит material и package cost per period в DASH
+rows 36/37 cols D..AT с **custom inflation logic**, которая **НЕ
+соответствует** ни одному стандартному профилю инфляции из seed.
+
+**Доказательство (SKU 1 HM material row 36):**
+```
+M1 = 3.6994        (база)
+M4 +7% = 3.958     (Apr 2024 — стандартно)
+M10 +7% = 4.235    (Oct 2024 — стандартно)
+M16 +7% = 4.532    (Apr 2025 — стандартно)
+M17 ×0.7876 = 3.569   ❌ (-21%, нестандартный reset!)
+M22 +7% = 3.819
+M28 +7% = 4.087
+M34 +7% = 4.373
+Y4..Y10 ×1.0712 каждый
+```
+
+Аномалия в M17 (× 0.7876) — это **бизнес-логика Excel** (возможно
+переход на нового поставщика, переоценка, или замена formula). Не может
+быть воспроизведена через generic `inflate_series` в pipeline.
+
+**Реализация:**
+1. Импорт-скрипт **читает per-period material+package values напрямую
+   из DASH** (rows 36/37 cols 4..46 после shift D-15)
+2. Сохраняет их в `PeriodValue.values["bom_unit_cost"]` per period
+3. `calculation_service._build_line_input` использует эти values если
+   они есть в effective values, иначе fallback на `inflate_series` от
+   BOMItem (для проектов где Excel custom logic не применяется)
+4. BOMItem остаётся в импорте для сохранения "базового" значения M1 — но
+   pipeline его игнорирует если в PeriodValue есть bom_unit_cost
+
+**Это архитектурное изменение pipeline** — расширение PipelineInput
+семантики (bom_unit_cost берётся из эффективных PeriodValues, не только
+из BOMItem). Согласовано с пользователем 2026-04-09.
+
+---
+
+### D-17 — Shelf price per-period custom inflation в DASH
+
+**Статус:** Обнаружено 2026-04-09. **Уже работает** через существующий
+механизм PeriodValue.values["shelf_price"]. Требует только D-15 shift.
+
+**Проблема:** Excel хранит shelf price per period в DASH row 30 с
+**custom inflation logic** — первый год константа, потом +7% Apr/Oct.
+
+**Доказательство (SKU 1 HM shelf_price row 30):**
+```
+M1..M27 absolute = 74.99   (константа в Y0, Y1, Y2 — никакой инфляции)
+M28 +7% = 80.24            (первый Apr inflation в Y3)
+M34 +7% = 85.86            (Oct Y3)
+Y4..Y10 ×1.0712 каждый
+```
+
+Это противоречит профилю "Апрель/Октябрь +7%" из seed (который
+применяет +7% **с первого Apr**, M4 absolute).
+
+Для SKU 1 HM (launch = M14 absolute) первая Apr inflation в shelf
+происходит в M28 = relative M15 канала (Apr второго года канала).
+Excel применяет shelf inflation **со второго года канала**, не с
+первого.
+
+**Реализация:** Pipeline **уже** использует `PeriodValue.values["shelf_price"]`
+напрямую (см. `calculation_service._build_line_input:241`). Не нужно
+ничего менять в pipeline. Достаточно чтобы **импорт** копировал DASH
+shelf values per period (после shift D-15) в PeriodValue.
+
+**После D-15 shift D-17 решается автоматически.**
+
+---
+
+### D-18 — Logistics per-period inflation в pipeline
+
+**Статус:** Обнаружено 2026-04-09. Требует расширения PipelineInput.
+
+**Проблема:** Excel хранит logistics_cost_per_kg per period в DASH row
+40 с inflation. Наш `PipelineInput.logistics_cost_per_kg` — `float`
+константа, применяется одинаково на все 43 периода в `s07_logistics_cost`.
+
+**Доказательство (SKU 1 HM logistics row 40):**
+```
+M1..M3 = 8.00      (база)
+M4..M9 = 8.56      (Apr 2024 +7%)
+...
+```
+
+При константе 8.00 на все periods и Excel инфлирующем к ~14.69 в Y10,
+наш logistics в Y10 на ~45% меньше Excel.
+
+**Реализация:**
+1. `PipelineInput.logistics_cost_per_kg`: `float → tuple[float, ...]`
+2. `s07_logistics_cost.step()`: `logistics[t] = logistics_per_kg[t] × volume_kg[t]`
+3. `_build_line_input`: формирует tuple через одно из:
+   - per-period values из `PeriodValue.values["logistic_per_kg"]` (если есть)
+   - `inflate_series` от `psc.logistics_cost_per_kg` (M1 базовое) с
+     project inflation profile (для проектов где Excel custom logic
+     не применяется)
+
+**Это архитектурное изменение pipeline** — расширение PipelineInput.
+Аналогично D-16, согласовано с пользователем 2026-04-09.
+
+---
+
+### D-19 — Production -15% per unit (TBD)
+
+**Статус:** Обнаружено 2026-04-09. **Может быть автоматически исправится**
+после D-15..D-18. Если нет — расследовать отдельно.
+
+**Проблема:** В Discovery V2 наш `cogs_production_per_unit` Y4 = 2.80 ₽,
+Excel = 3.27 ₽ (-15%).
+
+**Гипотеза:** `production_cost_rate × ex_factory_price × volume`. Если
+`ex_factory_price` берётся из неправильно инфлированного shelf (D-17),
+то ex_factory тоже неправильный → production занижен. После D-17 fix
+это может уйти автоматически.
+
+**Реализация:** Re-measure после D-15..D-18 fix'ов. Если расхождение
+останется > 1% — расследовать формулу production в Excel (возможно
+другая база, или другая ставка).
+
+---
+
 ## Верифицированные совпадения (ТЗ ≡ Excel)
 
 Следующие формулы ТЗ проверены против Excel и **расхождений нет**:
