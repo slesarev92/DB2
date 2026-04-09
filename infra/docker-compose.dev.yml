@@ -49,6 +49,10 @@ services:
       - "8000:8000"
     volumes:
       - ../backend:/app
+      # Фаза 4.5.2: file storage backend для media (package images,
+      # concept designs). Persistent volume — survives container restart.
+      # Структура: /media/{project_id}/{kind}/{uuid}_{filename}
+      - media-storage:/media
     environment:
       DATABASE_URL: postgresql+asyncpg://dbuser:dbpassword@postgres:5432/dbpassport
       REDIS_URL: redis://redis:6379/0
@@ -58,6 +62,7 @@ services:
       ENVIRONMENT: development
       LOG_LEVEL: INFO
       CORS_ORIGINS: http://localhost:3000
+      MEDIA_STORAGE_ROOT: /media
     depends_on:
       postgres:
         condition: service_healthy
@@ -76,6 +81,9 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ../backend:/app
+      # Тот же volume что у backend — celery task'и Phase 7.8 будут
+      # сохранять AI-generated изображения.
+      - media-storage:/media
     environment:
       DATABASE_URL: postgresql+asyncpg://dbuser:dbpassword@postgres:5432/dbpassport
       REDIS_URL: redis://redis:6379/0
@@ -84,6 +92,7 @@ services:
       SECRET_KEY: dev-secret-change-in-prod-min-32-chars
       ENVIRONMENT: development
       LOG_LEVEL: INFO
+      MEDIA_STORAGE_ROOT: /media
     depends_on:
       redis:
         condition: service_healthy
@@ -108,3 +117,7 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  # Фаза 4.5.2: file storage для MediaAsset (package images, concept
+  # designs, AI-generated изображения из Phase 7.8). Named volume чтобы
+  # файлы переживали рестарт backend/celery-worker контейнеров.
+  media-storage:

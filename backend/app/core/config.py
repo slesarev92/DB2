@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     cors_origins: str = "http://localhost:3000"
 
+    # --- Media storage (Фаза 4.5.2) ---
+    # Корень файлового хранилища для MediaAsset. В Docker — /media
+    # (named volume media-storage). Для локального запуска без Docker —
+    # ./media в текущей директории backend'а. Реальное значение
+    # переопределяется переменной окружения MEDIA_STORAGE_ROOT в compose.
+    media_storage_root: str = "./media"
+    # Hard-limit на размер одного файла в байтах (10 MB).
+    media_max_file_size: int = 10 * 1024 * 1024
+
     @property
     def cors_origins_list(self) -> list[str]:
         """Парсинг CSV в список: 'http://a,http://b' → ['http://a', 'http://b']."""

@@ -1136,7 +1136,34 @@ class MediaAsset:
 
 ---
 
-#### Задача 4.5.2 — File storage backend
+#### ✅ Задача 4.5.2 — File storage backend (2026-04-09)
+
+**Что сделано:**
+- `infra/docker-compose.dev.yml`: добавлен named volume `media-storage`,
+  mount `/media` на `backend` и `celery-worker` (последнее — для Phase 7.8
+  AI image generation), env var `MEDIA_STORAGE_ROOT=/media`
+- `app/core/config.py`: `media_storage_root`, `media_max_file_size` (10 MB)
+- `app/services/media_service.py` (~220 строк):
+  - `save_uploaded_file` — validation (kind whitelist, content_type whitelist
+    {png/jpeg/webp}, size ≤ 10 MB, non-empty), sanitization filename,
+    write-then-insert с компенсацией файла при IntegrityError
+  - `get_media_asset`, `list_media_for_project`, `read_media_file`,
+    `delete_media_asset` (hard-delete — blob, не финансовая сущность)
+  - Structure: `{root}/{project_id}/{kind}/{uuid}_{sanitized_filename}`
+  - Domain exceptions: `MediaValidationError`, `MediaNotFoundError`,
+    `MediaFileMissingError`
+- `app/api/media.py`: 4 endpoints с JWT auth, `StreamingResponse` для
+  download, зарегистрирован в `main.py`
+- 16 тестов (`tests/api/test_media.py`) — upload success / 401 /
+  404 project / 400 content_type|kind|empty|oversized, list empty /
+  returns DESC / 404, download bytes|headers / 404 / 500 missing-on-disk,
+  delete cleanup / 404 / 401. `autouse` fixture `isolated_media_root`
+  подменяет `settings.media_storage_root` на `tmp_path`
+
+**Критерий готовности:** ✅
+- Файлы сохраняются в Docker volume `media-storage`
+- Endpoints работают через `auth_client`, /media каталог writable
+- **252/252 pytest** (было 236/236 + 16 новых media)
 
 **Что делаем:**
 
@@ -1784,7 +1811,8 @@ GitHub Secrets).
 
 ### Фаза 4.5 — Контент паспорта (← следующий шаг: задача 4.5.1)
 - [ ] 4.5.1 Расширение data model (16 scalar + 5 JSONB Project + MediaAsset + миграция)
-- [ ] 4.5.2 File storage backend (Docker volume, media_service, upload/download endpoints)
+- [x] 4.5.2 File storage backend ✅ (2026-04-09, media-storage volume,
+  media_service с validation, 4 endpoints, 16 tests, 252/252 pytest)
 - [ ] 4.5.3 Frontend UI «Содержание паспорта» (новый таб с 7 секциями + image upload в SKU)
 - [ ] 4.5.4 Tests + commit
 

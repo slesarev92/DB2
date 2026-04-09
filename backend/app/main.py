@@ -9,6 +9,7 @@ from app.api import auth as auth_router
 from app.api import bom as bom_router
 from app.api import channels as channels_router
 from app.api import financial_plan as financial_plan_router
+from app.api import media as media_router
 from app.api import period_values as period_values_router
 from app.api import project_sku_channels as project_sku_channels_router
 from app.api import project_skus as project_skus_router
@@ -47,6 +48,7 @@ app.include_router(period_values_router.router)
 app.include_router(scenarios_router.router)
 app.include_router(reference_router.router)
 app.include_router(financial_plan_router.router)
+app.include_router(media_router.router)
 app.include_router(tasks_router.router)
 
 
