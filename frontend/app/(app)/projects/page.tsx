@@ -109,7 +109,7 @@ export default function ProjectsPage() {
       {projects !== null && projects.length > 0 && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {projects.map((p) => (
-            <Card key={p.id} className="relative h-full transition-shadow hover:shadow-md">
+            <Card key={p.id} className="h-full transition-shadow hover:shadow-md">
               <Link href={`/projects/${p.id}`} className="block">
                 <CardHeader>
                   <div className="flex items-start justify-between gap-2">
@@ -137,15 +137,12 @@ export default function ProjectsPage() {
                   </dl>
                 </CardContent>
               </Link>
-              <div className="absolute right-2 bottom-2">
+              <div className="flex justify-end border-t px-4 py-2">
                 <Button
                   variant="ghost"
                   size="sm"
                   className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setDeleteTarget(p);
-                  }}
+                  onClick={() => setDeleteTarget(p)}
                 >
                   Удалить
                 </Button>
