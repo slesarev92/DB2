@@ -29,12 +29,21 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
+from datetime import datetime, timezone
 
 from app.api.deps import get_current_user
 from app.core.rate_limit import limiter
 from app.db import get_db
-from app.models import AIGeneratedImage, MediaAsset, ProjectSKU, User
+from app.models import (
+    AIGeneratedImage,
+    ChatConversation,
+    ChatMessage,
+    MediaAsset,
+    ProjectSKU,
+    User,
+)
 from app.schemas.ai import (
     AIBudgetUpdateRequest,
     AIChatRequest,
@@ -44,6 +53,9 @@ from app.schemas.ai import (
     AIExecutiveSummaryResponse,
     AIExecutiveSummarySaveRequest,
     AIGeneratedImageRead,
+    ChatConversationDetail,
+    ChatConversationRead,
+    ChatMessageRead,
     AIKpiExplanationRequest,
     AIKpiExplanationResponse,
     AIMarketingResearchEditRequest,
@@ -679,18 +691,54 @@ async def freeform_chat(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
         ) from exc
 
-    # Conversation history from Redis
-    conv_id = body.conversation_id or str(uuid.uuid4())
+    # Conversation: load existing or create new
+    conversation: ChatConversation | None = None
+    if body.conversation_id:
+        try:
+            conv_id_int = int(body.conversation_id)
+            conversation = await session.get(ChatConversation, conv_id_int)
+            if conversation and conversation.deleted_at is not None:
+                conversation = None
+        except (ValueError, TypeError):
+            pass
+
+    if conversation is None:
+        title = body.question[:80].strip() or "Новый разговор"
+        conversation = ChatConversation(
+            project_id=project_id,
+            user_id=current_user.id,
+            title=title,
+        )
+        session.add(conversation)
+        await session.flush()
+
+    conv_id = conversation.id
+
+    # Save user message to DB
+    user_msg = ChatMessage(
+        conversation_id=conv_id,
+        role="user",
+        content=body.question,
+    )
+    session.add(user_msg)
+    await session.flush()
+
+    # Load conversation history from DB (last 20 messages for LLM context)
+    history_stmt = (
+        select(ChatMessage)
+        .where(ChatMessage.conversation_id == conv_id)
+        .order_by(ChatMessage.created_at)
+    )
+    all_db_messages = (await session.scalars(history_stmt)).all()
+    # Use last 20 messages (excluding the one we just added — it'll be appended)
+    history_messages = [
+        {"role": m.role, "content": m.content}
+        for m in all_db_messages[:-1]  # exclude last (just-added user msg)
+    ][-20:]
+
+    # Also update Redis for backward compat
     redis_key = f"ai_chat:{project_id}:{conv_id}"
     redis = ai_cache._get_redis_client()
-
-    history_messages: list[dict[str, str]] = []
-    try:
-        raw_history = await redis.get(redis_key)
-        if raw_history:
-            history_messages = json.loads(raw_history)
-    except Exception:
-        pass  # Redis unavailable → start fresh
 
     # Build messages array
     context_text = json.dumps(context, ensure_ascii=False, indent=2)
@@ -711,8 +759,8 @@ async def freeform_chat(
 
     async def sse_generator() -> AsyncIterator[str]:
         """SSE stream: yields `data: ...` events."""
-        # First event: conversation_id
-        yield f"data: {json.dumps({'type': 'conversation_id', 'id': conv_id})}\n\n"
+        # First event: conversation_id (now DB int id as string)
+        yield f"data: {json.dumps({'type': 'conversation_id', 'id': str(conv_id)})}\n\n"
 
         full_response = ""
         prompt_tokens = 0
@@ -742,12 +790,29 @@ async def freeform_chat(
             yield f"data: {json.dumps({'type': 'error', 'message': f'Ошибка: {exc}'})}\n\n"
             return
 
-        # Save conversation to Redis
+        # Save assistant message to DB
+        cost = calculate_cost(model, prompt_tokens, completion_tokens)
+        try:
+            assistant_msg = ChatMessage(
+                conversation_id=conv_id,
+                role="assistant",
+                content=full_response,
+                model=model,
+                cost_rub=cost,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+            )
+            session.add(assistant_msg)
+            conversation.updated_at = datetime.now(timezone.utc)
+            await session.flush()
+        except Exception:
+            pass  # Best effort
+
+        # Save conversation to Redis (for LLM context window perf)
         new_history = history_messages + [
             {"role": "user", "content": body.question},
             {"role": "assistant", "content": full_response},
         ]
-        # Keep last 20 messages (10 turns) to avoid unbounded growth
         new_history = new_history[-20:]
         try:
             await redis.set(
@@ -756,11 +821,9 @@ async def freeform_chat(
                 ex=CHAT_HISTORY_TTL,
             )
         except Exception:
-            pass  # Redis unavailable → history lost, not fatal
+            pass
 
-        # Cost + usage log (best effort — session may be closed by now
-        # in some edge cases with SSE, but normally still alive)
-        cost = calculate_cost(model, prompt_tokens, completion_tokens)
+        # Usage log
         try:
             await log_ai_usage(
                 session,
@@ -777,7 +840,7 @@ async def freeform_chat(
                 ),
             )
         except Exception:
-            pass  # Best effort logging
+            pass
 
         # Final event with metadata
         yield f"data: {json.dumps({'type': 'done', 'cost_rub': str(cost), 'model': model})}\n\n"
@@ -790,6 +853,113 @@ async def freeform_chat(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ============================================================
+# CHAT CONVERSATIONS — list / load / delete
+# ============================================================
+
+
+@router.get(
+    "/conversations",
+    response_model=list[ChatConversationRead],
+    summary="List chat conversations for project",
+)
+async def list_conversations(
+    project_id: int,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> list[ChatConversationRead]:
+    """Все незакрытые разговоры текущего юзера в проекте, новые первыми."""
+    stmt = (
+        select(ChatConversation)
+        .where(
+            ChatConversation.project_id == project_id,
+            ChatConversation.user_id == current_user.id,
+            ChatConversation.deleted_at.is_(None),
+        )
+        .order_by(ChatConversation.updated_at.desc())
+        .limit(50)
+    )
+    rows = (await session.scalars(stmt)).all()
+    return [
+        ChatConversationRead(
+            id=c.id,
+            title=c.title,
+            created_at=c.created_at.isoformat(),
+            updated_at=c.updated_at.isoformat(),
+        )
+        for c in rows
+    ]
+
+
+@router.get(
+    "/conversations/{conversation_id}",
+    response_model=ChatConversationDetail,
+    summary="Load conversation with all messages",
+)
+async def get_conversation(
+    project_id: int,
+    conversation_id: int,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> ChatConversationDetail:
+    """Загрузить разговор со всеми сообщениями."""
+    stmt = (
+        select(ChatConversation)
+        .where(
+            ChatConversation.id == conversation_id,
+            ChatConversation.project_id == project_id,
+            ChatConversation.user_id == current_user.id,
+            ChatConversation.deleted_at.is_(None),
+        )
+        .options(selectinload(ChatConversation.messages))
+    )
+    conv = (await session.scalars(stmt)).first()
+    if conv is None:
+        raise HTTPException(status_code=404, detail="Разговор не найден")
+    return ChatConversationDetail(
+        id=conv.id,
+        title=conv.title,
+        created_at=conv.created_at.isoformat(),
+        updated_at=conv.updated_at.isoformat(),
+        messages=[
+            ChatMessageRead(
+                id=m.id,
+                role=m.role,
+                content=m.content,
+                model=m.model,
+                cost_rub=m.cost_rub,
+                created_at=m.created_at.isoformat(),
+            )
+            for m in conv.messages
+        ],
+    )
+
+
+@router.delete(
+    "/conversations/{conversation_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Soft-delete conversation",
+)
+async def delete_conversation(
+    project_id: int,
+    conversation_id: int,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> None:
+    """Soft delete: проставляет deleted_at."""
+    stmt = select(ChatConversation).where(
+        ChatConversation.id == conversation_id,
+        ChatConversation.project_id == project_id,
+        ChatConversation.user_id == current_user.id,
+        ChatConversation.deleted_at.is_(None),
+    )
+    conv = (await session.scalars(stmt)).first()
+    if conv is None:
+        raise HTTPException(status_code=404, detail="Разговор не найден")
+    conv.deleted_at = datetime.now(timezone.utc)
+    await session.commit()
 
 
 # ============================================================

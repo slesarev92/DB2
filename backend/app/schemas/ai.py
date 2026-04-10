@@ -424,3 +424,32 @@ class AIGeneratedImageRead(BaseModel):
     cost_rub: Decimal | None
     model: str
     created_at: str
+
+
+# ============================================================
+# CHAT PERSISTENCE
+# ============================================================
+
+
+class ChatMessageRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    role: str
+    content: str
+    model: str | None = None
+    cost_rub: Decimal | None = None
+    created_at: str
+
+
+class ChatConversationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    created_at: str
+    updated_at: str
+
+
+class ChatConversationDetail(ChatConversationRead):
+    messages: list[ChatMessageRead]

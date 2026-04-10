@@ -15,6 +15,8 @@ from app.models.base import (
 from app.models.entities import (
     AIGeneratedImage,
     AIUsageLog,
+    ChatConversation,
+    ChatMessage,
     AKBEntry,
     BOMItem,
     Channel,
@@ -51,6 +53,8 @@ __all__ = [
     # Entities
     "AIGeneratedImage",
     "AIUsageLog",
+    "ChatConversation",
+    "ChatMessage",
     "AKBEntry",
     "BOMItem",
     "Channel",

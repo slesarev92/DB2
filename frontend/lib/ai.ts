@@ -217,3 +217,53 @@ export function setMockupAsPrimary(
 ): Promise<{ status: string; package_image_id: number }> {
   return apiPost(`/api/projects/${projectId}/ai/mockups/${mockupId}/set-primary`, {});
 }
+
+// ============================================================
+// Chat Conversations
+// ============================================================
+
+export interface ChatConversationItem {
+  id: number;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatMessageItem {
+  id: number;
+  role: "user" | "assistant";
+  content: string;
+  model?: string | null;
+  cost_rub?: string | null;
+  created_at: string;
+}
+
+export interface ChatConversationDetail extends ChatConversationItem {
+  messages: ChatMessageItem[];
+}
+
+export function listConversations(
+  projectId: number,
+): Promise<ChatConversationItem[]> {
+  return apiGet<ChatConversationItem[]>(
+    `/api/projects/${projectId}/ai/conversations`,
+  );
+}
+
+export function getConversation(
+  projectId: number,
+  conversationId: number,
+): Promise<ChatConversationDetail> {
+  return apiGet<ChatConversationDetail>(
+    `/api/projects/${projectId}/ai/conversations/${conversationId}`,
+  );
+}
+
+export function deleteConversation(
+  projectId: number,
+  conversationId: number,
+): Promise<void> {
+  return apiDelete<void>(
+    `/api/projects/${projectId}/ai/conversations/${conversationId}`,
+  );
+}

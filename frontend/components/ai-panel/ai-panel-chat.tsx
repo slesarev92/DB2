@@ -1,33 +1,45 @@
 "use client";
 
 /**
- * Freeform AI chat — полноценная SSE streaming реализация (Phase 7.3).
+ * Freeform AI chat — SSE streaming + DB persistence (Phase 7.3).
  *
- * Заменяет заглушку из Phase 7.2. Features:
- * - Scroll area с messages (user + assistant)
- * - SSE streaming: assistant message появляется token-by-token
- * - Input Enter = отправить, Shift+Enter = новая строка
- * - Abort controller для прерывания streaming
+ * Features:
+ * - Messages persisted to DB (chat_conversations + chat_messages)
+ * - Conversation list sidebar for switching between past chats
+ * - SSE streaming: assistant message appears token-by-token
+ * - Input Enter = send, Shift+Enter = newline
+ * - Abort controller for canceling streaming
  * - Tier toggle Standard / Deep
- * - "Clear conversation" button
- * - conversation_id из первого SSE event
+ * - "New conversation" and "Delete conversation" buttons
  */
 
-import { Send, Trash2, X } from "lucide-react";
+import { MessageSquarePlus, Send, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 
 import { useAIPanel } from "./ai-panel-context";
 
-import { formatCostRub, streamChat } from "@/lib/ai";
+import {
+  deleteConversation,
+  formatCostRub,
+  getConversation,
+  listConversations,
+  streamChat,
+} from "@/lib/ai";
 import { cn } from "@/lib/utils";
 
-import type { AIChatSSEEvent, AIModelTier } from "@/types/api";
+import type {
+  AIChatSSEEvent,
+  AIModelTier,
+} from "@/types/api";
+import type {
+  ChatConversationItem,
+  ChatMessageItem,
+} from "@/lib/ai";
 
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
-  /** Метаданные только для assistant (после done event) */
   costRub?: string;
   model?: string;
 }
@@ -46,10 +58,59 @@ export function AIPanelChat() {
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Conversation list
+  const [conversations, setConversations] = useState<ChatConversationItem[]>([]);
+  const [showList, setShowList] = useState(false);
+
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight);
   }, [messages]);
+
+  // Load conversations list on mount
+  useEffect(() => {
+    if (projectId === null) return;
+    listConversations(projectId)
+      .then((data) => {
+        setConversations(data);
+        // Auto-load last conversation if no active one
+        if (data.length > 0 && !conversationId) {
+          void loadConversation(data[0].id);
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+
+  const loadConversation = useCallback(
+    async (convId: number) => {
+      if (projectId === null) return;
+      try {
+        const detail = await getConversation(projectId, convId);
+        setConversationId(String(detail.id));
+        setMessages(
+          detail.messages.map((m: ChatMessageItem) => ({
+            role: m.role,
+            content: m.content,
+            costRub: m.cost_rub ?? undefined,
+            model: m.model ?? undefined,
+          })),
+        );
+        setShowList(false);
+        setError(null);
+      } catch {
+        setError("Не удалось загрузить разговор");
+      }
+    },
+    [projectId],
+  );
+
+  const refreshConversations = useCallback(() => {
+    if (projectId === null) return;
+    listConversations(projectId)
+      .then(setConversations)
+      .catch(() => {});
+  }, [projectId]);
 
   const handleSend = useCallback(async () => {
     if (!input.trim() || streaming || projectId === null) return;
@@ -58,16 +119,12 @@ export function AIPanelChat() {
     setInput("");
     setError(null);
 
-    // Add user message immediately
     setMessages((prev) => [...prev, { role: "user", content: question }]);
 
-    // Start streaming
     setStreaming(true);
     const controller = new AbortController();
     abortRef.current = controller;
 
-    // Add placeholder assistant message
-    const assistantIdx = messages.length + 1; // index after adding user msg
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
     let localConvId = conversationId;
@@ -126,9 +183,9 @@ export function AIPanelChat() {
         { signal: controller.signal },
       );
 
-      // Push to history
       if (lastModel) {
         refreshUsage();
+        refreshConversations();
         pushHistory({
           timestamp: new Date().toISOString(),
           feature: "freeform_chat",
@@ -142,7 +199,6 @@ export function AIPanelChat() {
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
-        // Aborted — append note to last message
         setMessages((prev) => {
           const copy = [...prev];
           const last = copy[copy.length - 1];
@@ -161,7 +217,7 @@ export function AIPanelChat() {
       setStreaming(false);
       abortRef.current = null;
     }
-  }, [input, streaming, projectId, conversationId, tier, messages.length, pushHistory, refreshUsage]);
+  }, [input, streaming, projectId, conversationId, tier, pushHistory, refreshUsage, refreshConversations]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -173,11 +229,29 @@ export function AIPanelChat() {
     [handleSend],
   );
 
-  const handleClear = useCallback(() => {
+  const handleNewConversation = useCallback(() => {
     setMessages([]);
     setConversationId(null);
     setError(null);
+    setShowList(false);
   }, []);
+
+  const handleDeleteConversation = useCallback(
+    async (convId: number) => {
+      if (projectId === null) return;
+      try {
+        await deleteConversation(projectId, convId);
+        if (conversationId === String(convId)) {
+          setMessages([]);
+          setConversationId(null);
+        }
+        refreshConversations();
+      } catch {
+        setError("Не удалось удалить разговор");
+      }
+    },
+    [projectId, conversationId, refreshConversations],
+  );
 
   if (projectId === null) {
     return (
@@ -190,43 +264,94 @@ export function AIPanelChat() {
   return (
     <div className="flex h-full flex-col">
       {/* Toolbar */}
-      <div className="flex items-center justify-between pb-2 text-xs">
-        <div className="flex overflow-hidden rounded-md border">
+      <div className="flex items-center justify-between gap-1 pb-2 text-xs">
+        <div className="flex items-center gap-1">
+          <div className="flex overflow-hidden rounded-md border">
+            <button
+              type="button"
+              onClick={() => setTier("balanced")}
+              className={cn(
+                "px-2 py-1",
+                tier === "balanced"
+                  ? "bg-primary text-primary-foreground"
+                  : "hover:bg-muted",
+              )}
+            >
+              Standard
+            </button>
+            <button
+              type="button"
+              onClick={() => setTier("heavy")}
+              className={cn(
+                "px-2 py-1",
+                tier === "heavy"
+                  ? "bg-primary text-primary-foreground"
+                  : "hover:bg-muted",
+              )}
+            >
+              Deep
+            </button>
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={() => setTier("balanced")}
+            onClick={() => setShowList((v) => !v)}
             className={cn(
-              "px-2 py-1",
-              tier === "balanced"
-                ? "bg-primary text-primary-foreground"
-                : "hover:bg-muted",
+              "rounded px-2 py-1",
+              showList ? "bg-muted" : "hover:bg-muted",
+              "text-muted-foreground hover:text-foreground",
             )}
+            title="История разговоров"
           >
-            Standard
+            {conversations.length > 0 ? `${conversations.length}` : "0"}
           </button>
           <button
             type="button"
-            onClick={() => setTier("heavy")}
-            className={cn(
-              "px-2 py-1",
-              tier === "heavy"
-                ? "bg-primary text-primary-foreground"
-                : "hover:bg-muted",
-            )}
+            onClick={handleNewConversation}
+            className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
+            title="Новый разговор"
           >
-            Deep
+            <MessageSquarePlus className="h-3.5 w-3.5" />
           </button>
         </div>
-        <button
-          type="button"
-          onClick={handleClear}
-          disabled={messages.length === 0}
-          className="flex items-center gap-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
-          title="Очистить чат"
-        >
-          <Trash2 className="h-3 w-3" />
-        </button>
       </div>
+
+      {/* Conversation list (slide-in) */}
+      {showList && (
+        <div className="mb-2 max-h-40 space-y-1 overflow-y-auto rounded-md border p-2">
+          {conversations.length === 0 && (
+            <p className="text-[10px] text-muted-foreground">Нет разговоров</p>
+          )}
+          {conversations.map((c) => (
+            <div
+              key={c.id}
+              className={cn(
+                "flex items-center justify-between rounded px-2 py-1 text-[11px]",
+                conversationId === String(c.id)
+                  ? "bg-primary/10 font-medium"
+                  : "hover:bg-muted cursor-pointer",
+              )}
+            >
+              <button
+                type="button"
+                className="flex-1 truncate text-left"
+                onClick={() => void loadConversation(c.id)}
+              >
+                {c.title}
+              </button>
+              <button
+                type="button"
+                className="ml-1 shrink-0 text-muted-foreground hover:text-destructive"
+                onClick={() => void handleDeleteConversation(c.id)}
+                title="Удалить"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Messages area */}
       <div

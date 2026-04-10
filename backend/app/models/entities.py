@@ -1054,3 +1054,86 @@ class AIUsageLog(Base):
         server_default=func.now(),
         nullable=False,
     )
+
+
+# ============================================================
+# Chat Conversations (Phase 7.3 — persistence)
+# ============================================================
+
+
+class ChatConversation(Base):
+    """Разговор в AI-чате. Связывает серию сообщений с проектом и юзером.
+
+    title — автоматически из первых ~80 символов первого вопроса.
+    deleted_at — soft delete (паттерн #4 из CLAUDE.md).
+    """
+
+    __tablename__ = "chat_conversations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    messages: Mapped[list["ChatMessage"]] = relationship(
+        back_populates="conversation",
+        lazy="raise_on_sql",
+        order_by="ChatMessage.created_at",
+    )
+
+
+class ChatMessage(Base):
+    """Одно сообщение в AI-чате (user или assistant).
+
+    model / cost_rub / prompt_tokens / completion_tokens — заполняются
+    только для role=assistant после завершения streaming.
+    """
+
+    __tablename__ = "chat_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_conversations.id", ondelete="CASCADE"), nullable=False
+    )
+    role: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    cost_rub: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 6), nullable=True
+    )
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    conversation: Mapped["ChatConversation"] = relationship(
+        back_populates="messages", lazy="raise_on_sql"
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('user', 'assistant')",
+            name="ck_chat_messages_role",
+        ),
+    )
