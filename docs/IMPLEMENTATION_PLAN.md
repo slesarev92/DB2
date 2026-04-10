@@ -2945,6 +2945,15 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
   Polza /v1/images/generations с моделью flux-2-pro, сохранение как
   MediaAsset, link to ProjectSKU.package_image_id)
 
+### ✅ UX Phase 4b — Navigation refactor: tabs → sidebar (закрыта 2026-04-10)
+- [x] ProjectNavContext — registry-based context for sidebar ↔ project page communication
+- [x] useProjectProgress hook — computes ●/○ progress from existing APIs (SKUs, fin plan, scenarios, results)
+- [x] ProjectSidebarNav — 5 numbered groups with progress dots, collapsed ①-⑤ mode
+- [x] Sidebar conditional: project nav inside `/projects/[id]`, global nav elsewhere
+- [x] Project page: removed `<Tabs>` strip, conditional rendering, `?tab=` URL persistence
+- [x] Split overview → Параметры + Фин. план (12 sections total)
+- tsc 0 errors, 442 pytest passed, visual check OK.
+
 ### ✅ UX Phase 4 — Keyboard, Validation, Sorting (закрыта 2026-04-10, 1 коммит)
 - [x] 4.1 Keyboard shortcuts: Ctrl+S save, Ctrl+[/] tab nav, Escape close AI.
   `lib/use-keyboard-shortcuts.ts`, Tabs controlled mode, AI panel Escape handler.

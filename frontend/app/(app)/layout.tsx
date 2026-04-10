@@ -7,6 +7,7 @@ import { AIPanelProvider } from "@/components/ai-panel/ai-panel-context";
 import { AIPanelDrawer } from "@/components/ai-panel/ai-panel-drawer";
 import { useAuth } from "@/components/auth-provider";
 import { Sidebar } from "@/components/sidebar";
+import { ProjectNavProvider } from "@/lib/project-nav-context";
 
 /**
  * Layout для защищённых маршрутов (/projects/*, /skus/*, /channels/*).
@@ -42,11 +43,13 @@ export default function AppLayout({
 
   return (
     <AIPanelProvider>
-      <div className="flex min-h-screen">
-        <Sidebar />
-        <main className="flex-1 overflow-auto p-6">{children}</main>
-        <AIPanelDrawer />
-      </div>
+      <ProjectNavProvider>
+        <div className="flex min-h-screen">
+          <Sidebar />
+          <main className="flex-1 overflow-auto p-6">{children}</main>
+          <AIPanelDrawer />
+        </div>
+      </ProjectNavProvider>
     </AIPanelProvider>
   );
 }

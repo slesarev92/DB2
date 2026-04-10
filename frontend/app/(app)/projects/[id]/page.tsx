@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AkbTab } from "@/components/projects/akb-tab";
@@ -23,70 +22,106 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
 import { useAIPanel } from "@/components/ai-panel/ai-panel-context";
 import { ApiError } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { getProject } from "@/lib/projects";
+import {
+  TAB_ORDER,
+  useProjectNavRegistry,
+  type TabValue,
+} from "@/lib/project-nav-context";
+import { useProjectProgress } from "@/lib/use-project-progress";
 import { useKeyboardShortcuts } from "@/lib/use-keyboard-shortcuts";
 import { useUnsavedChanges } from "@/lib/use-unsaved-changes";
 
 import type { ProjectRead } from "@/types/api";
 
-/** Ordered tab values — used for Ctrl+[ / Ctrl+] navigation. */
-const TAB_ORDER = [
-  "overview",
-  "content",
-  "skus",
-  "ingredients",
-  "channels",
-  "akb",
-  "obppc",
-  "periods",
-  "scenarios",
-  "results",
-  "sensitivity",
-] as const;
-
-type TabValue = (typeof TAB_ORDER)[number];
+/** Validate a query param as a valid tab value. */
+function parseTabParam(value: string | null): TabValue {
+  if (value && (TAB_ORDER as readonly string[]).includes(value)) {
+    return value as TabValue;
+  }
+  return "overview";
+}
 
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const projectId = Number(params.id);
   const [project, setProject] = useState<ProjectRead | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabValue>("overview");
+  const [activeTab, setActiveTabState] = useState<TabValue>(() =>
+    parseTabParam(searchParams.get("tab")),
+  );
   const { setProjectId } = useAIPanel();
   const { containerRef, confirmIfDirty } = useUnsavedChanges();
+  const { register, unregister } = useProjectNavRegistry();
+  const { groups, loading: progressLoading } = useProjectProgress(
+    projectId,
+    project,
+  );
 
-  /** Switch tab — blurs active input first (triggering auto-save). */
+  /** Switch tab — blurs active input first, updates state + URL. */
   const switchTab = useCallback(
     (tab: TabValue) => {
-      confirmIfDirty(() => setActiveTab(tab));
+      confirmIfDirty(() => {
+        setActiveTabState(tab);
+        const url = `/projects/${projectId}?tab=${tab}`;
+        router.replace(url, { scroll: false });
+      });
     },
-    [confirmIfDirty],
+    [confirmIfDirty, projectId, router],
   );
+
+  // Register into ProjectNavContext for sidebar
+  useEffect(() => {
+    if (project) {
+      register({
+        projectId,
+        projectName: project.name,
+        activeTab,
+        setActiveTab: switchTab,
+        groups,
+        progressLoading,
+      });
+    }
+    return () => unregister();
+  }, [
+    project,
+    projectId,
+    activeTab,
+    switchTab,
+    groups,
+    progressLoading,
+    register,
+    unregister,
+  ]);
 
   // Ctrl+[ previous tab, Ctrl+] next tab
   const goToPrevTab = useCallback(() => {
-    setActiveTab((cur) => {
+    setActiveTabState((cur) => {
       const idx = TAB_ORDER.indexOf(cur);
-      return idx > 0 ? TAB_ORDER[idx - 1] : cur;
+      const prev = idx > 0 ? TAB_ORDER[idx - 1] : cur;
+      if (prev !== cur) {
+        router.replace(`/projects/${projectId}?tab=${prev}`, { scroll: false });
+      }
+      return prev;
     });
-  }, []);
+  }, [projectId, router]);
 
   const goToNextTab = useCallback(() => {
-    setActiveTab((cur) => {
+    setActiveTabState((cur) => {
       const idx = TAB_ORDER.indexOf(cur);
-      return idx < TAB_ORDER.length - 1 ? TAB_ORDER[idx + 1] : cur;
+      const next =
+        idx < TAB_ORDER.length - 1 ? TAB_ORDER[idx + 1] : cur;
+      if (next !== cur) {
+        router.replace(`/projects/${projectId}?tab=${next}`, { scroll: false });
+      }
+      return next;
     });
-  }, []);
+  }, [projectId, router]);
 
   // Ctrl+S — blur active element to trigger onBlur auto-save handlers
   const saveShortcut = useCallback(() => {
@@ -157,146 +192,87 @@ export default function ProjectDetailPage() {
 
   return (
     <div className="space-y-6" ref={containerRef}>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <Link
-            href="/projects"
-            className="text-sm text-muted-foreground hover:underline"
-          >
-            ← Все проекты
-          </Link>
-          <h1 className="mt-1 text-2xl font-semibold">{project.name}</h1>
-          <p className="text-sm text-muted-foreground">
-            Старт: {formatDate(project.start_date)} · {project.horizon_years} лет
-          </p>
-        </div>
+      {/* Project header */}
+      <div>
+        <h1 className="text-2xl font-semibold">{project.name}</h1>
+        <p className="text-sm text-muted-foreground">
+          Старт: {formatDate(project.start_date)} · {project.horizon_years} лет
+        </p>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(v) => switchTab(v as TabValue)}>
-        <TabsList>
-          {/* Настройка */}
-          <TabsTrigger value="overview">Параметры</TabsTrigger>
-          <TabsTrigger value="content">Содержание</TabsTrigger>
-          <div className="mx-1 h-4 w-px shrink-0 bg-border" />
-          {/* Продукт */}
-          <TabsTrigger value="skus">SKU и BOM</TabsTrigger>
-          <TabsTrigger value="ingredients">Ингредиенты</TabsTrigger>
-          <div className="mx-1 h-4 w-px shrink-0 bg-border" />
-          {/* Дистрибуция */}
-          <TabsTrigger value="channels">Каналы</TabsTrigger>
-          <TabsTrigger value="akb">АКБ</TabsTrigger>
-          <TabsTrigger value="obppc">OBPPC</TabsTrigger>
-          <div className="mx-1 h-4 w-px shrink-0 bg-border" />
-          {/* Моделирование */}
-          <TabsTrigger value="periods">Периоды</TabsTrigger>
-          <TabsTrigger value="scenarios">Сценарии</TabsTrigger>
-          <div className="mx-1 h-4 w-px shrink-0 bg-border" />
-          {/* Анализ */}
-          <TabsTrigger value="results">Результаты</TabsTrigger>
-          <TabsTrigger value="sensitivity">Чувствительность</TabsTrigger>
-        </TabsList>
+      {/* Active section content */}
+      {activeTab === "overview" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Финансовые параметры</CardTitle>
+            <CardDescription>
+              Дефолты соответствуют GORJI Excel модели.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+              <div>
+                <dt className="text-muted-foreground">WACC</dt>
+                <dd className="font-medium">
+                  {(Number(project.wacc) * 100).toFixed(2)}%
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Налог на прибыль</dt>
+                <dd className="font-medium">
+                  {(Number(project.tax_rate) * 100).toFixed(2)}%
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Working Capital</dt>
+                <dd className="font-medium">
+                  {(Number(project.wc_rate) * 100).toFixed(2)}%
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">VAT</dt>
+                <dd className="font-medium">
+                  {(Number(project.vat_rate) * 100).toFixed(2)}%
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Валюта</dt>
+                <dd className="font-medium">{project.currency}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Профиль инфляции</dt>
+                <dd className="font-medium">
+                  {project.inflation_profile_id ?? "—"}
+                </dd>
+              </div>
+            </dl>
+          </CardContent>
+        </Card>
+      )}
 
-        {/* ── Настройка ── */}
+      {activeTab === "content" && <ContentTab projectId={projectId} />}
 
-        <TabsContent value="overview" className="mt-4 space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Финансовые параметры</CardTitle>
-              <CardDescription>
-                Дефолты соответствуют GORJI Excel модели.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-                <div>
-                  <dt className="text-muted-foreground">WACC</dt>
-                  <dd className="font-medium">
-                    {(Number(project.wacc) * 100).toFixed(2)}%
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Налог на прибыль</dt>
-                  <dd className="font-medium">
-                    {(Number(project.tax_rate) * 100).toFixed(2)}%
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Working Capital</dt>
-                  <dd className="font-medium">
-                    {(Number(project.wc_rate) * 100).toFixed(2)}%
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">VAT</dt>
-                  <dd className="font-medium">
-                    {(Number(project.vat_rate) * 100).toFixed(2)}%
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Валюта</dt>
-                  <dd className="font-medium">{project.currency}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Профиль инфляции</dt>
-                  <dd className="font-medium">
-                    {project.inflation_profile_id ?? "—"}
-                  </dd>
-                </div>
-              </dl>
-            </CardContent>
-          </Card>
+      {activeTab === "financial-plan" && (
+        <FinancialPlanEditor projectId={projectId} />
+      )}
 
-          <FinancialPlanEditor projectId={projectId} />
-        </TabsContent>
+      {activeTab === "skus" && <SkusTab projectId={projectId} />}
 
-        <TabsContent value="content" className="mt-4">
-          <ContentTab projectId={projectId} />
-        </TabsContent>
+      {activeTab === "ingredients" && <IngredientsCatalog />}
 
-        {/* ── Продукт ── */}
+      {activeTab === "channels" && <ChannelsTab projectId={projectId} />}
 
-        <TabsContent value="skus" className="mt-4">
-          <SkusTab projectId={projectId} />
-        </TabsContent>
+      {activeTab === "akb" && <AkbTab projectId={projectId} />}
 
-        <TabsContent value="ingredients" className="mt-4">
-          <IngredientsCatalog />
-        </TabsContent>
+      {activeTab === "obppc" && <ObppcTab projectId={projectId} />}
 
-        {/* ── Дистрибуция ── */}
+      {activeTab === "periods" && <PeriodsTab projectId={projectId} />}
 
-        <TabsContent value="channels" className="mt-4">
-          <ChannelsTab projectId={projectId} />
-        </TabsContent>
+      {activeTab === "scenarios" && <ScenariosTab projectId={projectId} />}
 
-        <TabsContent value="akb" className="mt-4">
-          <AkbTab projectId={projectId} />
-        </TabsContent>
+      {activeTab === "results" && <ResultsTab projectId={projectId} />}
 
-        <TabsContent value="obppc" className="mt-4">
-          <ObppcTab projectId={projectId} />
-        </TabsContent>
-
-        {/* ── Моделирование ── */}
-
-        <TabsContent value="periods" className="mt-4">
-          <PeriodsTab projectId={projectId} />
-        </TabsContent>
-
-        <TabsContent value="scenarios" className="mt-4">
-          <ScenariosTab projectId={projectId} />
-        </TabsContent>
-
-        {/* ── Анализ ── */}
-
-        <TabsContent value="results" className="mt-4">
-          <ResultsTab projectId={projectId} />
-        </TabsContent>
-
-        <TabsContent value="sensitivity" className="mt-4">
-          <SensitivityTab projectId={projectId} />
-        </TabsContent>
-      </Tabs>
+      {activeTab === "sensitivity" && <SensitivityTab projectId={projectId} />}
     </div>
   );
 }

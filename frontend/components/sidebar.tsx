@@ -6,19 +6,11 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 import { useAIPanel } from "@/components/ai-panel/ai-panel-context";
+import { ProjectSidebarNav } from "@/components/project-sidebar-nav";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-
-interface NavItem {
-  href: string;
-  label: string;
-  icon: typeof FolderKanban;
-}
-
-const NAV: NavItem[] = [
-  { href: "/projects", label: "Проекты", icon: FolderKanban },
-];
+import { useProjectNav } from "@/lib/project-nav-context";
 
 const STORAGE_KEY = "sidebar-collapsed";
 
@@ -26,6 +18,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const { toggle: toggleAIPanel } = useAIPanel();
+  const projectNav = useProjectNav();
   const [collapsed, setCollapsed] = useState(false);
 
   // Restore from localStorage on mount
@@ -53,6 +46,9 @@ export function Sidebar() {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, []);
+
+  // Detect if we're on a project detail page (for loading skeleton)
+  const isProjectRoute = /^\/projects\/\d+/.test(pathname);
 
   return (
     <aside
@@ -86,31 +82,53 @@ export function Sidebar() {
         </Button>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 space-y-1 px-2 py-4">
-        {NAV.map((item) => {
-          const active =
-            pathname === item.href || pathname.startsWith(`${item.href}/`);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              title={collapsed ? item.label : undefined}
-              className={cn(
-                "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
-                collapsed && "justify-center px-0",
-                active
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "hover:bg-sidebar-accent/50",
-              )}
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              {!collapsed && <span>{item.label}</span>}
-            </Link>
-          );
-        })}
-      </nav>
+      {/* Nav — conditional: project nav or global nav */}
+      {projectNav ? (
+        <ProjectSidebarNav
+          projectName={projectNav.projectName}
+          activeTab={projectNav.activeTab}
+          onTabChange={projectNav.setActiveTab}
+          groups={projectNav.groups}
+          collapsed={collapsed}
+        />
+      ) : isProjectRoute ? (
+        /* Loading skeleton while project data registers */
+        <nav className="flex-1 px-2 py-4">
+          {!collapsed && (
+            <div className="space-y-2 px-3">
+              <div className="h-3 w-20 animate-pulse rounded bg-muted" />
+              <div className="h-px bg-border" />
+              <div className="h-3 w-32 animate-pulse rounded bg-muted" />
+              <div className="h-3 w-24 animate-pulse rounded bg-muted" />
+              <div className="h-3 w-28 animate-pulse rounded bg-muted" />
+            </div>
+          )}
+        </nav>
+      ) : (
+        /* Global nav */
+        <nav className="flex-1 space-y-1 px-2 py-4">
+          {(() => {
+            const active =
+              pathname === "/projects" || pathname.startsWith("/projects/");
+            return (
+              <Link
+                href="/projects"
+                title={collapsed ? "Проекты" : undefined}
+                className={cn(
+                  "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+                  collapsed && "justify-center px-0",
+                  active
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "hover:bg-sidebar-accent/50",
+                )}
+              >
+                <FolderKanban className="h-4 w-4 shrink-0" />
+                {!collapsed && <span>Проекты</span>}
+              </Link>
+            );
+          })()}
+        </nav>
+      )}
 
       {/* Footer */}
       <div className="border-t px-3 py-3">

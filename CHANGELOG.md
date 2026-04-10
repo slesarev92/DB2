@@ -9,6 +9,24 @@
 
 ## [Unreleased]
 
+### Changed (Navigation refactor — tabs → sidebar, 2026-04-10)
+
+**Project sidebar navigation:**
+- Project tabs (11→12) moved from horizontal strip to sidebar
+- Sidebar shows project-specific nav when inside a project, global nav otherwise
+- 5 numbered groups: Основа, Продукт, Дистрибуция, Моделирование, Анализ
+- Progress dots (●/○) per section showing completion status
+- "Фин. план" split out from "Параметры" as separate section
+- `← Все проекты` back link in sidebar header
+- Collapsed mode: ①-⑤ numbered buttons with tooltips
+
+**Architecture:**
+- `ProjectNavProvider` — registry-based context (same pattern as AIPanelProvider)
+- `useProjectProgress` hook — computes progress from existing API data (no new endpoints)
+- `ProjectSidebarNav` component — renders groups, sections, progress dots
+- Active tab persisted in URL query param `?tab=skus` (survives refresh, shareable)
+- Horizontal `<Tabs>` strip removed — conditional rendering via `switch(activeTab)`
+
 ### Changed (UX Phase 4 — keyboard, validation, sorting, 2026-04-10)
 
 **Keyboard shortcuts (4.1):**
