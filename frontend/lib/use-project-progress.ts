@@ -43,6 +43,8 @@ export function useProjectProgress(
     results: false,
     sensitivity: false,
     pricing: false,
+    "value-chain": false,
+    pnl: false,
   });
   const [loading, setLoading] = useState(true);
 
@@ -66,6 +68,8 @@ export function useProjectProgress(
         results: false,
         sensitivity: false,    // always empty — on-demand
         pricing: false,        // derived from channels — on-demand
+        "value-chain": false,  // derived from channels — on-demand
+        pnl: false,            // derived from pipeline — on-demand
       };
 
       // Content: ≥3 of key fields filled

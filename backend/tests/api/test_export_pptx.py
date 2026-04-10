@@ -81,7 +81,7 @@ class TestGenerateProjectPptx:
         result = await generate_project_pptx(db_session, project_id)
 
         prs = Presentation(BytesIO(result))
-        assert len(prs.slides) == 13
+        assert len(prs.slides) == 14
 
     async def test_slide_titles(self, db_session: AsyncSession):
         """Каждый слайд имеет ожидаемый заголовок."""
@@ -103,6 +103,7 @@ class TestGenerateProjectPptx:
             "6. Финансовая модель",
             "7. Ключевые KPI",
             "8. PnL по годам",
+            "Анализ чувствительности",
             "9. Стакан себестоимости",
             "10. Риски и готовность функций",
             "11. Дорожная карта и согласующие",
@@ -180,7 +181,7 @@ class TestGenerateProjectPptx:
 
         result = await generate_project_pptx(db_session, project_id)
         prs = Presentation(BytesIO(result))
-        assert len(prs.slides) == 13
+        assert len(prs.slides) == 14
 
         # Placeholder'ы должны быть хотя бы в одной ячейке каждой секции
         all_text = " ".join(_collect_slide_text(prs))
@@ -225,7 +226,7 @@ class TestExportPptxEndpoint:
         assert resp.status_code == 200
 
         prs = Presentation(BytesIO(resp.content))
-        assert len(prs.slides) == 13
+        assert len(prs.slides) == 14
 
     async def test_filename_in_content_disposition(
         self,

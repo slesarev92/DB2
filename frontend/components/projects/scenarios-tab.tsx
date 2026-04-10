@@ -486,6 +486,7 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
                     {sortedScenarios.map((s) => {
                       const r = getResult(s.id, scope);
                       const d = deltaVsBase(s.id, scope, "npv");
+                      const npvNum = r?.npv != null ? Number(r.npv) : NaN;
                       return (
                         <TableValuePair
                           key={s.id}
@@ -494,6 +495,7 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
                           deltaAbs={d.abs}
                           deltaPct={d.pct}
                           formatDeltaAbs={formatAbsDelta}
+                          valueClassName={!Number.isNaN(npvNum) ? (npvNum >= 0 ? "text-green-600" : "text-red-600") : ""}
                         />
                       );
                     })}
@@ -570,6 +572,15 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
           </Card>
         ))
       )}
+
+      {/* Color legend (Phase 8.6) */}
+      {!loading && Object.keys(resultsByScenario).length > 0 && (
+        <div className="flex items-center gap-4 text-xs text-muted-foreground mt-2">
+          <span>Цвет:</span>
+          <span className="text-green-600 font-semibold">NPV &ge; 0 / дельта положительная</span>
+          <span className="text-red-600 font-semibold">NPV &lt; 0 / дельта отрицательная</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -584,19 +595,21 @@ function TableValuePair({
   deltaAbs,
   deltaPct,
   formatDeltaAbs,
+  valueClassName,
 }: {
   formattedValue: string;
   isBase: boolean;
   deltaAbs: number | null;
   deltaPct: number | null;
   formatDeltaAbs: (v: number | null) => string;
+  valueClassName?: string;
 }) {
   if (isBase) {
-    return <TableCell className="text-right">{formattedValue}</TableCell>;
+    return <TableCell className={`text-right ${valueClassName ?? ""}`}>{formattedValue}</TableCell>;
   }
   return (
     <>
-      <TableCell className="text-right">{formattedValue}</TableCell>
+      <TableCell className={`text-right ${valueClassName ?? ""}`}>{formattedValue}</TableCell>
       <TableCell className={`text-right text-xs ${deltaClass(deltaAbs)}`}>
         <div>{formatDeltaAbs(deltaAbs)}</div>
         <div className="text-muted-foreground">

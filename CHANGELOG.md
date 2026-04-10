@@ -13,6 +13,27 @@
 - **8.1 Pricing Summary tab:** сводная таблица цен SKU × канал (полка,
   ex-factory с VAT-коррекцией, COGS из BOM, маржи каналов). Backend
   endpoint GET /api/projects/{id}/pricing-summary + frontend PricingTab.
+- **8.2 Value Chain / Стакан tab:** per-unit waterfall экономика по
+  SKU × канал (Shelf → Ex-Factory → COGS → GP → Logistics → CM →
+  CA&M → Marketing → EBITDA). Backend endpoint GET
+  /api/projects/{id}/value-chain + frontend ValueChainTab с цветовой
+  индикацией маржей (green ≥50%, yellow 45-50%, red <45%).
+- **8.3 Per-unit метрики в KPI-сводке:** scope-averaged Revenue/GP/CM/EBITDA
+  на штуку, литр, кг. 12 новых Numeric колонок в scenario_results,
+  вычисление в calculation_service, таблица 4×3×3 в ResultsTab.
+- **8.6 Цветовая индикация KPI:** 3-tier margin colors в ResultsTab
+  (green ≥25% / yellow 15-25% / red <15%), NPV color в ScenariosTab
+  (green/red), легенды в обоих табах. Value Chain уже имел цвета (8.2).
+- **8.4 Sensitivity в экспортах:** 2D матрица чувствительности (4 param ×
+  5 delta → NPV Y1-Y10) добавлена в PPT (новый слайд) и PDF (новая
+  секция в HTML-шаблоне). Sensitivity service вызывается при экспорте.
+- **8.5 P&L tab с toggle месяцы/кварталы/годы:** Backend endpoint
+  GET /api/projects/{id}/pnl (43 per-period P&L метрики из pipeline).
+  Frontend PnlTab с client-side агрегацией в кварталы (Q1-Q4 × Y1-Y3)
+  и годы (Y1-Y10). Toggle "Месяцы / Кварталы / Годы".
+- **8.7 Gate Timeline:** горизонтальная шкала G0→G5 с текущей позицией
+  и milestone labels (Идея→Масштабирование). Встроена в overview tab.
+- **8.6→ Цветовая индикация, 8.4→ Sensitivity exports** — уже включены выше.
 
 ---
 

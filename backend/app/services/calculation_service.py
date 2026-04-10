@@ -521,8 +521,58 @@ async def calculate_and_save_scenario(
     total_ebitda = sum(agg.ebitda) if agg.ebitda else 0.0
     ebitda_margin = total_ebitda / total_nr if total_nr else None
 
+    # Per-unit метрики (8.3): суммируем per-period values по scope,
+    # делим на total volume (units / liters / kg).
+    # Scope → max model_year (логический, без Excel D-12 quirk).
+    _SCOPE_MAX_YEAR = {"y1y3": 3, "y1y5": 5, "y1y10": 10}
+    n = agg.input.period_count
+    density = agg.input.product_density  # кг/л, default 1.0
+
+    per_unit_data: dict[str, dict[str, float | None]] = {}
+    for scope_str, max_year in _SCOPE_MAX_YEAR.items():
+        s_units = 0.0
+        s_liters = 0.0
+        s_nr = 0.0
+        s_gp = 0.0
+        s_cm = 0.0
+        s_ebitda = 0.0
+        for t in range(n):
+            if agg.input.period_model_year[t] <= max_year:
+                s_units += agg.volume_units[t]
+                s_liters += agg.volume_liters[t]
+                s_nr += agg.net_revenue[t]
+                s_gp += agg.gross_profit[t]
+                s_cm += agg.contribution[t]
+                s_ebitda += agg.ebitda[t]
+
+        s_kg = s_liters * density
+        d: dict[str, float | None] = {}
+        if s_units > 0:
+            d["nr_per_unit"] = s_nr / s_units
+            d["gp_per_unit"] = s_gp / s_units
+            d["cm_per_unit"] = s_cm / s_units
+            d["ebitda_per_unit"] = s_ebitda / s_units
+        else:
+            d["nr_per_unit"] = d["gp_per_unit"] = d["cm_per_unit"] = d["ebitda_per_unit"] = None
+        if s_liters > 0:
+            d["nr_per_liter"] = s_nr / s_liters
+            d["gp_per_liter"] = s_gp / s_liters
+            d["cm_per_liter"] = s_cm / s_liters
+            d["ebitda_per_liter"] = s_ebitda / s_liters
+        else:
+            d["nr_per_liter"] = d["gp_per_liter"] = d["cm_per_liter"] = d["ebitda_per_liter"] = None
+        if s_kg > 0:
+            d["nr_per_kg"] = s_nr / s_kg
+            d["gp_per_kg"] = s_gp / s_kg
+            d["cm_per_kg"] = s_cm / s_kg
+            d["ebitda_per_kg"] = s_ebitda / s_kg
+        else:
+            d["nr_per_kg"] = d["gp_per_kg"] = d["cm_per_kg"] = d["ebitda_per_kg"] = None
+        per_unit_data[scope_str] = d
+
     results: list[ScenarioResult] = []
     for scope_str, scope_enum in _SCOPE_TO_ENUM.items():
+        pu = per_unit_data[scope_str]
         result = ScenarioResult(
             scenario_id=scenario_id,
             period_scope=scope_enum,
@@ -542,6 +592,18 @@ async def calculate_and_save_scenario(
             contribution_margin=_decimal_or_none(cm_ratio),
             ebitda_margin=_decimal_or_none(ebitda_margin),
             go_no_go=agg.go_no_go.get(scope_str),
+            nr_per_unit=_decimal_or_none(pu["nr_per_unit"]),
+            gp_per_unit=_decimal_or_none(pu["gp_per_unit"]),
+            cm_per_unit=_decimal_or_none(pu["cm_per_unit"]),
+            ebitda_per_unit=_decimal_or_none(pu["ebitda_per_unit"]),
+            nr_per_liter=_decimal_or_none(pu["nr_per_liter"]),
+            gp_per_liter=_decimal_or_none(pu["gp_per_liter"]),
+            cm_per_liter=_decimal_or_none(pu["cm_per_liter"]),
+            ebitda_per_liter=_decimal_or_none(pu["ebitda_per_liter"]),
+            nr_per_kg=_decimal_or_none(pu["nr_per_kg"]),
+            gp_per_kg=_decimal_or_none(pu["gp_per_kg"]),
+            cm_per_kg=_decimal_or_none(pu["cm_per_kg"]),
+            ebitda_per_kg=_decimal_or_none(pu["ebitda_per_kg"]),
         )
         session.add(result)
         results.append(result)

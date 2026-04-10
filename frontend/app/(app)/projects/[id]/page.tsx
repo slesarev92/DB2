@@ -14,6 +14,9 @@ import { ResultsTab } from "@/components/projects/results-tab";
 import { ScenariosTab } from "@/components/projects/scenarios-tab";
 import { SensitivityTab } from "@/components/projects/sensitivity-tab";
 import { PricingTab } from "@/components/projects/pricing-tab";
+import { ValueChainTab } from "@/components/projects/value-chain-tab";
+import { PnlTab } from "@/components/projects/pnl-tab";
+import { GateTimeline } from "@/components/projects/gate-timeline";
 import { SkusTab } from "@/components/projects/skus-tab";
 import { Button } from "@/components/ui/button";
 import {
@@ -203,6 +206,17 @@ export default function ProjectDetailPage() {
 
       {/* Active section content */}
       {activeTab === "overview" && (
+        <div className="space-y-6">
+        {/* Gate Timeline (Phase 8.7) */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Gate-шкала проекта</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <GateTimeline currentGate={project.gate_stage ?? null} />
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Финансовые параметры</CardTitle>
@@ -249,6 +263,7 @@ export default function ProjectDetailPage() {
             </dl>
           </CardContent>
         </Card>
+        </div>
       )}
 
       {activeTab === "content" && <ContentTab projectId={projectId} />}
@@ -276,6 +291,10 @@ export default function ProjectDetailPage() {
       {activeTab === "sensitivity" && <SensitivityTab projectId={projectId} />}
 
       {activeTab === "pricing" && <PricingTab projectId={projectId} />}
+
+      {activeTab === "value-chain" && <ValueChainTab projectId={projectId} />}
+
+      {activeTab === "pnl" && <PnlTab projectId={projectId} />}
     </div>
   );
 }

@@ -536,6 +536,47 @@
 <div class="page-break"></div>
 
 {# ================================================================== #}
+{# 8.5. Анализ чувствительности (Phase 8.4)                           #}
+{# ================================================================== #}
+{% if sensitivity %}
+<div class="section">
+  <h2>Анализ чувствительности — NPV Y1-Y10</h2>
+  <p style="margin-bottom: 8px; font-size: 11px; color: #666;">
+    Базовый NPV Y1-Y10: {{ fmt_money(sensitivity.base_npv_y1y10) }} ₽
+  </p>
+  <table class="kpi-table">
+    <thead>
+      <tr>
+        <th>Параметр</th>
+        {% for d in sensitivity.deltas %}
+          <th>{{ "{:+.0%}".format(d) }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% set param_labels = {"nd": "Дистрибуция (ND)", "offtake": "Офтейк", "shelf_price": "Цена полки", "cogs": "Себестоимость (COGS)"} %}
+      {% for p in sensitivity.params %}
+      <tr>
+        <td>{{ param_labels.get(p, p) }}</td>
+        {% for d in sensitivity.deltas %}
+          {% set cell = namespace(npv=None) %}
+          {% for c in sensitivity.cells %}
+            {% if c.parameter == p and c.delta == d %}
+              {% set cell.npv = c.npv_y1y10 %}
+            {% endif %}
+          {% endfor %}
+          <td style="text-align: right;">{{ fmt_money(cell.npv) }}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="page-break"></div>
+
+{# ================================================================== #}
 {# 9. Стакан себестоимости + финансовый план                           #}
 {# ================================================================== #}
 <div class="section">

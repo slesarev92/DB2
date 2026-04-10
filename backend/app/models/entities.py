@@ -748,6 +748,24 @@ class ScenarioResult(Base):
 
     go_no_go: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
+    # Per-unit метрики (Phase 8.3): scope-averaged NR/GP/CM/EBITDA
+    # делённые на total_units / total_liters / total_kg за scope.
+    # Numeric(15,4) — до 11 цифр целой части + 4 дробных. Для ₽/шт достаточно.
+    nr_per_unit: Mapped[Decimal | None] = mapped_column(Numeric(15, 4), nullable=True)
+    gp_per_unit: Mapped[Decimal | None] = mapped_column(Numeric(15, 4), nullable=True)
+    cm_per_unit: Mapped[Decimal | None] = mapped_column(Numeric(15, 4), nullable=True)
+    ebitda_per_unit: Mapped[Decimal | None] = mapped_column(Numeric(15, 4), nullable=True)
+
+    nr_per_liter: Mapped[Decimal | None] = mapped_column(Numeric(15, 4), nullable=True)
+    gp_per_liter: Mapped[Decimal | None] = mapped_column(Numeric(15, 4), nullable=True)
+    cm_per_liter: Mapped[Decimal | None] = mapped_column(Numeric(15, 4), nullable=True)
+    ebitda_per_liter: Mapped[Decimal | None] = mapped_column(Numeric(15, 4), nullable=True)
+
+    nr_per_kg: Mapped[Decimal | None] = mapped_column(Numeric(15, 4), nullable=True)
+    gp_per_kg: Mapped[Decimal | None] = mapped_column(Numeric(15, 4), nullable=True)
+    cm_per_kg: Mapped[Decimal | None] = mapped_column(Numeric(15, 4), nullable=True)
+    ebitda_per_kg: Mapped[Decimal | None] = mapped_column(Numeric(15, 4), nullable=True)
+
     calculated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 
 import { ExecutiveSummaryInline } from "@/components/ai-panel/executive-summary-inline";
 import { ExplainKpiInline } from "@/components/ai-panel/explain-kpi-inline";
@@ -29,7 +29,7 @@ import {
   downloadProjectPptx,
   downloadProjectXlsx,
 } from "@/lib/export";
-import { formatMoney, formatPercent } from "@/lib/format";
+import { formatMoney, formatMoneyPerUnit, formatPercent } from "@/lib/format";
 import { getProject } from "@/lib/projects";
 import {
   listProjectScenarios,
@@ -62,12 +62,17 @@ const SCOPE_LABELS: Record<PeriodScope, string> = {
 /** Порядок отображения scope'ов в grid'е */
 const SCOPE_ORDER: PeriodScope[] = ["y1y3", "y1y5", "y1y10"];
 
-/** Цветовая индикация для маржи: >25% → зелёный, <25% → красный */
+/** 3-tier цветовая индикация для маржи (Phase 8.6).
+ *  ≥50% green, 45-50% yellow, <45% red. CM/EBITDA используют
+ *  более мягкие пороги (≥25% green, 15-25% yellow, <15% red)
+ *  поскольку CM% и EBITDA% существенно ниже GP% по определению. */
 function marginClass(value: string | null): string {
   if (value === null) return "";
   const num = Number(value);
   if (Number.isNaN(num)) return "";
-  return num >= 0.25 ? "text-green-600" : "text-red-600";
+  if (num >= 0.25) return "text-green-600";
+  if (num >= 0.15) return "text-yellow-600";
+  return "text-red-600";
 }
 
 /** Payback из string | null в "N лет" или "НЕ ОКУПАЕТСЯ". */
@@ -77,6 +82,23 @@ function formatPayback(value: string | null): string {
   if (Number.isNaN(num)) return "—";
   return `${num.toFixed(0)} лет`;
 }
+
+/** Per-unit row definitions for the table (Phase 8.3). */
+interface PerUnitRow {
+  key: string;
+  label: string;
+  unitField: keyof ScenarioResultRead;
+  literField: keyof ScenarioResultRead;
+  kgField: keyof ScenarioResultRead;
+  bold?: boolean;
+}
+
+const PER_UNIT_ROWS: PerUnitRow[] = [
+  { key: "nr", label: "Выручка (NR)", unitField: "nr_per_unit", literField: "nr_per_liter", kgField: "nr_per_kg", bold: true },
+  { key: "gp", label: "Валовая прибыль (GP)", unitField: "gp_per_unit", literField: "gp_per_liter", kgField: "gp_per_kg" },
+  { key: "cm", label: "Contribution (CM)", unitField: "cm_per_unit", literField: "cm_per_liter", kgField: "cm_per_kg" },
+  { key: "ebitda", label: "EBITDA", unitField: "ebitda_per_unit", literField: "ebitda_per_liter", kgField: "ebitda_per_kg", bold: true },
+];
 
 /**
  * Таб "Результаты" в карточке проекта.
@@ -523,6 +545,80 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
                 valueClassName={marginClass(ebitdaMargin)}
               />
             </div>
+          </div>
+
+          {/* Per-unit metrics (Phase 8.3) */}
+          <div>
+            <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
+              Per-unit экономика (средняя за период)
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="border-b">
+                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">
+                      Показатель
+                    </th>
+                    {SCOPE_ORDER.map((scope) => (
+                      <th key={scope} className="px-2 py-1.5 text-right font-medium" colSpan={3}>
+                        {SCOPE_LABELS[scope]}
+                      </th>
+                    ))}
+                  </tr>
+                  <tr className="border-b">
+                    <th />
+                    {SCOPE_ORDER.map((scope) => (
+                      <Fragment key={scope}>
+                        <th className="px-2 py-1 text-right text-[10px] font-medium text-muted-foreground">
+                          ₽/шт
+                        </th>
+                        <th className="px-2 py-1 text-right text-[10px] font-medium text-muted-foreground">
+                          ₽/л
+                        </th>
+                        <th className="px-2 py-1 text-right text-[10px] font-medium text-muted-foreground">
+                          ₽/кг
+                        </th>
+                      </Fragment>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {PER_UNIT_ROWS.map((row) => (
+                    <tr key={row.key} className="border-b last:border-0 hover:bg-muted/30">
+                      <td className={`px-2 py-1.5 whitespace-nowrap ${row.bold ? "font-medium" : ""}`}>
+                        {row.label}
+                      </td>
+                      {SCOPE_ORDER.map((scope) => {
+                        const r = resultsByScope[scope];
+                        const u = (r?.[row.unitField] as string | null) ?? null;
+                        const l = (r?.[row.literField] as string | null) ?? null;
+                        const k = (r?.[row.kgField] as string | null) ?? null;
+                        return (
+                          <Fragment key={scope}>
+                            <td className="px-2 py-1.5 text-right tabular-nums">
+                              {formatMoneyPerUnit(u)}
+                            </td>
+                            <td className="px-2 py-1.5 text-right tabular-nums">
+                              {formatMoneyPerUnit(l)}
+                            </td>
+                            <td className="px-2 py-1.5 text-right tabular-nums">
+                              {formatMoneyPerUnit(k)}
+                            </td>
+                          </Fragment>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          {/* Color legend (Phase 8.6) */}
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <span>Цветовая индикация:</span>
+            <span className="text-green-600 font-semibold">NPV &ge; 0 / маржа &ge; 25%</span>
+            <span className="text-yellow-600 font-semibold">маржа 15-25%</span>
+            <span className="text-red-600 font-semibold">NPV &lt; 0 / маржа &lt; 15%</span>
           </div>
         </>
       )}

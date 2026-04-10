@@ -3013,64 +3013,46 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
 - [x] Навигация: таб «Цены» в группе ⑤ Анализ
 - [ ] Экспорт: PPT/PDF — **TODO** (отдельный коммит)
 
-#### 8.2 Стакан / Value Chain
-**Что:** Per-unit экономика по SKU × канал: Revenue → COGS → GP → Logistics
-→ OPEX → CM → EBITDA. В эталоне это таблица 4 SKU × 6 каналов с % маржами
-и цветовой индикацией (Green >50%, Yellow 45-60%, Red <45%).
-**Backend:** Новый endpoint GET /api/projects/{id}/value-chain?scope=y1y3
-собирающий per-unit метрики из pipeline results.
-**UI:** Новый таб «Стакан» или секция в «Результаты». AG Grid с условным
-форматированием маржей.
-**Экспорт:** Включить в PPT и PDF.
-**Критерий:** Совпадает со страницами 8-9 эталона.
-**Зависимости:** расчётное ядро (Фаза 2) уже считает все метрики per-unit.
+#### ✅ 8.2 Стакан / Value Chain — закрыта 2026-04-10
+- [x] Backend: GET /api/projects/{id}/value-chain — per-unit waterfall
+  (shelf, ex-factory, COGS material/production, GP, logistics, CM,
+  CA&M, marketing, EBITDA + margins GP%/CM%/EBITDA%)
+- [x] Frontend: ValueChainTab — waterfall-таблица rows × SKU×Channel
+  с цветовой индикацией маржей (green ≥50%, yellow 45-50%, red <45%)
+- [x] Навигация: таб «Стакан» в группе ⑤ Анализ
+- [ ] Экспорт: PPT/PDF — **TODO** (отдельный коммит)
 
-#### 8.3 Per-unit метрики в KPI-сводке
-**Что:** Revenue / GP / CM / EBITDA — на штуку, на литр, на кг.
-Отдельная строка или секция в KPI-таблице.
-**Backend:** Расширить endpoint results или добавить вычисление в
-существующий aggregator.
-**UI:** Дополнительные строки в ResultsTab KPI grid.
-**Экспорт:** Добавить в PPT/PDF KPI-секцию.
-**Критерий:** Совпадает со страницей 18 эталона.
-**Зависимости:** нет.
+#### ✅ 8.3 Per-unit метрики в KPI-сводке — закрыта 2026-04-10
+- [x] Backend: 12 колонок в scenario_results (nr/gp/cm/ebitda × unit/liter/kg)
+- [x] Backend: вычисление в calculate_and_save_scenario из aggregate context
+- [x] Frontend: таблица 4 rows × 3 scopes × 3 units в ResultsTab
+- [x] Migration: df5babcd77d8
+- [ ] Экспорт: PPT/PDF — **TODO**
 
-#### 8.4 Sensitivity в экспортах
-**Что:** 2D матрицы чувствительности (Price × COGS, Price × Discount Rate)
-уже есть в UI (SensitivityTab). Нужно добавить в PPT и PDF.
-**Backend:** Модифицировать ppt_exporter и pdf_exporter — вызвать
-sensitivity_service, отрендерить таблицу.
-**UI:** нет изменений.
-**Критерий:** PPT/PDF содержат 2D матрицу как на странице 7 эталона.
-**Зависимости:** sensitivity_service (Фаза 4.4).
+#### ✅ 8.4 Sensitivity в экспортах — закрыта 2026-04-11
+- [x] PPT: новый слайд _build_slide_sensitivity (4 param × 5 delta → NPV)
+- [x] PDF: секция "Анализ чувствительности" в HTML template
+- [x] Тесты: 444 passed (обновлён slide count 13→14)
 
-#### 8.5 Квартальный P&L
-**Что:** Эталон показывает P&L по кварталам + годовые итоги.
-Сейчас — только годовые.
-**Backend:** Агрегация помесячных данных (M1-M12) в кварталы Q1-Q4.
-Новый query mode или endpoint parameter `?period_mode=quarterly`.
-**UI:** Переключатель «Месяцы / Кварталы / Годы» в табе Периоды.
-**Экспорт:** Квартальный лист в XLSX.
-**Критерий:** Переключатель работает, данные сходятся с годовыми итогами.
-**Зависимости:** нет.
+#### ✅ 8.5 Квартальный P&L — закрыта 2026-04-11
+- [x] Backend: GET /api/projects/{id}/pnl — 43 per-period P&L из pipeline
+- [x] Frontend: PnlTab с toggle "Месяцы / Кварталы / Годы"
+- [x] Навигация: таб «P&L» в группе ⑤ Анализ
+- [x] Client-side агрегация: Q1-Q4 × Y1-Y3, annual Y1-Y10
+- [ ] Экспорт: квартальный лист XLSX — **TODO**
 
-#### 8.6 Цветовая индикация KPI
-**Что:** Green/Yellow/Red для GP%, CM%, Go/No-Go. Визуальная легенда.
-Пороги: GP >50% = green, 45-50% = yellow, <45% = red (из эталона).
-**UI:** Условное форматирование ячеек в ResultsTab, ScenariosTab,
-Value Chain. Легенда внизу таблицы.
-**Экспорт:** Цветные ячейки в PPT и PDF (уже есть Go/No-Go badge).
-**Критерий:** Визуально совпадает с эталоном.
-**Зависимости:** нет.
+#### ✅ 8.6 Цветовая индикация KPI — закрыта 2026-04-10
+- [x] ResultsTab: 3-tier marginClass (green ≥25% / yellow 15-25% / red <15%)
+- [x] ResultsTab: NPV green/red (уже был), легенда внизу
+- [x] ScenariosTab: NPV valueClassName green/red, легенда
+- [x] Value Chain: green ≥50% / yellow 45-50% / red <45% (уже в 8.2)
+- [ ] Экспорт PPT/PDF: цветные ячейки — **TODO**
 
-#### 8.7 Gate Timeline (Gantt-диаграмма)
-**Что:** Визуальная шкала G0→G5 с датами и текущей позицией.
-В эталоне — горизонтальная полоса с milestone'ами.
-**UI:** Компонент gate-timeline в overview или отдельной секции.
-Горизонтальная полоса с точками Gate и подписями дат.
-**Экспорт:** Включить в PPT title slide и PDF cover.
-**Критерий:** Визуально читаемая шкала гейтов.
-**Зависимости:** Project.gate_stage, Project.roadmap_tasks.
+#### ✅ 8.7 Gate Timeline — закрыта 2026-04-11
+- [x] Frontend: GateTimeline компонент (G0→G5, milestone labels)
+- [x] Встроен в overview tab (Параметры)
+- [x] Визуальная индикация: past/current/future gate dots + progress bar
+- [ ] Экспорт: PPT/PDF — **TODO**
 
 #### 8.8 Расширенный бюджет маркетинга
 **Что:** В эталоне 14 категорий OPEX (Digital, E-com, OOH, PR, SMM,

@@ -15,8 +15,10 @@ from app.schemas.project import (
     ProjectRead,
     ProjectUpdate,
 )
+from app.schemas.pnl import PnlResponse
 from app.schemas.pricing import PricingSummaryResponse
 from app.schemas.sensitivity import SensitivityResponse
+from app.schemas.value_chain import ValueChainResponse
 from app.services import project_service
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -343,6 +345,241 @@ async def pricing_summary_endpoint(
         )
 
     return PricingSummaryResponse(vat_rate=vat_rate, skus=skus)
+
+
+@router.get(
+    "/{project_id}/value-chain",
+    response_model=ValueChainResponse,
+    summary="Value Chain: per-unit waterfall экономика по SKU × канал",
+)
+async def value_chain_endpoint(
+    project_id: int,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> ValueChainResponse:
+    """Стакан / Value Chain (Phase 8.2).
+
+    Per-unit waterfall для каждого SKU × Channel:
+    Shelf Price → Ex-Factory → COGS → GP → Logistics → Contribution
+    → CA&M → Marketing → EBITDA + margins (GP%, CM%, EBITDA%).
+
+    Рассчитывается из статических параметров в БД (M1 base period,
+    без инфляции). Пайплайн запускать не нужно.
+    """
+    from decimal import Decimal
+
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload as sil
+
+    from app.models import BOMItem, ProjectSKU, ProjectSKUChannel
+    from app.schemas.value_chain import ValueChainCell, ValueChainSKU
+
+    project = await project_service.get_project(session, project_id)
+    if project is None:
+        raise _not_found
+
+    vat_rate = project.vat_rate
+    ZERO = Decimal("0")
+    ONE = Decimal("1")
+    DENSITY = Decimal("1")  # D-09: product_density ≈ 1.0 для напитков
+
+    psk_stmt = (
+        select(ProjectSKU)
+        .where(ProjectSKU.project_id == project_id, ProjectSKU.include.is_(True))
+        .options(sil(ProjectSKU.sku))
+        .order_by(ProjectSKU.id)
+    )
+    psks = (await session.scalars(psk_stmt)).all()
+
+    skus: list[ValueChainSKU] = []
+    for psk in psks:
+        # COGS material per unit from BOM
+        boms = (
+            await session.scalars(
+                select(BOMItem).where(BOMItem.project_sku_id == psk.id)
+            )
+        ).all()
+        bom_cost = ZERO
+        for b in boms:
+            bom_cost += b.quantity_per_unit * b.price_per_unit * (ONE + b.loss_pct)
+
+        volume_l = psk.sku.volume_l or ZERO
+        prod_rate = psk.production_cost_rate
+        ca_m_rate = psk.ca_m_rate
+        mkt_rate = psk.marketing_rate
+
+        # Channels
+        psc_stmt = (
+            select(ProjectSKUChannel)
+            .where(ProjectSKUChannel.project_sku_id == psk.id)
+            .options(sil(ProjectSKUChannel.channel))
+            .order_by(ProjectSKUChannel.id)
+        )
+        pscs = (await session.scalars(psc_stmt)).all()
+
+        channels: list[ValueChainCell] = []
+        for psc in pscs:
+            sp_reg = psc.shelf_price_reg
+            sp_promo = sp_reg * (ONE - psc.promo_discount)
+            sp_weighted = sp_reg * (ONE - psc.promo_share) + sp_promo * psc.promo_share
+
+            # D-02: VAT через деление на (1+VAT)
+            ex_factory = sp_weighted / (ONE + vat_rate) * (ONE - psc.channel_margin)
+
+            # COGS per unit
+            cogs_material = bom_cost
+            cogs_production = ex_factory * prod_rate
+            cogs_total = cogs_material + cogs_production  # copacking = 0 in MVP
+
+            # P&L waterfall per unit
+            gross_profit = ex_factory - cogs_total
+            logistics = psc.logistics_cost_per_kg * volume_l * DENSITY
+            contribution = gross_profit - logistics
+            ca_m = ex_factory * ca_m_rate
+            marketing = ex_factory * mkt_rate
+            ebitda = contribution - ca_m - marketing
+
+            # Margins (доли)
+            if ex_factory > ZERO:
+                gp_margin = gross_profit / ex_factory
+                cm_margin = contribution / ex_factory
+                ebitda_margin = ebitda / ex_factory
+            else:
+                gp_margin = cm_margin = ebitda_margin = ZERO
+
+            channels.append(
+                ValueChainCell(
+                    channel_code=psc.channel.code,
+                    channel_name=psc.channel.name,
+                    shelf_price_reg=sp_reg,
+                    shelf_price_weighted=sp_weighted,
+                    ex_factory=ex_factory,
+                    cogs_material=cogs_material,
+                    cogs_production=cogs_production,
+                    cogs_total=cogs_total,
+                    gross_profit=gross_profit,
+                    logistics=logistics,
+                    contribution=contribution,
+                    ca_m=ca_m,
+                    marketing=marketing,
+                    ebitda=ebitda,
+                    gp_margin=gp_margin,
+                    cm_margin=cm_margin,
+                    ebitda_margin=ebitda_margin,
+                )
+            )
+
+        skus.append(
+            ValueChainSKU(
+                sku_brand=psk.sku.brand,
+                sku_name=psk.sku.name,
+                sku_format=psk.sku.format,
+                sku_volume_l=psk.sku.volume_l,
+                channels=channels,
+            )
+        )
+
+    return ValueChainResponse(vat_rate=vat_rate, skus=skus)
+
+
+@router.get(
+    "/{project_id}/pnl",
+    response_model=PnlResponse,
+    summary="P&L per-period: NR/COGS/GP/CM/EBITDA/FCF для base scenario",
+)
+async def pnl_endpoint(
+    project_id: int,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> PnlResponse:
+    """Per-period P&L из pipeline (Phase 8.5).
+
+    Запускает pipeline для Base сценария и возвращает 43 периода
+    с P&L метриками. Frontend группирует по месяцам/кварталам/годам.
+    """
+    from app.engine.pipeline import run_project_pipeline
+    from app.models import Scenario
+    from app.schemas.pnl import PnlPeriod
+    from app.services.calculation_service import (
+        _load_period_catalog,
+        _load_project_financial_plan,
+        build_line_inputs,
+    )
+
+    project = await project_service.get_project(session, project_id)
+    if project is None:
+        raise _not_found
+
+    # Find base scenario
+    from sqlalchemy import select
+
+    from app.models.enums import ScenarioType
+
+    base = (
+        await session.scalars(
+            select(Scenario).where(
+                Scenario.project_id == project_id,
+                Scenario.type == ScenarioType.BASE,
+            )
+        )
+    ).first()
+    if base is None:
+        raise HTTPException(status_code=404, detail="Base scenario not found")
+
+    try:
+        line_inputs = await build_line_inputs(session, project_id, base.id)
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Нет SKU/каналов для расчёта P&L",
+        )
+
+    sorted_periods, _ = await _load_period_catalog(session)
+    capex, opex = await _load_project_financial_plan(
+        session, project_id, sorted_periods
+    )
+    agg = run_project_pipeline(
+        line_inputs, project_capex=capex, project_opex=opex
+    )
+
+    n = agg.input.period_count
+    periods: list[PnlPeriod] = []
+    for t in range(n):
+        is_monthly = agg.input.period_is_monthly[t]
+        month_num = agg.input.period_month_num[t]
+        model_year = agg.input.period_model_year[t]
+        quarter = ((month_num - 1) // 3 + 1) if month_num is not None else None
+
+        if is_monthly:
+            # M1..M36 — sequential number within monthly range
+            label = f"M{t + 1}"
+            ptype = "monthly"
+        else:
+            label = f"Y{model_year}"
+            ptype = "annual"
+
+        periods.append(
+            PnlPeriod(
+                period_label=label,
+                period_type=ptype,
+                model_year=model_year,
+                month_num=month_num,
+                quarter=quarter,
+                volume_units=agg.volume_units[t],
+                volume_liters=agg.volume_liters[t],
+                net_revenue=agg.net_revenue[t],
+                cogs_total=agg.cogs_total[t],
+                gross_profit=agg.gross_profit[t],
+                logistics_cost=agg.logistics_cost[t],
+                contribution=agg.contribution[t],
+                ca_m_cost=agg.ca_m_cost[t],
+                marketing_cost=agg.marketing_cost[t],
+                ebitda=agg.ebitda[t],
+                free_cash_flow=agg.free_cash_flow[t],
+            )
+        )
+
+    return PnlResponse(scenario_type="base", periods=periods)
 
 
 @router.get(

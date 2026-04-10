@@ -445,6 +445,17 @@ async def generate_project_pdf(
         except Exception:  # noqa: BLE001
             base_aggregate = None
 
+    # Sensitivity (Phase 8.4)
+    sensitivity_data: dict | None = None
+    if base_scenario is not None:
+        try:
+            from app.services.sensitivity_service import compute_sensitivity
+            sensitivity_data = await compute_sensitivity(
+                session, project_id, base_scenario.id
+            )
+        except Exception:  # noqa: BLE001
+            sensitivity_data = None
+
     # Jinja2 context
     pnl_ctx = _build_pnl_context(base_aggregate)
     context: dict[str, Any] = {
@@ -469,6 +480,7 @@ async def generate_project_pdf(
         "gate_label": _gate_label,
         "fmt_money": _fmt_money,
         "fmt_pct": _fmt_pct,
+        "sensitivity": sensitivity_data,
     }
 
     # Render HTML

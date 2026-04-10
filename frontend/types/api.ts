@@ -451,6 +451,21 @@ export interface ScenarioResultRead {
   contribution_margin: string | null;
   ebitda_margin: string | null;
   go_no_go: boolean | null;
+
+  // Per-unit metrics (Phase 8.3)
+  nr_per_unit: string | null;
+  gp_per_unit: string | null;
+  cm_per_unit: string | null;
+  ebitda_per_unit: string | null;
+  nr_per_liter: string | null;
+  gp_per_liter: string | null;
+  cm_per_liter: string | null;
+  ebitda_per_liter: string | null;
+  nr_per_kg: string | null;
+  gp_per_kg: string | null;
+  cm_per_kg: string | null;
+  ebitda_per_kg: string | null;
+
   calculated_at: string;
 }
 

@@ -996,6 +996,80 @@ def _build_slide_roadmap_and_approvers(
     )
 
 
+def _build_slide_sensitivity(
+    prs: PresentationType,
+    sensitivity_data: dict | None,
+) -> None:
+    """Слайд: 2D sensitivity matrix (Phase 8.4).
+
+    Rows = параметры (ND / Offtake / Shelf Price / COGS).
+    Columns = дельты (-20% / -10% / 0% / +10% / +20%).
+    Cells = NPV Y1-Y10.
+    """
+    slide = prs.slides.add_slide(prs.slide_layouts[LAYOUT_BLANK])
+    _add_title(slide, "Анализ чувствительности — NPV Y1-Y10")
+
+    if sensitivity_data is None:
+        _add_text_box(
+            slide,
+            Inches(0.5),
+            Inches(2.5),
+            Inches(12.0),
+            Inches(1.0),
+            "Нет данных для анализа чувствительности (SKU/каналы не настроены).",
+            size=Pt(14),
+        )
+        return
+
+    base_npv = sensitivity_data.get("base_npv_y1y10")
+    deltas = sensitivity_data.get("deltas", [])
+    params = sensitivity_data.get("params", [])
+    cells = sensitivity_data.get("cells", [])
+
+    # Subtitle with base NPV
+    _add_text_box(
+        slide,
+        Inches(0.5),
+        Inches(1.2),
+        Inches(12.0),
+        Inches(0.4),
+        f"Базовый NPV Y1-Y10: {_fmt_money(base_npv)} ₽",
+        size=Pt(12),
+    )
+
+    # Build lookup: (param, delta) → npv
+    npv_lookup: dict[tuple[str, float], float | None] = {}
+    for c in cells:
+        npv_lookup[(c["parameter"], c["delta"])] = c.get("npv_y1y10")
+
+    param_labels = {
+        "nd": "Дистрибуция (ND)",
+        "offtake": "Офтейк",
+        "shelf_price": "Цена полки",
+        "cogs": "Себестоимость (COGS)",
+    }
+
+    # Table: header row + 1 row per param
+    headers = ["Параметр"] + [f"{d:+.0%}" for d in deltas]
+    rows: list[list[str]] = []
+    for p in params:
+        row = [param_labels.get(p, p)]
+        for d in deltas:
+            npv = npv_lookup.get((p, d))
+            row.append(_fmt_money(npv))
+        rows.append(row)
+
+    _add_simple_table(
+        slide,
+        Inches(0.5),
+        Inches(1.8),
+        Inches(12.3),
+        Inches(4.5),
+        headers,
+        rows,
+    )
+
+
 def _build_slide_executive_summary(
     prs: PresentationType, project: Project
 ) -> None:
@@ -1139,6 +1213,19 @@ async def generate_project_pptx(
     _build_slide_financial_model(prs, project, inflation_profile)
     _build_slide_kpi(prs, list(scenarios), results_by_scenario)
     _build_slide_pnl(prs, base_aggregate)
+
+    # Sensitivity matrix (Phase 8.4)
+    sensitivity_data: dict | None = None
+    if base_scenario is not None:
+        try:
+            from app.services.sensitivity_service import compute_sensitivity
+            sensitivity_data = await compute_sensitivity(
+                session, project_id, base_scenario.id
+            )
+        except Exception:  # noqa: BLE001
+            sensitivity_data = None
+    _build_slide_sensitivity(prs, sensitivity_data)
+
     _build_slide_cogs_and_fin_plan(
         prs, skus_with_bom, list(fp_rows), period_by_id
     )

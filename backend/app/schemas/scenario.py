@@ -79,4 +79,19 @@ class ScenarioResultRead(BaseModel):
     contribution_margin: Decimal | None
     ebitda_margin: Decimal | None
     go_no_go: bool | None
+
+    # Per-unit метрики (Phase 8.3): scope-averaged
+    nr_per_unit: Decimal | None = None
+    gp_per_unit: Decimal | None = None
+    cm_per_unit: Decimal | None = None
+    ebitda_per_unit: Decimal | None = None
+    nr_per_liter: Decimal | None = None
+    gp_per_liter: Decimal | None = None
+    cm_per_liter: Decimal | None = None
+    ebitda_per_liter: Decimal | None = None
+    nr_per_kg: Decimal | None = None
+    gp_per_kg: Decimal | None = None
+    cm_per_kg: Decimal | None = None
+    ebitda_per_kg: Decimal | None = None
+
     calculated_at: datetime

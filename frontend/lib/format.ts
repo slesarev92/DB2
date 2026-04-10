@@ -23,6 +23,19 @@ export function formatMoney(value: string | null | undefined): string {
   return `${numberFmt.format(num)} ₽`;
 }
 
+const moneyPerUnitFmt = new Intl.NumberFormat("ru-RU", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+/** Денежная сумма per-unit с 2 знаками. "—" если null. */
+export function formatMoneyPerUnit(value: string | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  const num = Number(value);
+  if (Number.isNaN(num)) return "—";
+  return `${moneyPerUnitFmt.format(num)} ₽`;
+}
+
 /** Процент с одним знаком после запятой. "—" если null. */
 export function formatPercent(value: string | null | undefined): string {
   if (value === null || value === undefined) return "—";
