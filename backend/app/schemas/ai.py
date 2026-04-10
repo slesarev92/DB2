@@ -261,3 +261,49 @@ class AIBudgetUpdateRequest(BaseModel):
         description="Новый лимит в рублях. null = unlimited.",
         ge=0,
     )
+
+
+# ============================================================
+# CONTENT FIELD GENERATION (Phase 7.6)
+# ============================================================
+
+# Поля для которых доступна AI-генерация. Синхронизировано с
+# AIContextBuilder.CONTENT_FIELDS.
+ContentFieldName = Literal[
+    "project_goal", "target_audience", "concept_text", "rationale",
+    "growth_opportunity", "idea_short", "technology", "rnd_progress",
+    "replacement_target", "description", "innovation_type",
+    "geography", "production_type",
+]
+
+
+class AIContentFieldRequest(BaseModel):
+    """POST /api/projects/{id}/ai/generate-content."""
+    field: ContentFieldName
+    user_hint: str | None = Field(
+        default=None,
+        max_length=1000,
+        description="Подсказка для AI — что учесть при генерации.",
+    )
+    tier_override: AIModelTier | None = Field(
+        default=None,
+        description="Override: null=FAST_CHEAP (haiku), balanced=sonnet.",
+    )
+
+
+class AIContentFieldResponse(BaseModel):
+    """Ответ генерации content field."""
+    model_config = ConfigDict(extra="forbid")
+
+    field: str
+    generated_text: str
+    cost_rub: Decimal
+    model: str
+    cached: bool
+
+
+class LLMContentFieldOutput(BaseModel):
+    """То что LLM возвращает как JSON."""
+    model_config = ConfigDict(extra="ignore")
+
+    generated_text: str

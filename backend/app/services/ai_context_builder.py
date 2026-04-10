@@ -439,6 +439,83 @@ class AIContextBuilder:
         }
 
 
+    # Текстовые поля проекта, для которых доступна AI-генерация (Phase 7.6).
+    # gate_stage, passport_date, project_owner — не генерируем (structured / personal).
+    # executive_summary — генерируется через отдельный endpoint (7.4).
+    CONTENT_FIELDS = frozenset({
+        "project_goal", "target_audience", "concept_text", "rationale",
+        "growth_opportunity", "idea_short", "technology", "rnd_progress",
+        "replacement_target", "description", "innovation_type",
+        "geography", "production_type",
+    })
+
+    async def for_content_field(
+        self,
+        *,
+        project_id: int,
+        field_name: str,
+        user_hint: str | None = None,
+    ) -> dict[str, Any]:
+        """Контекст для AI-генерации одного text content field (~1-2k токенов).
+
+        Включает: project metadata + params + existing content других полей
+        (чтобы LLM не повторял уже написанное) + user_hint.
+
+        Raises:
+            AIContextBuilderError: project не найден или field невалидный.
+        """
+        if field_name not in self.CONTENT_FIELDS:
+            raise AIContextBuilderError(
+                f"Поле '{field_name}' не поддерживается для AI-генерации. "
+                f"Допустимые: {', '.join(sorted(self.CONTENT_FIELDS))}"
+            )
+
+        project = await self._session.get(Project, project_id)
+        if project is None or project.deleted_at is not None:
+            raise AIContextBuilderError(
+                f"Project {project_id} не найден или удалён"
+            )
+
+        # Top-3 SKU для контекста (бренд, сегмент, формат)
+        skus_stmt = (
+            select(ProjectSKU)
+            .where(ProjectSKU.project_id == project_id)
+            .where(ProjectSKU.include.is_(True))
+            .options(selectinload(ProjectSKU.sku))
+            .order_by(ProjectSKU.id)
+            .limit(3)
+        )
+        project_skus = list((await self._session.scalars(skus_stmt)).all())
+
+        # Existing content — все поля кроме target field (anti-repeat)
+        existing: dict[str, str | None] = {}
+        for f in self.CONTENT_FIELDS:
+            if f != field_name:
+                val = getattr(project, f, None)
+                if val:
+                    existing[f] = _trim(val, 300)
+
+        return {
+            "project": {
+                "id": project.id,
+                "name": project.name,
+                "horizon_years": project.horizon_years,
+                "gate_stage": project.gate_stage,
+                "innovation_type": project.innovation_type,
+                "geography": project.geography,
+                "production_type": project.production_type,
+                "params": {
+                    "wacc": float(project.wacc),
+                    "currency": project.currency,
+                },
+            },
+            "target_field": field_name,
+            "existing_content": existing,
+            "top_skus": [_serialize_project_sku(ps) for ps in project_skus],
+            "user_hint": _trim(user_hint, 500) if user_hint else None,
+        }
+
+
 def _trim(text: str | None, max_len: int) -> str | None:
     """Обрезает строку до `max_len` символов с суффиксом «…»."""
     if text is None:

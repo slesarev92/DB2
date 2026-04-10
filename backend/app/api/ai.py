@@ -36,6 +36,8 @@ from app.models import User
 from app.schemas.ai import (
     AIBudgetUpdateRequest,
     AIChatRequest,
+    AIContentFieldRequest,
+    AIContentFieldResponse,
     AIExecutiveSummaryRequest,
     AIExecutiveSummaryResponse,
     AIExecutiveSummarySaveRequest,
@@ -44,6 +46,7 @@ from app.schemas.ai import (
     AISensitivityExplanationRequest,
     AISensitivityExplanationResponse,
     AIUsageResponse,
+    LLMContentFieldOutput,
     LLMExecutiveSummaryOutput,
     LLMKpiOutput,
     LLMSensitivityOutput,
@@ -56,6 +59,8 @@ from app.services.ai_context_builder import (
 from app.models import Project
 from app.services.ai_prompts import (
     CHAT_SYSTEM_PROMPT,
+    CONTENT_FIELD_PROMPTS,
+    CONTENT_FIELD_SYSTEM,
     EXECUTIVE_SUMMARY_SYSTEM,
     KPI_EXPLAIN_SYSTEM,
     SENSITIVITY_EXPLAIN_SYSTEM,
@@ -712,6 +717,149 @@ async def freeform_chat(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ============================================================
+# CONTENT FIELD GENERATION (Phase 7.6)
+# ============================================================
+
+
+@router.post(
+    "/generate-content",
+    response_model=AIContentFieldResponse,
+    summary="AI-генерация текстового поля паспорта",
+)
+@limiter.limit("10/minute", key_func=_rate_limit_key)
+async def generate_content_field(
+    request: Request,
+    project_id: int,
+    body: AIContentFieldRequest,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(_set_rate_limit_user)],
+) -> AIContentFieldResponse:
+    """Генерация текста для одного content field паспорта.
+
+    Default tier: FAST_CHEAP (haiku) — ~0.3-0.5₽ за вызов.
+    Override tier_override=balanced для deeper reasoning (~1.5₽).
+    """
+    await check_daily_user_budget(session, user_id=current_user.id)
+    await check_project_budget(session, project_id)
+
+    # 1. Build context
+    builder = AIContextBuilder(session)
+    try:
+        context = await builder.for_content_field(
+            project_id=project_id,
+            field_name=body.field,
+            user_hint=body.user_hint,
+        )
+    except AIContextBuilderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    # 2. Per-field task prompt
+    field_task = CONTENT_FIELD_PROMPTS.get(body.field)
+    if field_task is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Нет промпта для поля '{body.field}'",
+        )
+
+    # 3. Cache
+    input_hash = ai_cache.hash_context(context)
+    cache_key = ai_cache.make_cache_key(
+        project_id, AIFeature.CONTENT_FIELD, input_hash
+    )
+    lock_key = ai_cache.make_lock_key(
+        project_id, AIFeature.CONTENT_FIELD, input_hash
+    )
+
+    cached = await ai_cache.get_cached(cache_key)
+    if cached is not None:
+        await log_ai_usage(
+            session,
+            project_id=project_id,
+            user_id=current_user.id,
+            endpoint="content_field_cache",
+            model=cached.get("model", "unknown"),
+            result=None,
+        )
+        return AIContentFieldResponse(
+            **{k: v for k, v in cached.items() if k != "cached"},
+            cached=True,
+        )
+
+    lock_acquired = await ai_cache.acquire_dedupe_lock(lock_key)
+    if not lock_acquired:
+        cached = await ai_cache.wait_for_cache(cache_key)
+        if cached is not None:
+            await log_ai_usage(
+                session,
+                project_id=project_id,
+                user_id=current_user.id,
+                endpoint="content_field_dedupe",
+                model=cached.get("model", "unknown"),
+                result=None,
+            )
+            return AIContentFieldResponse(
+                **{k: v for k, v in cached.items() if k != "cached"},
+                cached=True,
+            )
+
+    # 4. Polza call
+    try:
+        user_prompt = (
+            f"Сгенерируй текст для поля «{body.field}» паспорта проекта.\n\n"
+            f"Задание: {field_task}\n\n"
+            f"Контекст проекта:\n"
+            + json.dumps(context, ensure_ascii=False, indent=2)
+        )
+        result = await ai_service.complete_json(
+            system_prompt=CONTENT_FIELD_SYSTEM,
+            user_prompt=user_prompt,
+            schema=LLMContentFieldOutput,
+            feature=AIFeature.CONTENT_FIELD,
+            tier_override=body.tier_override,
+            endpoint="content_field",
+        )
+    except AIServiceUnavailableError as exc:
+        await log_ai_usage(
+            session,
+            project_id=project_id,
+            user_id=current_user.id,
+            endpoint="content_field",
+            error=str(exc),
+        )
+        await ai_cache.release_dedupe_lock(lock_key)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"AI-генерация недоступна: {exc}",
+        ) from exc
+
+    # 5. Success
+    cost_rub = calculate_cost(
+        result.model, result.prompt_tokens, result.completion_tokens
+    )
+    await log_ai_usage(
+        session,
+        project_id=project_id,
+        user_id=current_user.id,
+        endpoint="content_field",
+        result=result,
+    )
+
+    response_payload: dict = {
+        "field": body.field,
+        "generated_text": result.parsed.generated_text,
+        "cost_rub": cost_rub,
+        "model": result.model,
+    }
+    await ai_cache.set_cached(cache_key, _jsonable(response_payload))
+    await ai_cache.release_dedupe_lock(lock_key)
+
+    return AIContentFieldResponse(**response_payload, cached=False)
 
 
 # ============================================================

@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { ContentFieldAI } from "@/components/projects/content-field-ai";
 import { ApiError } from "@/lib/api";
 import { getProject, updateProject } from "@/lib/projects";
 
@@ -211,6 +212,33 @@ export function ContentTab({ projectId }: ContentTabProps) {
     setScalars((prev) => (prev ? { ...prev, [field]: value } : prev));
   }
 
+  /** AI-генерируемые поля (Phase 7.6). */
+  const AI_FIELDS = new Set([
+    "project_goal", "target_audience", "concept_text", "rationale",
+    "growth_opportunity", "idea_short", "technology", "rnd_progress",
+    "replacement_target", "description", "innovation_type",
+    "geography", "production_type",
+  ]);
+
+  /** Label с кнопкой AI для генерируемых полей. */
+  function FieldLabel({ field, children }: { field: ScalarField; children: React.ReactNode }) {
+    return (
+      <div className="flex items-center">
+        <Label htmlFor={field}>{children}</Label>
+        {AI_FIELDS.has(field) && (
+          <ContentFieldAI
+            projectId={projectId}
+            field={field}
+            onApply={async (text) => {
+              setScalarField(field, text);
+              await patchProject(field, { [field]: text } as ProjectUpdate);
+            }}
+          />
+        )}
+      </div>
+    );
+  }
+
   if (loadError !== null) {
     return (
       <Card className="border-destructive">
@@ -318,7 +346,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="description">Описание проекта</Label>
+            <FieldLabel field="description">Описание проекта</FieldLabel>
             <Textarea
               id="description"
               rows={3}
@@ -329,7 +357,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="project_goal">Цель проекта</Label>
+            <FieldLabel field="project_goal">Цель проекта</FieldLabel>
             <Textarea
               id="project_goal"
               rows={2}
@@ -341,7 +369,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-1">
-              <Label htmlFor="innovation_type">Тип инновации</Label>
+              <FieldLabel field="innovation_type">Тип инновации</FieldLabel>
               <Input
                 id="innovation_type"
                 value={scalars.innovation_type}
@@ -350,7 +378,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="geography">География</Label>
+              <FieldLabel field="geography">География</FieldLabel>
               <Input
                 id="geography"
                 value={scalars.geography}
@@ -359,7 +387,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="production_type">Тип производства</Label>
+              <FieldLabel field="production_type">Тип производства</FieldLabel>
               <Input
                 id="production_type"
                 value={scalars.production_type}
@@ -383,7 +411,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1">
-            <Label htmlFor="growth_opportunity">Growth opportunity</Label>
+            <FieldLabel field="growth_opportunity">Growth opportunity</FieldLabel>
             <Textarea
               id="growth_opportunity"
               rows={2}
@@ -394,7 +422,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="concept_text">Концепция (полный текст)</Label>
+            <FieldLabel field="concept_text">Концепция (полный текст)</FieldLabel>
             <Textarea
               id="concept_text"
               rows={4}
@@ -405,7 +433,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="rationale">Обоснование</Label>
+            <FieldLabel field="rationale">Обоснование</FieldLabel>
             <Textarea
               id="rationale"
               rows={3}
@@ -416,7 +444,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="idea_short">Короткая идея</Label>
+            <FieldLabel field="idea_short">Короткая идея</FieldLabel>
             <Input
               id="idea_short"
               value={scalars.idea_short}
@@ -426,7 +454,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="target_audience">Целевая аудитория</Label>
+            <FieldLabel field="target_audience">Целевая аудитория</FieldLabel>
             <Textarea
               id="target_audience"
               rows={2}
@@ -437,7 +465,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="replacement_target">Кого замещаем</Label>
+            <FieldLabel field="replacement_target">Кого замещаем</FieldLabel>
             <Input
               id="replacement_target"
               value={scalars.replacement_target}
@@ -447,7 +475,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="technology">Технология</Label>
+            <FieldLabel field="technology">Технология</FieldLabel>
             <Textarea
               id="technology"
               rows={2}
@@ -458,7 +486,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="rnd_progress">Прогресс R&D</Label>
+            <FieldLabel field="rnd_progress">Прогресс R&D</FieldLabel>
             <Textarea
               id="rnd_progress"
               rows={2}

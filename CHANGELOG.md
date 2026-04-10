@@ -9,6 +9,28 @@
 
 ## [Unreleased]
 
+### Added (Phase 7.6 — AI generate content fields, 2026-04-10)
+
+**Backend:**
+- 13 per-field prompts in `ai_prompts.py`: CONTENT_FIELD_PROMPTS dict +
+  CONTENT_FIELD_BASE_SYSTEM (corporate tone, anti-repeat, JSON output)
+- `AIContextBuilder.for_content_field()` — project metadata + existing
+  content of other fields (anti-repeat) + top-3 SKUs + user_hint
+- `POST /api/projects/{id}/ai/generate-content` — FAST_CHEAP (haiku)
+  default, balanced override, full cache + dedupe + budget enforcement
+- Pydantic schemas: AIContentFieldRequest (Literal 13 fields), Response,
+  LLMContentFieldOutput
+- 12 new tests (383 total): happy path, user_hint, invalid field, cache
+  hit, tier override, deleted project, budget exceeded, auth required,
+  context builder (happy, hint, invalid field, deleted project)
+
+**Frontend:**
+- `ContentFieldAI` component: inline collapsible panel under each field
+  with user_hint input, Haiku/Sonnet tier toggle, generate → editable
+  preview → Apply/Regenerate/Cancel flow
+- Content tab: 13 fields have `AI` button next to label, auto-saves via
+  PATCH on Apply
+
 ### Added (Phase 7.5 — Cost monitoring + budget enforcement, 2026-04-10)
 
 **Backend:**

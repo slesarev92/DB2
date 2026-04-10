@@ -2926,7 +2926,7 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
   daily user limit 100₽, real Polza balance widget, usage endpoint,
   budget editing UI) *(закрыта 2026-04-10, migration 4160c5e248b5,
   7 routes total, 371/371 pytest, tsc clean)*
-- [ ] 7.6 AI generate content fields (Haiku default для 15 полей,
+- [x] 7.6 AI generate content fields (Haiku default для 13 полей,
   inline collapsible panel вместо модалки, batch cost < 8₽)
 - [ ] 7.7 AI marketing research (web search Discovery → implementation,
   multi-topic JSONB в Project, 7-day freshness, PPT/PDF integration)
@@ -2936,8 +2936,8 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
 - [ ] 7.3 AI-комментарий чувствительности (POST .../ai/explain-sensitivity)
 - [x] 7.4 AI executive summary slide в PPT-экспорте *(закрыта 2026-04-10)*
 - [x] 7.5 Cost monitoring + бюджет проекта + rate limiting *(закрыта 2026-04-10)*
-- [ ] 7.6 AI генерация text content fields паспорта (15+ промптов для
-  полей из 4.5.1, кнопка «✨ Сгенерировать AI» в content tab)
+- [x] 7.6 AI генерация text content fields паспорта (13 промптов для
+  полей из 4.5.1, кнопка «AI» в content tab) *(закрыта 2026-04-10)*
 - [ ] 7.7 AI marketing research через web search (новое поле
   Project.marketing_research JSONB, multi-topic storage, секция в
   content tab)

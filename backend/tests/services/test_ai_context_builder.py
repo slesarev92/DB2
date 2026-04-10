@@ -288,3 +288,75 @@ async def test_for_kpi_explanation_no_skus(
         scope=PeriodScope.Y1Y3,
     )
     assert ctx["top_skus"] == []
+
+
+# ============================================================
+# Phase 7.6 — for_content_field
+# ============================================================
+
+
+async def test_for_content_field_happy_path(
+    db_session: AsyncSession,
+    project_with_scenarios: Project,
+) -> None:
+    """Successful context build for content field generation."""
+    # Set some existing content to verify cross-field inclusion
+    project_with_scenarios.project_goal = "Вывод нового SKU"
+    project_with_scenarios.innovation_type = "line extension"
+    await db_session.flush()
+
+    builder = AIContextBuilder(db_session)
+    ctx = await builder.for_content_field(
+        project_id=project_with_scenarios.id,
+        field_name="target_audience",
+    )
+
+    assert ctx["target_field"] == "target_audience"
+    assert ctx["project"]["name"] == project_with_scenarios.name
+    # existing_content содержит project_goal но не target_audience
+    assert "project_goal" in ctx["existing_content"]
+    assert "target_audience" not in ctx["existing_content"]
+    assert ctx["user_hint"] is None
+
+
+async def test_for_content_field_with_user_hint(
+    db_session: AsyncSession,
+    project_with_scenarios: Project,
+) -> None:
+    """user_hint included in context."""
+    builder = AIContextBuilder(db_session)
+    ctx = await builder.for_content_field(
+        project_id=project_with_scenarios.id,
+        field_name="project_goal",
+        user_hint="Акцент на экологичность",
+    )
+    assert ctx["user_hint"] == "Акцент на экологичность"
+
+
+async def test_for_content_field_invalid_field(
+    db_session: AsyncSession,
+    project_with_scenarios: Project,
+) -> None:
+    """Invalid field name → AIContextBuilderError."""
+    builder = AIContextBuilder(db_session)
+    with pytest.raises(AIContextBuilderError, match="не поддерживается"):
+        await builder.for_content_field(
+            project_id=project_with_scenarios.id,
+            field_name="executive_summary",  # not in CONTENT_FIELDS
+        )
+
+
+async def test_for_content_field_deleted_project(
+    db_session: AsyncSession,
+    project_with_scenarios: Project,
+) -> None:
+    """Deleted project → AIContextBuilderError."""
+    project_with_scenarios.deleted_at = datetime.now(timezone.utc)
+    await db_session.flush()
+
+    builder = AIContextBuilder(db_session)
+    with pytest.raises(AIContextBuilderError, match="не найден"):
+        await builder.for_content_field(
+            project_id=project_with_scenarios.id,
+            field_name="project_goal",
+        )

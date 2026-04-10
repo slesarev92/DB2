@@ -1112,3 +1112,207 @@ async def test_update_ai_budget_negative_rejected(
         json={"ai_budget_rub_monthly": -100},
     )
     assert resp.status_code == 422
+
+
+# ============================================================
+# Phase 7.6 — GENERATE CONTENT FIELD
+# ============================================================
+
+
+@pytest.fixture
+def mock_polza_content(mock_polza: AsyncMock) -> AsyncMock:
+    """Override mock_polza for content field schema (haiku response)."""
+    content_output = {"generated_text": "Цель проекта — вывод нового SKU в premium сегмент."}
+    mock_polza.return_value = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(content=json.dumps(content_output))
+            )
+        ],
+        usage=SimpleNamespace(
+            prompt_tokens=800, completion_tokens=100, total_tokens=900
+        ),
+        model="anthropic/claude-haiku-4.5",
+    )
+    return mock_polza
+
+
+async def test_generate_content_happy_path(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+    mock_polza_content: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """Successful content field generation → 200 + haiku model."""
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/generate-content",
+        json={"field": "project_goal"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["field"] == "project_goal"
+    assert "SKU" in data["generated_text"]
+    assert data["model"] == "anthropic/claude-haiku-4.5"
+    assert data["cached"] is False
+    # Cost on haiku: 800 × 0.08/1k + 100 × 0.40/1k = 0.064 + 0.040 = 0.104
+    assert Decimal(data["cost_rub"]) == Decimal("0.104000")
+
+    mock_polza_content.assert_awaited_once()
+
+    logs = (
+        await db_session.scalars(
+            select(AIUsageLog).where(AIUsageLog.endpoint == "content_field")
+        )
+    ).all()
+    assert len(logs) == 1
+    assert logs[0].model == "anthropic/claude-haiku-4.5"
+
+
+async def test_generate_content_with_user_hint(
+    auth_client: AsyncClient,
+    gorji_project: Project,
+    mock_polza_content: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """user_hint передаётся в промпт."""
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/generate-content",
+        json={
+            "field": "target_audience",
+            "user_hint": "Акцент на молодёжь 18-25 лет",
+        },
+    )
+    assert resp.status_code == 200
+    # Проверяем что Polza был вызван (hint включён в context)
+    mock_polza_content.assert_awaited_once()
+
+
+async def test_generate_content_invalid_field_returns_422(
+    auth_client: AsyncClient,
+    gorji_project: Project,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """Несуществующее поле → 422 от Pydantic."""
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/generate-content",
+        json={"field": "nonexistent_field"},
+    )
+    assert resp.status_code == 422
+
+
+async def test_generate_content_cache_hit(
+    auth_client: AsyncClient,
+    gorji_project: Project,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """Cache hit → cached=true, Polza не вызван."""
+    cached_payload = {
+        "field": "project_goal",
+        "generated_text": "Cached goal text.",
+        "cost_rub": "0.10",
+        "model": "anthropic/claude-haiku-4.5",
+    }
+    mock_redis.get.return_value = json.dumps(cached_payload)
+
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/generate-content",
+        json={"field": "project_goal"},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["cached"] is True
+    assert data["generated_text"] == "Cached goal text."
+    mock_polza.assert_not_awaited()
+
+
+async def test_generate_content_tier_override_to_balanced(
+    auth_client: AsyncClient,
+    gorji_project: Project,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """tier_override=balanced → sonnet model."""
+    content_output = {"generated_text": "Deeper rationale text."}
+    mock_polza.return_value = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(content=json.dumps(content_output))
+            )
+        ],
+        usage=SimpleNamespace(
+            prompt_tokens=1000, completion_tokens=200, total_tokens=1200
+        ),
+        model="anthropic/claude-sonnet-4.6",
+    )
+
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/generate-content",
+        json={"field": "rationale", "tier_override": "balanced"},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["model"] == "anthropic/claude-sonnet-4.6"
+    call_kwargs = mock_polza.await_args.kwargs
+    assert call_kwargs["model"] == "anthropic/claude-sonnet-4.6"
+
+
+async def test_generate_content_deleted_project_returns_404(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """Deleted project → 404."""
+    gorji_project.deleted_at = datetime.now(timezone.utc)
+    await db_session.flush()
+
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/generate-content",
+        json={"field": "project_goal"},
+    )
+    assert resp.status_code == 404
+
+
+async def test_generate_content_project_budget_exceeded(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """Budget exceeded → 429."""
+    db_session.add(
+        AIUsageLog(
+            project_id=gorji_project.id,
+            endpoint="content_field",
+            model="anthropic/claude-haiku-4.5",
+            cost_rub=Decimal("500"),
+            latency_ms=100,
+        )
+    )
+    await db_session.flush()
+
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/generate-content",
+        json={"field": "project_goal"},
+    )
+    assert resp.status_code == 429
+    mock_polza.assert_not_awaited()
+
+
+async def test_generate_content_requires_auth(
+    client: AsyncClient, gorji_project: Project
+) -> None:
+    """401 без JWT."""
+    resp = await client.post(
+        f"/api/projects/{gorji_project.id}/ai/generate-content",
+        json={"field": "project_goal"},
+    )
+    assert resp.status_code == 401
