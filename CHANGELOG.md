@@ -9,7 +9,10 @@
 
 ## [Unreleased]
 
-_Phase 8: Presentation Layer — паритет с эталонным паспортом_
+### Added
+- **8.1 Pricing Summary tab:** сводная таблица цен SKU × канал (полка,
+  ex-factory с VAT-коррекцией, COGS из BOM, маржи каналов). Backend
+  endpoint GET /api/projects/{id}/pricing-summary + frontend PricingTab.
 
 ---
 

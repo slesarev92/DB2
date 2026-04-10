@@ -341,6 +341,39 @@ URLs (когда compose работает):
 - `localhost:5432` — postgres (`dbuser` / `dbpassword` / `dbpassport`)
 - `localhost:6379` — redis
 
+### Деплой на production
+
+**Workflow: локально → GitHub → сервер.** Не редактировать код на
+сервере напрямую.
+
+```bash
+# 1. Коммит локально
+git add <files>
+git commit -m "..."
+
+# 2. Push на GitHub
+git push origin main
+
+# 3. По команде пользователя — деплой на VPS
+ssh -i ~/.ssh/db2_deploy root@45.144.221.215 "cd /opt/dbpassport && git pull origin main"
+# Пересборка образов
+ssh ... "cd /opt/dbpassport && docker build -f backend/Dockerfile.prod -t dbpassport-backend:latest backend/"
+ssh ... "cd /opt/dbpassport && docker build -f frontend/Dockerfile.prod \
+    --build-arg NEXT_PUBLIC_API_URL=http://45.144.221.215:8080 \
+    --build-arg NPM_REGISTRY=https://registry.npmmirror.com \
+    -t dbpassport-frontend:latest frontend/"
+# Перезапуск
+ssh ... "cd /opt/dbpassport/infra && docker compose -f docker-compose.prod.yml up -d --force-recreate backend celery-worker frontend && sleep 5 && docker compose -f docker-compose.prod.yml restart nginx"
+# Миграции (если были)
+ssh ... "cd /opt/dbpassport/infra && docker compose -f docker-compose.prod.yml exec backend alembic upgrade head"
+```
+
+Prod-сервер: `45.144.221.215:8080` (nginx → backend:8000 + frontend:3000).
+SSH key: `~/.ssh/db2_deploy`. `.env` в `infra/.env` на сервере.
+Образы: локальные `dbpassport-backend:latest` / `dbpassport-frontend:latest`
+(GHCR недоступен с RU VPS, переменные `BACKEND_IMAGE`/`FRONTEND_IMAGE`
+в `infra/.env` указывают на локальные теги).
+
 ---
 
 ## АРХИТЕКТУРНЫЕ ПАТТЕРНЫ (установлены в Фазе 1, применять везде)

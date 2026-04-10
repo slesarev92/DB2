@@ -3006,15 +3006,12 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
 
 **Приоритет:** от высокого к низкому по impact для Gate-презентации.
 
-#### 8.1 Ценовые таблицы (Pricing Summary)
-**Что:** Сводная таблица полочных цен, отгрузочных цен и промо-цен
-по матрице SKU × канал. Данные уже есть в ProjectSKUChannel
-(shelf_price, channel_margin, promo_discount, promo_share).
-**UI:** Новая секция в табе «Результаты» или отдельный таб «Цены».
-Таблица: строки = каналы, колонки = SKU. Ячейки: полка / отгрузка / себестоимость.
-**Экспорт:** Включить в PPT (слайд) и PDF (секция).
-**Критерий:** Таблица совпадает со страницей 2 эталона.
-**Зависимости:** нет (данные из существующих таблиц).
+#### ✅ 8.1 Ценовые таблицы (Pricing Summary) — закрыта 2026-04-10
+- [x] Backend: GET /api/projects/{id}/pricing-summary (shelf_price_reg,
+  promo, weighted, ex_factory, COGS per unit, channel_margin)
+- [x] Frontend: PricingTab — 3 карточки (полка, ex-factory, COGS/маржи)
+- [x] Навигация: таб «Цены» в группе ⑤ Анализ
+- [ ] Экспорт: PPT/PDF — **TODO** (отдельный коммит)
 
 #### 8.2 Стакан / Value Chain
 **Что:** Per-unit экономика по SKU × канал: Revenue → COGS → GP → Logistics
