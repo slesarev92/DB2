@@ -241,7 +241,7 @@ export function MockupGallery({
 
       {!loading && mockups.length === 0 && (
         <p className="text-xs text-muted-foreground">
-          Нет mockup'ов. Загрузите reference и нажмите «Сгенерировать».
+          Нет mockup-ов. Загрузите reference и нажмите «Сгенерировать».
         </p>
       )}
     </div>

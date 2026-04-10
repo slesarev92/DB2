@@ -28,7 +28,7 @@ export function AIPanelSettings() {
   return (
     <div className="space-y-3 text-xs">
       <p className="text-muted-foreground">
-        Текущие tier'ы для каждой фичи. Override per-feature будет в 7.5.
+        Текущие tier-ы для каждой фичи. Override per-feature будет в 7.5.
       </p>
       <ul className="space-y-1">
         {FEATURES.map((f) => (
