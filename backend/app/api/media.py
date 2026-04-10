@@ -119,14 +119,12 @@ async def list_project_media_endpoint(
 async def download_media_endpoint(
     media_id: int,
     session: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
 ) -> StreamingResponse:
     """Скачать файл. Возвращает stream с правильным Content-Type.
 
-    Авторизация: любой аутентифицированный пользователь может скачать —
-    проверки принадлежности к проекту на уровне проекта будут добавлены
-    в Фазе 8 (RBAC). Сейчас все пользователи имеют доступ ко всем
-    проектам (см. ADR-01).
+    Доступ без авторизации — используется в <img src> тегах на фронтенде,
+    которые не передают Authorization header. RBAC-проверка принадлежности
+    к проекту будет добавлена в Фазе 8 (Keycloak).
     """
     asset = await media_service.get_media_asset(session, media_id)
     if asset is None:
