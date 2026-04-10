@@ -721,7 +721,7 @@ async def freeform_chat(
         content=body.question,
     )
     session.add(user_msg)
-    await session.flush()
+    await session.commit()  # Commit conversation + user message before SSE stream
 
     # Load conversation history from DB (last 20 messages for LLM context)
     history_stmt = (
@@ -804,7 +804,7 @@ async def freeform_chat(
             )
             session.add(assistant_msg)
             conversation.updated_at = datetime.now(timezone.utc)
-            await session.flush()
+            await session.commit()
         except Exception:
             pass  # Best effort
 
@@ -839,6 +839,7 @@ async def freeform_chat(
                     latency_ms=0,
                 ),
             )
+            await session.commit()
         except Exception:
             pass
 
