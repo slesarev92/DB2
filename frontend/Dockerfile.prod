@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1.6
 #
 # Production multi-stage build for Next.js frontend.
 # Standalone output, non-root user, minimal runtime image.
@@ -8,8 +7,7 @@ FROM node:20-alpine AS deps
 
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci
+RUN npm ci
 
 # ── Stage 2: builder ──
 FROM node:20-alpine AS builder
