@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { AIPanelProvider } from "@/components/ai-panel/ai-panel-context";
+import { AIPanelDrawer } from "@/components/ai-panel/ai-panel-drawer";
 import { useAuth } from "@/components/auth-provider";
 import { Sidebar } from "@/components/sidebar";
 
@@ -39,9 +41,12 @@ export default function AppLayout({
   }
 
   return (
-    <div className="flex min-h-screen">
-      <Sidebar />
-      <main className="flex-1 overflow-auto p-6">{children}</main>
-    </div>
+    <AIPanelProvider>
+      <div className="flex min-h-screen">
+        <Sidebar />
+        <main className="flex-1 overflow-auto p-6">{children}</main>
+        <AIPanelDrawer />
+      </div>
+    </AIPanelProvider>
   );
 }

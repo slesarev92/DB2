@@ -1,8 +1,10 @@
 "use client";
 
+import { Sparkles } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { useAIPanel } from "@/components/ai-panel/ai-panel-context";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -20,6 +22,7 @@ const NAV: NavItem[] = [
 export function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const { toggle: toggleAIPanel } = useAIPanel();
 
   return (
     <aside className="flex h-screen w-60 flex-col border-r bg-sidebar text-sidebar-foreground">
@@ -52,6 +55,19 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t px-4 py-3">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={toggleAIPanel}
+          className="mb-2 w-full justify-start gap-2"
+          title="AI Assistant (Ctrl+K)"
+        >
+          <Sparkles className="h-4 w-4" />
+          <span>AI Assistant</span>
+          <kbd className="ml-auto rounded border px-1 text-[10px] text-muted-foreground">
+            Ctrl+K
+          </kbd>
+        </Button>
         <p className="truncate text-xs text-muted-foreground" title={user?.email}>
           {user?.email ?? "—"}
         </p>

@@ -509,3 +509,67 @@ export interface MediaAssetRead {
   created_at: string;
   uploaded_by: number | null;
 }
+
+// ============================================================
+// AI (Фаза 7, Polza AI — ADR-16)
+// ============================================================
+
+/**
+ * Уровни моделей Polza AI. Используется в tier_override при Standard/Deep
+ * toggle в UI. Backend enum `AIModelTier` — stable string ids.
+ */
+export type AIModelTier =
+  | "fast_cheap"
+  | "balanced"
+  | "heavy"
+  | "research"
+  | "image";
+
+/** AI-фичи для агрегации в usage logs / AI Panel history. */
+export type AIFeature =
+  | "explain_kpi"
+  | "explain_sensitivity"
+  | "freeform_chat"
+  | "executive_summary"
+  | "content_field"
+  | "marketing_research"
+  | "package_mockup";
+
+/** Request body для POST /api/projects/{id}/ai/explain-kpi. */
+export interface AIKpiExplanationRequest {
+  scenario_id: number;
+  scope: PeriodScope;
+  /** null / undefined = default BALANCED. "heavy" = Deep analysis (opus). */
+  tier_override?: AIModelTier | null;
+}
+
+/**
+ * Response от /ai/explain-kpi. `cost_rub` приходит как string (Pydantic
+ * Decimal → JSON string), парсим через Number() при отображении.
+ */
+export interface AIKpiExplanationResponse {
+  summary: string;
+  key_drivers: string[];
+  risks: string[];
+  recommendation: "go" | "no-go" | "review";
+  confidence: number;
+  rationale: string;
+  cost_rub: string;
+  model: string;
+  cached: boolean;
+}
+
+/**
+ * Запись в AI usage history (для AI Panel). В Phase 7.2 — локальный
+ * mock state, реальный endpoint `/ai/usage` добавится в 7.5.
+ */
+export interface AIUsageHistoryEntry {
+  timestamp: string;
+  feature: AIFeature;
+  model: string;
+  cost_rub: string;
+  latency_ms: number;
+  project_id: number;
+  project_name: string;
+  cached: boolean;
+}

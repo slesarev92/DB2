@@ -114,10 +114,15 @@ export function apiGet<T>(path: string): Promise<T> {
   return _request<T>(path, { method: "GET" });
 }
 
-export function apiPost<T>(path: string, body?: unknown): Promise<T> {
+export function apiPost<T>(
+  path: string,
+  body?: unknown,
+  options?: { signal?: AbortSignal },
+): Promise<T> {
   return _request<T>(path, {
     method: "POST",
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal: options?.signal,
   });
 }
 

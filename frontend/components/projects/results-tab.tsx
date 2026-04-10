@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { ExplainKpiInline } from "@/components/ai-panel/explain-kpi-inline";
 import { GoNoGoBadge } from "@/components/go-no-go-badge";
 import { KpiCard } from "@/components/projects/kpi-card";
 import { Button } from "@/components/ui/button";
@@ -388,6 +389,16 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
               </div>
             </CardHeader>
           </Card>
+
+          {/* AI Explain KPI (Phase 7.2) — под Go/No-Go hero */}
+          {selectedScenarioId !== null && (
+            <ExplainKpiInline
+              projectId={projectId}
+              projectName="Проект"
+              scenarioId={selectedScenarioId}
+              scope="y1y5"
+            />
+          )}
 
           {/* NPV row */}
           <div>
