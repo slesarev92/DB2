@@ -457,3 +457,160 @@ async def complete_json(
         total_tokens=total_tokens,
         latency_ms=latency_ms,
     )
+
+
+async def complete_vision(
+    *,
+    system_prompt: str,
+    user_prompt: str,
+    image_base64: str,
+    image_media_type: str = "image/png",
+    schema: type[T],
+    feature: AIFeature | None = None,
+    tier_override: AIModelTier | None = None,
+    endpoint: str = "unknown",
+    temperature: float = 0.2,
+) -> AICallResult[T]:
+    """Claude vision: анализ изображения + JSON output.
+
+    Отправляет изображение как base64 в content block (OpenAI vision
+    format). Используется в Phase 7.8 для анализа reference-изображения
+    (логотип) и генерации art direction для flux.
+
+    Args:
+        image_base64: Base64-encoded изображение (без data: prefix).
+        image_media_type: MIME type изображения.
+        Остальные аргументы — как в complete_json.
+    """
+    if feature is not None:
+        resolved_model = resolve_model(feature, tier_override)
+    else:
+        resolved_model = COMPLEX_CHAT_MODEL
+
+    try:
+        client = _get_client()
+    except AIServiceUnavailableError:
+        raise
+
+    start = time.monotonic()
+    try:
+        response = await client.chat.completions.create(
+            model=resolved_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{image_media_type};base64,{image_base64}",
+                            },
+                        },
+                        {"type": "text", "text": user_prompt},
+                    ],
+                },
+            ],
+            response_format={"type": "json_object"},
+            temperature=temperature,
+        )
+    except AuthenticationError as exc:
+        raise AIServiceUnavailableError(f"Polza AI auth failed: {exc}") from exc
+    except RateLimitError as exc:
+        raise AIServiceUnavailableError(f"Polza AI rate limit: {exc}") from exc
+    except APITimeoutError as exc:
+        raise AIServiceUnavailableError(f"Polza AI timeout: {exc}") from exc
+    except APIConnectionError as exc:
+        raise AIServiceUnavailableError(f"Polza AI connection error: {exc}") from exc
+    except APIError as exc:
+        raise AIServiceUnavailableError(f"Polza AI error: {exc}") from exc
+
+    latency_ms = int((time.monotonic() - start) * 1000)
+
+    if not response.choices:
+        raise AIServiceUnavailableError("Polza AI: empty choices[]")
+    content = response.choices[0].message.content
+    if not content:
+        raise AIServiceUnavailableError("Polza AI: content=None")
+
+    try:
+        raw_dict: dict[str, Any] = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise AIServiceUnavailableError(
+            f"Invalid JSON from vision: {exc}; content={content[:200]!r}"
+        ) from exc
+
+    try:
+        parsed = schema.model_validate(raw_dict)
+    except ValidationError as exc:
+        raise AIServiceUnavailableError(
+            f"Vision schema mismatch {schema.__name__}: {exc}"
+        ) from exc
+
+    usage = response.usage
+    return AICallResult(
+        parsed=parsed,
+        model=response.model or resolved_model,
+        prompt_tokens=usage.prompt_tokens if usage else 0,
+        completion_tokens=usage.completion_tokens if usage else 0,
+        total_tokens=usage.total_tokens if usage else 0,
+        latency_ms=latency_ms,
+    )
+
+
+async def generate_image(
+    *,
+    prompt: str,
+    model: str = "black-forest-labs/flux-2-pro",
+    size: str = "1024x1024",
+    n: int = 1,
+) -> dict[str, Any]:
+    """Генерация изображения через Polza images API (flux-2-pro).
+
+    Returns:
+        {"b64_json": str, "model": str, "prompt_tokens": int,
+         "latency_ms": int}
+
+    Raises:
+        AIServiceUnavailableError
+    """
+    try:
+        client = _get_client()
+    except AIServiceUnavailableError:
+        raise
+
+    start = time.monotonic()
+    try:
+        response = await client.images.generate(
+            model=model,
+            prompt=prompt,
+            n=n,
+            size=size,
+            response_format="b64_json",
+        )
+    except AuthenticationError as exc:
+        raise AIServiceUnavailableError(f"Polza image auth: {exc}") from exc
+    except RateLimitError as exc:
+        raise AIServiceUnavailableError(f"Polza image rate limit: {exc}") from exc
+    except APITimeoutError as exc:
+        raise AIServiceUnavailableError(f"Polza image timeout: {exc}") from exc
+    except APIConnectionError as exc:
+        raise AIServiceUnavailableError(f"Polza image connection: {exc}") from exc
+    except APIError as exc:
+        raise AIServiceUnavailableError(f"Polza image error: {exc}") from exc
+
+    latency_ms = int((time.monotonic() - start) * 1000)
+
+    if not response.data:
+        raise AIServiceUnavailableError("Polza image: empty data[]")
+
+    image_data = response.data[0]
+    b64 = getattr(image_data, "b64_json", None)
+    if not b64:
+        raise AIServiceUnavailableError("Polza image: no b64_json in response")
+
+    return {
+        "b64_json": b64,
+        "model": model,
+        "latency_ms": latency_ms,
+    }

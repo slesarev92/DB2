@@ -42,7 +42,7 @@ ALLOWED_CONTENT_TYPES: frozenset[str] = frozenset(
 # Whitelist kind (совпадает с Literal в schemas/media.py и CHECK
 # constraint `ck_media_assets_kind` в миграции 2e7b824682be).
 ALLOWED_KINDS: frozenset[str] = frozenset(
-    {"package_image", "concept_design", "other"}
+    {"package_image", "concept_design", "ai_reference", "ai_generated", "other"}
 )
 
 

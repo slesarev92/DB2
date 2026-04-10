@@ -9,6 +9,35 @@
 
 ## [Unreleased]
 
+### Added (Phase 7.8 — AI package mockup generation, 2026-04-10)
+
+**Backend:**
+- Migration `e3be6ed2aeaa`: `ai_generated_images` table (gallery of all
+  generations per SKU), updated `media_assets` kind CHECK for ai_reference
+  and ai_generated
+- `complete_vision()` in ai_service: Claude opus vision analyzes reference
+  image → structured art direction JSON
+- `generate_image()` in ai_service: flux-2-pro via images.generate() API
+- Two-step pipeline: reference → Claude vision (art direction, ~5₽) →
+  flux (image, ~8₽) = ~13₽ total. Without reference → flux only (~8₽)
+- `POST /ai/generate-mockup`: budget checks, SKU validation, saves to
+  MediaAsset + AIGeneratedImage, returns media_url
+- `GET /ai/mockups`: gallery list (all or per-SKU), ordered by created_at
+- `POST /ai/mockups/{id}/set-primary`: sets ProjectSKU.package_image_id
+- PACKAGE_VISION_SYSTEM + PACKAGE_VISION_WITH_PROMPT prompts
+- Schemas: AIPackageMockupRequest/Response, LLMVisionArtDirectionOutput,
+  AIGeneratedImageRead
+- 6 new tests (398 total): generate without ref, with ref, auth, invalid
+  SKU, empty gallery, set-primary
+
+**Frontend:**
+- `MockupGallery` component: upload reference (logo), prompt input,
+  generate with confirmation (~13₽), scrollable grid gallery with
+  thumbnails, "Сделать основным" button, primary indicator
+- Integrated in BOM panel per-SKU below SkuImageUpload
+- API functions: generatePackageMockup, listMockups, setMockupAsPrimary
+- types/api.ts: AIPackageMockupResponse, AIGeneratedImageRead
+
 ### Added (Phase 7.7 — AI marketing research, 2026-04-10)
 
 **Backend:**

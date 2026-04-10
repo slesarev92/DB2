@@ -20,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { MockupGallery } from "@/components/projects/mockup-gallery";
 import { SkuImageUpload } from "@/components/projects/sku-image-upload";
 import { ApiError } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
@@ -251,6 +252,21 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
               pskId={pskId}
               currentImageId={psk.package_image_id}
               onChange={(newId) => {
+                setPsk((prev) =>
+                  prev ? { ...prev, package_image_id: newId } : prev,
+                );
+              }}
+            />
+          </div>
+
+          {/* Phase 7.8: AI Mockup gallery */}
+          <div className="mt-4 border-t pt-4">
+            <MockupGallery
+              projectId={projectId}
+              projectSkuId={pskId}
+              skuLabel={`${psk.sku?.brand ?? ""} ${psk.sku?.name ?? ""}`}
+              currentPackageImageId={psk.package_image_id}
+              onPrimaryChanged={(newId) => {
                 setPsk((prev) =>
                   prev ? { ...prev, package_image_id: newId } : prev,
                 );

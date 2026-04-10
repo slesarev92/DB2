@@ -2930,7 +2930,7 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
   inline collapsible panel вместо модалки, batch cost < 8₽)
 - [ ] 7.7 AI marketing research (web search Discovery → implementation,
   multi-topic JSONB в Project, 7-day freshness, PPT/PDF integration)
-- [ ] 7.8 AI package mockups (flux-2-pro, n=1..4 variants, inline
+- [x] 7.8 AI package mockups (flux-2-pro, vision+flux two-step, inline
   panel + style presets, confirmation dialog >5₽, unselected variants
   остаются в MediaAsset)
 - [ ] 7.3 AI-комментарий чувствительности (POST .../ai/explain-sensitivity)
@@ -2941,7 +2941,7 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
 - [x] 7.7 AI marketing research через web search (новое поле
   Project.marketing_research JSONB, multi-topic storage, секция в
   content tab)
-- [ ] 7.8 AI генерация package mockups (image generation через
+- [x] 7.8 AI генерация package mockups (image generation через
   Polza /v1/images/generations с моделью flux-2-pro, сохранение как
   MediaAsset, link to ProjectSKU.package_image_id)
 

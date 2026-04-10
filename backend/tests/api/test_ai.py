@@ -40,6 +40,7 @@ from app.models import (
     AIUsageLog,
     PeriodScope,
     Project,
+    ProjectSKU,
     Scenario,
     ScenarioResult,
     ScenarioType,
@@ -1526,3 +1527,223 @@ async def test_marketing_research_requires_auth(
         json={"topic": "market_size"},
     )
     assert resp.status_code == 401
+
+
+# ============================================================
+# Phase 7.8 — PACKAGE MOCKUP
+# ============================================================
+
+
+@pytest.fixture
+async def gorji_sku(db_session: AsyncSession, gorji_project: Project) -> "ProjectSKU":
+    """ProjectSKU с подгруженным SKU для тестов mockup."""
+    from app.models import ProjectSKU as PSKU, SKU as SKUModel
+
+    sku = SKUModel(
+        brand="GORJI",
+        name="Premium ICE",
+        format="bottle",
+        volume_l=Decimal("0.5"),
+        segment="premium",
+    )
+    db_session.add(sku)
+    await db_session.flush()
+
+    psku = PSKU(
+        project_id=gorji_project.id,
+        sku_id=sku.id,
+    )
+    db_session.add(psku)
+    await db_session.flush()
+    return psku
+
+
+@pytest.fixture
+def mock_polza_mockup(monkeypatch: pytest.MonkeyPatch) -> dict:
+    """Мокает и vision (complete_vision) и flux (generate_image)."""
+    import base64
+    from unittest.mock import AsyncMock as AM
+
+    # Mock vision — returns art direction
+    vision_mock = AM()
+    vision_output = {"art_direction": "Premium bottle, blue gradient, white logo top-left."}
+    vision_mock.return_value = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(content=json.dumps(vision_output))
+            )
+        ],
+        usage=SimpleNamespace(
+            prompt_tokens=5000, completion_tokens=300, total_tokens=5300
+        ),
+        model="anthropic/claude-opus-4.6",
+    )
+
+    # Mock flux — returns fake b64 PNG (1x1 red pixel)
+    fake_png_b64 = base64.b64encode(
+        b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
+    ).decode("ascii")
+    flux_mock = AM()
+    flux_mock.return_value = SimpleNamespace(
+        data=[SimpleNamespace(b64_json=fake_png_b64)]
+    )
+
+    ai_service.reset_client_cache()
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create = vision_mock
+    fake_client.images.generate = flux_mock
+    monkeypatch.setattr(ai_service, "_get_client", lambda: fake_client)
+    monkeypatch.setattr(
+        "app.core.config.settings.polza_ai_api_key", "fake-test-key"
+    )
+
+    return {"vision": vision_mock, "flux": flux_mock}
+
+
+async def test_generate_mockup_without_reference(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+    gorji_sku: "ProjectSKU",
+    mock_polza_mockup: dict,
+    mock_redis: MagicMock,
+) -> None:
+    """Generate mockup without reference image → skip vision, only flux."""
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/generate-mockup",
+        json={
+            "project_sku_id": gorji_sku.id,
+            "prompt": "Modern minimalist bottle design",
+        },
+    )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["media_asset_id"] > 0
+    assert data["media_url"].startswith("/api/media/")
+    assert "Modern minimalist" in data["prompt"]
+
+    # Vision NOT called (no reference)
+    mock_polza_mockup["vision"].assert_not_awaited()
+    # Flux called
+    mock_polza_mockup["flux"].assert_awaited_once()
+
+
+async def test_generate_mockup_with_reference(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+    gorji_sku: "ProjectSKU",
+    mock_polza_mockup: dict,
+    mock_redis: MagicMock,
+) -> None:
+    """Generate with reference → vision + flux both called."""
+    from app.models import MediaAsset as MA
+
+    # Create a reference asset
+    ref = MA(
+        project_id=gorji_project.id,
+        kind="ai_reference",
+        filename="logo.png",
+        content_type="image/png",
+        storage_path="test/logo.png",
+        size_bytes=100,
+    )
+    db_session.add(ref)
+    await db_session.flush()
+
+    # Write a tiny file so read_media_file works
+    from app.services.media_service import _absolute_path
+
+    path = _absolute_path(ref.storage_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 50)
+
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/generate-mockup",
+        json={
+            "project_sku_id": gorji_sku.id,
+            "prompt": "Bottle with brand logo",
+            "reference_asset_id": ref.id,
+        },
+    )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert "art_direction" in data
+    assert "Premium bottle" in data["art_direction"]
+
+    # Both called
+    mock_polza_mockup["vision"].assert_awaited_once()
+    mock_polza_mockup["flux"].assert_awaited_once()
+
+
+async def test_generate_mockup_requires_auth(
+    client: AsyncClient, gorji_project: Project
+) -> None:
+    """401 без JWT."""
+    resp = await client.post(
+        f"/api/projects/{gorji_project.id}/ai/generate-mockup",
+        json={"project_sku_id": 1, "prompt": "test"},
+    )
+    assert resp.status_code == 401
+
+
+async def test_generate_mockup_invalid_sku(
+    auth_client: AsyncClient,
+    gorji_project: Project,
+    mock_polza_mockup: dict,
+    mock_redis: MagicMock,
+) -> None:
+    """Non-existent SKU → 404."""
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/generate-mockup",
+        json={"project_sku_id": 999999, "prompt": "test"},
+    )
+    assert resp.status_code == 404
+
+
+async def test_list_mockups_empty(
+    auth_client: AsyncClient,
+    gorji_project: Project,
+) -> None:
+    """Empty gallery → empty list."""
+    resp = await auth_client.get(
+        f"/api/projects/{gorji_project.id}/ai/mockups",
+    )
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+async def test_set_mockup_as_primary(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+    gorji_sku: "ProjectSKU",
+    mock_polza_mockup: dict,
+    mock_redis: MagicMock,
+) -> None:
+    """Set generated mockup as primary package image."""
+    # Generate a mockup first
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/generate-mockup",
+        json={
+            "project_sku_id": gorji_sku.id,
+            "prompt": "Clean design",
+        },
+    )
+    assert resp.status_code == 200
+    mockup_id = resp.json()["id"]
+    media_asset_id = resp.json()["media_asset_id"]
+
+    # Set as primary
+    resp2 = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/mockups/{mockup_id}/set-primary",
+    )
+    assert resp2.status_code == 200
+    assert resp2.json()["package_image_id"] == media_asset_id
+
+    # Verify in DB
+    await db_session.refresh(gorji_sku)
+    assert gorji_sku.package_image_id == media_asset_id

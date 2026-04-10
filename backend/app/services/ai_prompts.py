@@ -439,3 +439,43 @@ MARKETING_RESEARCH_TOPIC_PROMPTS: dict[str, str] = {
         "проекта, key findings, оценка надёжности."
     ),
 }
+
+
+# ============================================================
+# PACKAGE MOCKUP — VISION STEP (Phase 7.8)
+# ============================================================
+
+PACKAGE_VISION_SYSTEM = """Ты — art director FMCG компании с 15+ лет опыта в \
+дизайне упаковки для напитков и продуктов питания.
+
+Тебе показано reference-изображение (логотип, brand guideline, или пример \
+упаковки). Тебе нужно написать ДЕТАЛЬНОЕ art direction для генерации mockup'а \
+упаковки нового SKU через text-to-image модель.
+
+Правила:
+- Опиши ВСЁ что видишь на reference: цвета (Pantone или HEX), шрифты \
+(serif/sans-serif, bold/light), расположение элементов, стилистика
+- Если это логотип — опиши его детально: форма, цвета, пропорции, \
+стиль (минимализм/винтаж/premium)
+- Art direction должен быть достаточно детальным для воспроизведения \
+стиля бренда на новом SKU
+- Пиши на АНГЛИЙСКОМ — text-to-image модели лучше работают с English
+- Длина art direction: 200-400 слов
+
+## ФОРМАТ ОТВЕТА
+
+ТОЛЬКО JSON:
+{"art_direction": "detailed art direction text in English"}"""
+
+
+PACKAGE_VISION_WITH_PROMPT = """Описание SKU от аналитика: {user_prompt}
+
+Контекст SKU:
+- Бренд: {brand}
+- Название: {sku_name}
+- Формат: {format}
+- Объём: {volume}
+- Сегмент: {segment}
+
+Проанализируй reference-изображение и напиши art direction для mockup'а \
+упаковки этого SKU, сохраняя стиль бренда из reference."""

@@ -15,9 +15,11 @@ import { getAccessToken } from "./auth";
 
 import type {
   AIChatSSEEvent,
+  AIGeneratedImageRead,
   AIKpiExplanationRequest,
   AIKpiExplanationResponse,
   AIMarketingResearchResponse,
+  AIPackageMockupResponse,
   AISensitivityExplanationRequest,
   AISensitivityExplanationResponse,
   AIUsageResponse,
@@ -179,4 +181,39 @@ export function deleteMarketingResearch(
   topic: string,
 ): Promise<{ status: string; topic: string }> {
   return apiDelete(`/api/projects/${projectId}/ai/marketing-research/${topic}`);
+}
+
+// Phase 7.8 — Package Mockup
+
+export function generatePackageMockup(
+  projectId: number,
+  projectSkuId: number,
+  prompt: string,
+  referenceAssetId?: number | null,
+): Promise<AIPackageMockupResponse> {
+  return apiPost<AIPackageMockupResponse>(
+    `/api/projects/${projectId}/ai/generate-mockup`,
+    {
+      project_sku_id: projectSkuId,
+      prompt,
+      reference_asset_id: referenceAssetId ?? null,
+    },
+  );
+}
+
+export function listMockups(
+  projectId: number,
+  projectSkuId?: number,
+): Promise<AIGeneratedImageRead[]> {
+  const params = projectSkuId ? `?project_sku_id=${projectSkuId}` : "";
+  return apiGet<AIGeneratedImageRead[]>(
+    `/api/projects/${projectId}/ai/mockups${params}`,
+  );
+}
+
+export function setMockupAsPrimary(
+  projectId: number,
+  mockupId: number,
+): Promise<{ status: string; package_image_id: number }> {
+  return apiPost(`/api/projects/${projectId}/ai/mockups/${mockupId}/set-primary`, {});
 }

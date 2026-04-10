@@ -26,6 +26,7 @@ from decimal import Decimal
 from typing import Annotated, AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import select
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
@@ -33,7 +34,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.api.deps import get_current_user
 from app.core.rate_limit import limiter
 from app.db import get_db
-from app.models import User
+from app.models import AIGeneratedImage, MediaAsset, ProjectSKU, User
 from app.schemas.ai import (
     AIBudgetUpdateRequest,
     AIChatRequest,
@@ -42,11 +43,14 @@ from app.schemas.ai import (
     AIExecutiveSummaryRequest,
     AIExecutiveSummaryResponse,
     AIExecutiveSummarySaveRequest,
+    AIGeneratedImageRead,
     AIKpiExplanationRequest,
     AIKpiExplanationResponse,
     AIMarketingResearchEditRequest,
     AIMarketingResearchRequest,
     AIMarketingResearchResponse,
+    AIPackageMockupRequest,
+    AIPackageMockupResponse,
     AISensitivityExplanationRequest,
     AISensitivityExplanationResponse,
     AIUsageResponse,
@@ -55,6 +59,7 @@ from app.schemas.ai import (
     LLMKpiOutput,
     LLMMarketingResearchOutput,
     LLMSensitivityOutput,
+    LLMVisionArtDirectionOutput,
 )
 from app.services import ai_cache, ai_service
 from app.services.ai_context_builder import (
@@ -70,6 +75,8 @@ from app.services.ai_prompts import (
     KPI_EXPLAIN_SYSTEM,
     MARKETING_RESEARCH_SYSTEM,
     MARKETING_RESEARCH_TOPIC_PROMPTS,
+    PACKAGE_VISION_SYSTEM,
+    PACKAGE_VISION_WITH_PROMPT,
     SENSITIVITY_EXPLAIN_SYSTEM,
 )
 from app.services.ai_service import (
@@ -1060,6 +1067,269 @@ async def delete_marketing_research(
     await session.flush()
 
     return {"status": "deleted", "topic": topic}
+
+
+# ============================================================
+# PACKAGE MOCKUP (Phase 7.8)
+# ============================================================
+
+
+@router.post(
+    "/generate-mockup",
+    response_model=AIPackageMockupResponse,
+    summary="AI-генерация mockup'а упаковки (two-step: vision → flux)",
+)
+@limiter.limit("5/minute", key_func=_rate_limit_key)
+async def generate_package_mockup(
+    request: Request,
+    project_id: int,
+    body: AIPackageMockupRequest,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(_set_rate_limit_user)],
+) -> AIPackageMockupResponse:
+    """Two-step pipeline: Claude vision анализирует reference → flux генерит mockup.
+
+    Step 1 (~5₽): Claude opus (vision) reads reference image → art direction
+    Step 2 (~8₽): flux-2-pro generates image from art direction
+    Total: ~13₽ per generation.
+    """
+    import base64
+    import io
+
+    from app.services.media_service import (
+        read_media_file,
+        save_uploaded_file,
+    )
+
+    await check_daily_user_budget(session, user_id=current_user.id)
+    await check_project_budget(session, project_id)
+
+    # Validate project_sku exists and belongs to project
+    from sqlalchemy.orm import selectinload as _sil
+
+    psku_stmt = (
+        select(ProjectSKU)
+        .where(ProjectSKU.id == body.project_sku_id)
+        .options(_sil(ProjectSKU.sku))
+    )
+    psku = (await session.scalars(psku_stmt)).first()
+    if psku is None or psku.project_id != project_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"ProjectSKU {body.project_sku_id} не найден в project {project_id}",
+        )
+
+    sku = psku.sku
+    art_direction = ""
+    vision_cost = Decimal("0")
+
+    # Step 1: Vision — analyze reference image
+    if body.reference_asset_id is not None:
+        ref_asset = await session.get(MediaAsset, body.reference_asset_id)
+        if ref_asset is None or ref_asset.project_id != project_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Reference asset {body.reference_asset_id} не найден",
+            )
+
+        try:
+            image_bytes = read_media_file(ref_asset)
+            image_b64 = base64.b64encode(image_bytes).decode("ascii")
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Не удалось прочитать reference image: {exc}",
+            ) from exc
+
+        user_prompt = PACKAGE_VISION_WITH_PROMPT.format(
+            user_prompt=body.prompt,
+            brand=sku.brand,
+            sku_name=sku.name,
+            format=sku.format or "не указан",
+            volume=f"{sku.volume_l}L" if sku.volume_l else "не указан",
+            segment=sku.segment or "не указан",
+        )
+
+        try:
+            vision_result = await ai_service.complete_vision(
+                system_prompt=PACKAGE_VISION_SYSTEM,
+                user_prompt=user_prompt,
+                image_base64=image_b64,
+                image_media_type=ref_asset.content_type,
+                schema=LLMVisionArtDirectionOutput,
+                feature=AIFeature.PACKAGE_MOCKUP,
+                tier_override=ai_service.AIModelTier.HEAVY,
+                endpoint="mockup_vision",
+            )
+            art_direction = vision_result.parsed.art_direction
+            vision_cost = calculate_cost(
+                vision_result.model,
+                vision_result.prompt_tokens,
+                vision_result.completion_tokens,
+            )
+            await log_ai_usage(
+                session,
+                project_id=project_id,
+                user_id=current_user.id,
+                endpoint="mockup_vision",
+                result=vision_result,
+            )
+        except AIServiceUnavailableError as exc:
+            await log_ai_usage(
+                session,
+                project_id=project_id,
+                user_id=current_user.id,
+                endpoint="mockup_vision",
+                error=str(exc),
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"AI vision недоступен: {exc}",
+            ) from exc
+    else:
+        # No reference — use prompt directly as art direction
+        art_direction = (
+            f"Product packaging mockup for FMCG brand '{sku.brand}', "
+            f"product '{sku.name}', segment '{sku.segment or 'mainstream'}', "
+            f"format '{sku.format or 'bottle'}', volume {sku.volume_l or '0.5'}L. "
+            f"User request: {body.prompt}"
+        )
+
+    # Step 2: Generate image via flux
+    flux_prompt = (
+        f"{art_direction}\n\n"
+        f"Professional product packaging photo, studio lighting, "
+        f"white background, high resolution, commercial photography style."
+    )
+
+    try:
+        img_result = await ai_service.generate_image(prompt=flux_prompt)
+    except AIServiceUnavailableError as exc:
+        await log_ai_usage(
+            session,
+            project_id=project_id,
+            user_id=current_user.id,
+            endpoint="mockup_generate",
+            error=str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"AI image generation недоступен: {exc}",
+        ) from exc
+
+    # Save generated image to MediaAsset
+    image_data = base64.b64decode(img_result["b64_json"])
+    asset = await save_uploaded_file(
+        session,
+        project_id=project_id,
+        kind="ai_generated",
+        filename=f"mockup_{sku.brand}_{sku.name}.png".replace(" ", "_"),
+        content_type="image/png",
+        fileobj=io.BytesIO(image_data),
+        uploaded_by=current_user.id,
+    )
+
+    # Estimate flux cost (no per-token pricing — use flat estimate)
+    flux_cost = Decimal("8")  # ~8₽ per flux generation
+    total_cost = vision_cost + flux_cost
+
+    await log_ai_usage(
+        session,
+        project_id=project_id,
+        user_id=current_user.id,
+        endpoint="mockup_generate",
+        model=img_result["model"],
+    )
+
+    # Save to AIGeneratedImage gallery
+    gen_img = AIGeneratedImage(
+        project_sku_id=body.project_sku_id,
+        media_asset_id=asset.id,
+        reference_asset_id=body.reference_asset_id,
+        prompt_text=body.prompt,
+        art_direction=art_direction,
+        cost_rub=total_cost,
+        model=img_result["model"],
+        created_by=current_user.id,
+    )
+    session.add(gen_img)
+    await session.flush()
+
+    return AIPackageMockupResponse(
+        id=gen_img.id,
+        media_asset_id=asset.id,
+        media_url=f"/api/media/{asset.id}",
+        art_direction=art_direction,
+        prompt=body.prompt,
+        cost_rub=total_cost,
+        model=img_result["model"],
+    )
+
+
+@router.get(
+    "/mockups",
+    response_model=list[AIGeneratedImageRead],
+    summary="Галерея AI-генерированных mockup'ов",
+)
+async def list_mockups(
+    project_id: int,
+    project_sku_id: int | None = None,
+    session: Annotated[AsyncSession, Depends(get_db)] = None,
+    current_user: Annotated[User, Depends(get_current_user)] = None,
+) -> list[AIGeneratedImageRead]:
+    """Все AI-генерированные mockup'ы проекта (или конкретного SKU)."""
+    stmt = (
+        select(AIGeneratedImage)
+        .join(ProjectSKU, AIGeneratedImage.project_sku_id == ProjectSKU.id)
+        .where(ProjectSKU.project_id == project_id)
+    )
+    if project_sku_id is not None:
+        stmt = stmt.where(AIGeneratedImage.project_sku_id == project_sku_id)
+    stmt = stmt.order_by(AIGeneratedImage.created_at.desc()).limit(50)
+
+    rows = (await session.scalars(stmt)).all()
+    return [
+        AIGeneratedImageRead(
+            id=r.id,
+            project_sku_id=r.project_sku_id,
+            media_asset_id=r.media_asset_id,
+            media_url=f"/api/media/{r.media_asset_id}",
+            reference_asset_id=r.reference_asset_id,
+            prompt_text=r.prompt_text,
+            art_direction=r.art_direction,
+            cost_rub=r.cost_rub,
+            model=r.model,
+            created_at=r.created_at.isoformat(),
+        )
+        for r in rows
+    ]
+
+
+@router.post(
+    "/mockups/{mockup_id}/set-primary",
+    summary="Установить mockup как основное изображение SKU",
+)
+@limiter.limit("10/minute", key_func=_rate_limit_key)
+async def set_mockup_as_primary(
+    request: Request,
+    project_id: int,
+    mockup_id: int,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(_set_rate_limit_user)],
+) -> dict:
+    """Set AIGeneratedImage as ProjectSKU.package_image_id."""
+    gen_img = await session.get(AIGeneratedImage, mockup_id)
+    if gen_img is None:
+        raise HTTPException(status_code=404, detail="Mockup не найден")
+
+    psku = await session.get(ProjectSKU, gen_img.project_sku_id)
+    if psku is None or psku.project_id != project_id:
+        raise HTTPException(status_code=404, detail="SKU не найден в проекте")
+
+    psku.package_image_id = gen_img.media_asset_id
+    await session.flush()
+
+    return {"status": "set", "package_image_id": gen_img.media_asset_id}
 
 
 # ============================================================

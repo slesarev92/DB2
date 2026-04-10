@@ -654,6 +654,30 @@ export interface AIMarketingResearchResponse {
   web_sources_used: boolean;
 }
 
+// Package Mockup (Phase 7.8)
+export interface AIPackageMockupResponse {
+  id: number;
+  media_asset_id: number;
+  media_url: string;
+  art_direction: string;
+  prompt: string;
+  cost_rub: string;
+  model: string;
+}
+
+export interface AIGeneratedImageRead {
+  id: number;
+  project_sku_id: number;
+  media_asset_id: number;
+  media_url: string;
+  reference_asset_id: number | null;
+  prompt_text: string;
+  art_direction: string;
+  cost_rub: string | null;
+  model: string;
+  created_at: string;
+}
+
 export interface AIUsageResponse {
   project_id: number;
   month_start: string;

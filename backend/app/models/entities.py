@@ -650,11 +650,65 @@ class MediaAsset(Base):
     )
 
     __table_args__ = (
-        # 4.5.1: kind ограничен whitelist
+        # 4.5.1 + 7.8: kind whitelist расширен для AI reference и generated
         CheckConstraint(
-            "kind IN ('package_image', 'concept_design', 'other')",
+            "kind IN ('package_image', 'concept_design', 'ai_reference', "
+            "'ai_generated', 'other')",
             name="ck_media_assets_kind",
         ),
+    )
+
+
+# ============================================================
+# AI generated images (Фаза 7.8 — package mockup gallery)
+# ============================================================
+
+
+class AIGeneratedImage(Base):
+    """Сгенерированное AI-изображение упаковки (Phase 7.8).
+
+    Хранит все генерации для SKU — аналитик листает галерею и выбирает
+    лучший вариант через "Сделать основным" (→ ProjectSKU.package_image_id).
+
+    Pipeline: reference image → Claude vision (art direction) → flux (image).
+    Оба шага логируются: art_direction (текст от Claude) и media_asset
+    (результат flux). cost_rub = сумма обоих вызовов.
+    """
+
+    __tablename__ = "ai_generated_images"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_sku_id: Mapped[int] = mapped_column(
+        ForeignKey("project_skus.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Сгенерированное изображение (flux output, сохранённое как MediaAsset)
+    media_asset_id: Mapped[int] = mapped_column(
+        ForeignKey("media_assets.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Reference-изображение (логотип, бренд-гайд), nullable — генерация
+    # без reference допустима
+    reference_asset_id: Mapped[int | None] = mapped_column(
+        ForeignKey("media_assets.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # Пользовательский промпт (что попросил аналитик)
+    prompt_text: Mapped[str] = mapped_column(Text, nullable=False)
+    # Art direction от Claude vision (детальное описание для flux)
+    art_direction: Mapped[str] = mapped_column(Text, nullable=False)
+    # Суммарная стоимость (vision + generation)
+    cost_rub: Mapped[Decimal | None] = mapped_column(Numeric(12, 6), nullable=True)
+    model: Mapped[str] = mapped_column(String(100), nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    created_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
     )
 
 

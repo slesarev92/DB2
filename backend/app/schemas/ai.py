@@ -364,3 +364,56 @@ class AIMarketingResearchEditRequest(BaseModel):
     """PATCH body для редактирования research text."""
     topic: ResearchTopic
     edited_text: str = Field(..., min_length=1, max_length=20000)
+
+
+# ============================================================
+# PACKAGE MOCKUP (Phase 7.8)
+# ============================================================
+
+
+class AIPackageMockupRequest(BaseModel):
+    """POST /api/projects/{project_id}/ai/generate-mockup."""
+    project_sku_id: int
+    prompt: str = Field(
+        ..., min_length=1, max_length=2000,
+        description="Описание желаемого mockup'а.",
+    )
+    reference_asset_id: int | None = Field(
+        default=None,
+        description="MediaAsset ID reference-изображения (логотип).",
+    )
+
+
+class AIPackageMockupResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int  # AIGeneratedImage.id
+    media_asset_id: int
+    media_url: str  # /api/media/{id}
+    art_direction: str
+    prompt: str
+    cost_rub: Decimal
+    model: str
+
+
+class LLMVisionArtDirectionOutput(BaseModel):
+    """Vision step output: art direction text."""
+    model_config = ConfigDict(extra="ignore")
+
+    art_direction: str
+
+
+class AIGeneratedImageRead(BaseModel):
+    """Gallery item for GET /ai/mockups."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    project_sku_id: int
+    media_asset_id: int
+    media_url: str
+    reference_asset_id: int | None
+    prompt_text: str
+    art_direction: str
+    cost_rub: Decimal | None
+    model: str
+    created_at: str
