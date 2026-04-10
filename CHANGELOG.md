@@ -9,6 +9,19 @@
 
 ## [Unreleased]
 
+### Added (B-15 — MinIO/S3 for media storage, 2026-04-10)
+
+**Infra:**
+- MinIO service in docker-compose.dev.yml (ports 9000/9001, console at :9001)
+- `minio-data` named volume
+
+**Backend:**
+- `boto3` dependency added
+- `s3_storage.py`: upload/download/delete operations, auto bucket creation
+- `media_service.py`: S3 when s3_endpoint configured, filesystem fallback
+- `config.py`: s3_endpoint, s3_access_key, s3_secret_key, s3_bucket, s3_region
+- Tests: s3_endpoint="" in conftest (filesystem mode for test isolation)
+
 ### Added (B-05 — Regional channel detail, 2026-04-10)
 
 **Backend:**

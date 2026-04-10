@@ -31,6 +31,11 @@ from app.models import Base, User
 
 TEST_DB_NAME = "dbpassport_test"
 
+# B-15: disable S3 in all tests — use filesystem fallback.
+# Cannot use monkeypatch in session fixture (function scope only),
+# so we patch settings directly at import time.
+settings.s3_endpoint = ""
+
 
 def _replace_db_name(url: str, new_db: str) -> str:
     """Меняет имя БД в DSN-строке (последний сегмент после '/')."""

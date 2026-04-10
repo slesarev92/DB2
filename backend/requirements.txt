@@ -69,3 +69,8 @@ openai>=1.54.0,<2.0.0
 # cost-based лимиты (daily 100₽/user) — отдельный middleware в ai_service,
 # т.к. slowapi не умеет cost-based.
 slowapi>=0.1.9,<1.0.0
+
+# --- S3/MinIO storage (B-15) ---
+# boto3: AWS S3 SDK, работает с MinIO через endpoint_url.
+# Используется для media storage (package images, AI mockups).
+boto3>=1.35.0,<2.0.0

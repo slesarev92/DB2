@@ -70,10 +70,19 @@ services:
       LOG_LEVEL: INFO
       CORS_ORIGINS: http://localhost:3000
       MEDIA_STORAGE_ROOT: /media
+      # B-15: S3/MinIO settings. Если S3_ENDPOINT задан — media хранится
+      # в S3. Если нет — fallback на filesystem (MEDIA_STORAGE_ROOT).
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_BUCKET: media
+      S3_REGION: us-east-1
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
@@ -104,10 +113,34 @@ services:
       ENVIRONMENT: development
       LOG_LEVEL: INFO
       MEDIA_STORAGE_ROOT: /media
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_BUCKET: media
+      S3_REGION: us-east-1
     depends_on:
       redis:
         condition: service_healthy
+      minio:
+        condition: service_healthy
     command: celery -A app.worker worker --loglevel=info
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   frontend:
     build:
@@ -128,7 +161,7 @@ services:
 volumes:
   postgres-data:
   redis-data:
-  # Фаза 4.5.2: file storage для MediaAsset (package images, concept
-  # designs, AI-generated изображения из Phase 7.8). Named volume чтобы
-  # файлы переживали рестарт backend/celery-worker контейнеров.
+  # Фаза 4.5.2: file storage для MediaAsset (fallback если S3 не настроен).
   media-storage:
+  # B-15: MinIO S3-compatible object storage.
+  minio-data:

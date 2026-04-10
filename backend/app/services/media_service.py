@@ -1,23 +1,15 @@
-"""File storage для MediaAsset (Фаза 4.5.2).
+"""File storage для MediaAsset (Фаза 4.5.2 + B-15 S3/MinIO).
 
-Бинарные файлы лежат в файловой системе (Docker named volume `media-storage`,
-см. `infra/docker-compose.dev.yml`). В БД — только метаданные в таблице
-`media_assets` + относительный путь в `storage_path`.
+B-15: если `settings.s3_endpoint` задан — файлы хранятся в S3/MinIO.
+Иначе — filesystem (Docker named volume `media-storage`).
 
-Структура файлов:
-    {MEDIA_STORAGE_ROOT}/{project_id}/{kind}/{uuid}_{sanitized_filename}
-
-`uuid` нужен чтобы избежать коллизий при одноимённых загрузках и чтобы
-случайный угадывающий URL не мог получить чужой файл (хотя основной
-механизм авторизации — JWT + проверка что asset.project_id принадлежит
-пользователю через проект).
+В обоих случаях `storage_path` в БД — относительный ключ:
+    {project_id}/{kind}/{uuid}_{sanitized_filename}
 
 Валидация:
 - размер ≤ MEDIA_MAX_FILE_SIZE (10 MB)
 - content_type в whitelist (image/png, image/jpeg, image/webp)
 - filename очищается от path separators и управляющих символов
-
-MinIO/S3 вынесен в Backlog — filesystem MVP достаточен до продакшена.
 """
 from __future__ import annotations
 
@@ -164,11 +156,21 @@ async def save_uploaded_file(
         )
 
     rel_path = _build_storage_path(project_id, kind, filename)
-    abs_path = _absolute_path(rel_path)
-    abs_path.parent.mkdir(parents=True, exist_ok=True)
+    storage_key = str(rel_path).replace("\\", "/")
 
-    # Write-then-commit: если БД упадёт, удаляем файл вручную в except.
-    abs_path.write_bytes(data)
+    # B-15: S3 or filesystem
+    from app.services.s3_storage import is_s3_configured
+
+    use_s3 = is_s3_configured()
+
+    if use_s3:
+        from app.services.s3_storage import delete_object, upload_bytes
+
+        upload_bytes(storage_key, data, content_type)
+    else:
+        abs_path = _absolute_path(rel_path)
+        abs_path.parent.mkdir(parents=True, exist_ok=True)
+        abs_path.write_bytes(data)
 
     try:
         asset = MediaAsset(
@@ -176,7 +178,7 @@ async def save_uploaded_file(
             kind=kind,
             filename=_sanitize_filename(filename),
             content_type=content_type,
-            storage_path=str(rel_path).replace("\\", "/"),
+            storage_path=storage_key,
             size_bytes=size,
             uploaded_by=uploaded_by,
         )
@@ -185,10 +187,12 @@ async def save_uploaded_file(
         await session.refresh(asset)
         return asset
     except Exception:
-        # Откат файла на диске. В Phase 7.8 при AI-генерации это
-        # важно — не копим мусор при сбоях БД.
+        # Откат файла при DB failure
         try:
-            abs_path.unlink(missing_ok=True)
+            if use_s3:
+                delete_object(storage_key)
+            else:
+                _absolute_path(rel_path).unlink(missing_ok=True)
         except OSError:
             pass
         raise
@@ -217,17 +221,29 @@ async def list_media_for_project(
 
 
 def read_media_file(asset: MediaAsset) -> bytes:
-    """Читает файл с диска целиком.
+    """Читает файл из S3 или с диска.
 
     Raises:
-        MediaFileMissingError: запись в БД есть, но файла на диске нет.
+        MediaFileMissingError: запись в БД есть, но файла нет.
     """
-    abs_path = _absolute_path(asset.storage_path)
-    if not abs_path.is_file():
-        raise MediaFileMissingError(
-            f"Файл {abs_path} отсутствует (MediaAsset id={asset.id})"
-        )
-    return abs_path.read_bytes()
+    from app.services.s3_storage import is_s3_configured
+
+    if is_s3_configured():
+        from app.services.s3_storage import download_bytes
+
+        try:
+            return download_bytes(asset.storage_path)
+        except FileNotFoundError as exc:
+            raise MediaFileMissingError(
+                f"S3 object {asset.storage_path} отсутствует (MediaAsset id={asset.id})"
+            ) from exc
+    else:
+        abs_path = _absolute_path(asset.storage_path)
+        if not abs_path.is_file():
+            raise MediaFileMissingError(
+                f"Файл {abs_path} отсутствует (MediaAsset id={asset.id})"
+            )
+        return abs_path.read_bytes()
 
 
 async def delete_media_asset(
@@ -243,12 +259,18 @@ async def delete_media_asset(
     FK ProjectSKU.package_image_id = ON DELETE SET NULL — ссылки
     разрываются без каскада.
     """
-    abs_path = _absolute_path(asset.storage_path)
+    storage_key = asset.storage_path
     await session.delete(asset)
     await session.flush()
+
+    from app.services.s3_storage import is_s3_configured
+
     try:
-        abs_path.unlink(missing_ok=True)
+        if is_s3_configured():
+            from app.services.s3_storage import delete_object
+
+            delete_object(storage_key)
+        else:
+            _absolute_path(storage_key).unlink(missing_ok=True)
     except OSError:
-        # Файл уже удалён или inaccessible — не валим транзакцию,
-        # запись в БД уже удалена, это главное.
         pass

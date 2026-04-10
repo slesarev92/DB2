@@ -53,6 +53,8 @@ def isolated_media_root(
     включения в сигнатуру. Возвращает tmp_path для удобства ассертов.
     """
     monkeypatch.setattr(settings, "media_storage_root", str(tmp_path))
+    # B-15: force filesystem mode in tests (no S3)
+    monkeypatch.setattr(settings, "s3_endpoint", "")
     return tmp_path
 
 

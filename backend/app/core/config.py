@@ -48,6 +48,15 @@ class Settings(BaseSettings):
     # Hard-limit на размер одного файла в байтах (10 MB).
     media_max_file_size: int = 10 * 1024 * 1024
 
+    # --- S3/MinIO storage (B-15) ---
+    # Если s3_endpoint задан — media хранится в S3/MinIO.
+    # Если пуст — fallback на filesystem (media_storage_root).
+    s3_endpoint: str = ""
+    s3_access_key: str = ""
+    s3_secret_key: str = ""
+    s3_bucket: str = "media"
+    s3_region: str = "us-east-1"
+
     # --- AI integration (Фаза 7, ADR-16) ---
     # Polza AI = OpenAI-совместимый прокси с оплатой в рублях, без VPN.
     # Используется через `openai` Python SDK (AsyncOpenAI) с кастомным
