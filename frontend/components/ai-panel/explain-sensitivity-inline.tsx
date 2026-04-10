@@ -5,7 +5,7 @@
  */
 
 import { Sparkles, X } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAIPanel } from "./ai-panel-context";
 
@@ -36,14 +36,17 @@ export function ExplainSensitivityInline({
   const { pushHistory, refreshUsage } = useAIPanel();
   const [loading, setLoading] = useState(false);
 
-  // Restore from DB if available
-  const savedForScenario = savedCommentary?.[String(scenarioId)] as
-    | AISensitivityExplanationResponse
-    | undefined;
-  const [result, setResult] = useState<AISensitivityExplanationResponse | null>(
-    savedForScenario ?? null,
-  );
+  const [result, setResult] = useState<AISensitivityExplanationResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Restore saved commentary from DB when project data arrives
+  useEffect(() => {
+    if (result !== null) return; // don't overwrite active result
+    const saved = savedCommentary?.[String(scenarioId)] as
+      | AISensitivityExplanationResponse
+      | undefined;
+    if (saved) setResult({ ...saved, cached: true });
+  }, [savedCommentary, scenarioId]); // eslint-disable-line react-hooks/exhaustive-deps
   const abortRef = useRef<AbortController | null>(null);
 
   const handleRun = useCallback(async () => {

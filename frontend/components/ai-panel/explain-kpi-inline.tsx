@@ -18,7 +18,7 @@
  */
 
 import { Sparkles, X } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAIPanel } from "./ai-panel-context";
 
@@ -55,13 +55,16 @@ export function ExplainKpiInline({
   const { pushHistory, refreshUsage } = useAIPanel();
   const [loading, setLoading] = useState(false);
 
-  // Restore from DB if available
-  const savedForKey = savedCommentary?.[`${scenarioId}_${scope}`] as
-    | AIKpiExplanationResponse
-    | undefined;
-  const [result, setResult] = useState<AIKpiExplanationResponse | null>(
-    savedForKey ?? null,
-  );
+  const [result, setResult] = useState<AIKpiExplanationResponse | null>(null);
+
+  // Restore saved commentary from DB when project data arrives
+  useEffect(() => {
+    if (result !== null) return; // don't overwrite active result
+    const saved = savedCommentary?.[`${scenarioId}_${scope}`] as
+      | AIKpiExplanationResponse
+      | undefined;
+    if (saved) setResult({ ...saved, cached: true });
+  }, [savedCommentary, scenarioId, scope]); // eslint-disable-line react-hooks/exhaustive-deps
   const [error, setError] = useState<string | null>(null);
   const [tier, setTier] = useState<AIModelTier>("balanced");
   const abortRef = useRef<AbortController | null>(null);
