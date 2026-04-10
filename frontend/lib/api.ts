@@ -77,7 +77,8 @@ async function _fetchWithAuth(
   const token = getAccessToken();
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  if (init.body && !headers.has("Content-Type")) {
+  // Don't set Content-Type for FormData — browser sets multipart/form-data with boundary
+  if (init.body && !headers.has("Content-Type") && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -121,7 +122,12 @@ export function apiPost<T>(
 ): Promise<T> {
   return _request<T>(path, {
     method: "POST",
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body:
+      body instanceof FormData
+        ? body
+        : body !== undefined
+          ? JSON.stringify(body)
+          : undefined,
     signal: options?.signal,
   });
 }
