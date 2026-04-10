@@ -74,3 +74,8 @@ slowapi>=0.1.9,<1.0.0
 # boto3: AWS S3 SDK, работает с MinIO через endpoint_url.
 # Используется для media storage (package images, AI mockups).
 boto3>=1.35.0,<2.0.0
+
+# --- Production WSGI server (6.2) ---
+# gunicorn с uvicorn workers для production. В dev не используется
+# (uvicorn --reload напрямую). Конфиг: 4 workers, timeout 120s.
+gunicorn>=22.0.0,<24.0.0

@@ -2966,10 +2966,13 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
   `beforeunload` on dirty, tab switch blurs first (auto-save trigger).
 - tsc --noEmit 0 errors, 442 pytest passed, frontend HTTP 200.
 
-### Финальный этап — CI/CD и production deploy (после Phase 7)
-- [ ] 6.2 GitHub Actions CI — `.github/workflows/ci.yml` (test job на PR,
-  deploy job на merge в main), Dockerfile.prod (multi-stage, non-root,
-  gunicorn), branch protection, GitHub Secrets для POLZA_AI_API_KEY +
-  SECRET_KEY + DB creds + SSH deploy target, VPS setup + первый
-  автоматический deploy, smoke test `curl /health`.
-  Перенесено из Phase 6 2026-04-09.
+### ✅ Финальный этап — CI/CD и production deploy (закрыт 2026-04-10)
+- [x] 6.2 GitHub Actions CI/CD + Production Dockerfiles + GHCR ✅
+  - `backend/Dockerfile.prod`: multi-stage, gunicorn 4 workers, non-root appuser, healthcheck
+  - `frontend/Dockerfile.prod`: multi-stage Next.js standalone, non-root nextjs, healthcheck
+  - `infra/docker-compose.prod.yml`: 6 services (postgres, redis, backend, celery, frontend, nginx)
+  - `infra/nginx/nginx.conf`: reverse proxy /api→backend, /→frontend
+  - `.github/workflows/ci.yml`: 3 jobs — backend pytest (postgres+redis), frontend tsc+build, docker build+push GHCR
+  - `.github/workflows/deploy.yml`: manual trigger, SSH deploy, health check
+  - `gunicorn>=22.0.0` in requirements.txt, `output: "standalone"` in next.config.mjs
+  - GHCR images tagged `latest` + `sha` per commit

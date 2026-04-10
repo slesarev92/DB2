@@ -9,6 +9,23 @@
 
 ## [Unreleased]
 
+### Added (6.2 — CI/CD + Production Dockerfiles + GHCR, 2026-04-10)
+
+**Production Dockerfiles:**
+- `backend/Dockerfile.prod` — multi-stage, gunicorn + uvicorn workers, non-root user, healthcheck
+- `frontend/Dockerfile.prod` — multi-stage Next.js standalone build, non-root user, healthcheck
+- `gunicorn>=22.0.0` added to requirements.txt
+- `output: "standalone"` in next.config.mjs
+
+**Production infrastructure:**
+- `infra/docker-compose.prod.yml` — 6 services (postgres, redis, backend, celery, frontend, nginx)
+- `infra/nginx/nginx.conf` — reverse proxy: /api→backend, /→frontend
+- GHCR images: `ghcr.io/$REPO/backend:latest`, `ghcr.io/$REPO/frontend:latest`
+
+**GitHub Actions:**
+- `.github/workflows/ci.yml` — 3 jobs: backend pytest (postgres+redis services), frontend tsc+build, docker build+push to GHCR (on push to main)
+- `.github/workflows/deploy.yml` — manual trigger, SSH deploy, docker compose pull+up+health check
+
 ### Changed (Navigation refactor — tabs → sidebar, 2026-04-10)
 
 **Project sidebar navigation:**
