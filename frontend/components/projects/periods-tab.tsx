@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { PeriodsGrid } from "@/components/projects/periods-grid";
 import { SkuPanel } from "@/components/projects/sku-panel";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import {
@@ -13,7 +14,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  type ActualImportResult,
+  getActualTemplateUrl,
+  uploadActualData,
+} from "@/lib/actual-import";
 import { ApiError } from "@/lib/api";
+import { getAccessToken } from "@/lib/auth";
 import { listProjectSkuChannels } from "@/lib/channels";
 import { listProjectScenarios } from "@/lib/scenarios";
 
@@ -53,6 +60,13 @@ export function PeriodsTab({ projectId }: PeriodsTabProps) {
   );
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("monthly");
   const [error, setError] = useState<string | null>(null);
+
+  // Actual import state (B-02)
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<ActualImportResult | null>(
+    null,
+  );
 
   // Загружаем сценарии проекта (один раз)
   useEffect(() => {
@@ -104,6 +118,46 @@ export function PeriodsTab({ projectId }: PeriodsTabProps) {
       cancelled = true;
     };
   }, [selectedPskId]);
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || selectedScenarioId === null) return;
+    setImporting(true);
+    setError(null);
+    setImportResult(null);
+    try {
+      const result = await uploadActualData(
+        projectId,
+        selectedScenarioId,
+        file,
+      );
+      setImportResult(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка импорта");
+    } finally {
+      setImporting(false);
+      // Reset file input so same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function handleDownloadTemplate() {
+    const token = getAccessToken();
+    const resp = await fetch(getActualTemplateUrl(projectId), {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!resp.ok) {
+      setError("Не удалось скачать шаблон");
+      return;
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `actual_template_project_${projectId}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
@@ -192,6 +246,67 @@ export function PeriodsTab({ projectId }: PeriodsTabProps) {
                 </div>
               </CardContent>
             </Card>
+
+            {/* B-02: Import actual data */}
+            <Card>
+              <CardContent className="flex items-center gap-3 pt-4 pb-4">
+                <span className="text-sm font-medium">Импорт факта:</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadTemplate}
+                >
+                  Скачать шаблон
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                />
+                <Button
+                  variant="default"
+                  size="sm"
+                  disabled={importing || selectedScenarioId === null}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {importing ? "Импорт..." : "Загрузить .xlsx"}
+                </Button>
+                {importResult !== null && (
+                  <span className="text-xs text-muted-foreground">
+                    Импортировано: {importResult.imported}, пропущено:{" "}
+                    {importResult.skipped}
+                    {importResult.errors.length > 0 && (
+                      <span className="text-destructive">
+                        {" "}
+                        ({importResult.errors.length} ошиб.)
+                      </span>
+                    )}
+                  </span>
+                )}
+              </CardContent>
+            </Card>
+
+            {importResult !== null && importResult.errors.length > 0 && (
+              <Card>
+                <CardContent className="pt-4 pb-4">
+                  <p className="mb-2 text-sm font-medium text-destructive">
+                    Ошибки импорта:
+                  </p>
+                  <ul className="list-disc pl-5 text-xs text-muted-foreground space-y-0.5">
+                    {importResult.errors.slice(0, 20).map((err, i) => (
+                      <li key={i}>{err}</li>
+                    ))}
+                    {importResult.errors.length > 20 && (
+                      <li>
+                        ... и ещё {importResult.errors.length - 20} ошибок
+                      </li>
+                    )}
+                  </ul>
+                </CardContent>
+              </Card>
+            )}
 
             {error !== null && (
               <p className="text-sm text-destructive" role="alert">

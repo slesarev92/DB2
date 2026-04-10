@@ -8,6 +8,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
+from app.api import actual_import as actual_import_router
 from app.api import ai as ai_router
 from app.api import auth as auth_router
 from app.api import bom as bom_router
@@ -64,6 +65,7 @@ app.include_router(financial_plan_router.router)
 app.include_router(media_router.router)
 app.include_router(tasks_router.router)
 app.include_router(ai_router.router)
+app.include_router(actual_import_router.router)
 
 
 @app.get("/health", tags=["system"])

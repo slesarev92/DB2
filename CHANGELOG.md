@@ -9,6 +9,21 @@
 
 ## [Unreleased]
 
+### Added (B-02 — Import actual data from Excel, 2026-04-10)
+
+**Backend:**
+- `actual_import_service.py`: Excel parser (openpyxl), SKU/Channel/Period
+  validation, PeriodValue creation with source_type=ACTUAL, append-only
+  versioning. Template generator with pre-filled Period/SKU/Channel rows.
+- `api/actual_import.py`: POST upload endpoint, GET template download
+- 9 new tests (412 total): basic import, version increment, invalid SKU,
+  missing columns, empty file, auth, template download, partial values
+
+**Frontend:**
+- `lib/actual-import.ts`: uploadActualData, getActualTemplateUrl
+- periods-tab.tsx: «Скачать шаблон» + «Загрузить .xlsx» buttons,
+  import result display (imported/skipped/errors), error list
+
 ### Added (B-19 — OPEX breakdown по статьям, 2026-04-10)
 
 **Backend:**
