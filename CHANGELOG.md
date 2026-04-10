@@ -9,6 +9,38 @@
 
 ## [Unreleased]
 
+### Added (B-12 — AKB distribution plan, 2026-04-10)
+
+**Backend:**
+- Model: `AKBEntry` (project × channel, universe/target outlets, coverage %,
+  weighted distribution, notes). UNIQUE(project_id, channel_id).
+- Migration `196823092dd6`: akb_entries + obppc_entries tables
+- CRUD: GET/POST/PATCH/DELETE /api/projects/{id}/akb
+- `akb_service`: list/get/create/update/delete with selectinload(channel)
+- 7 new tests (443 total)
+
+**Frontend:**
+- `AkbTab` component: channel selector, universe/target/coverage inputs,
+  table with delete, formatPercent display
+- New tab "АКБ" in project detail page
+- `lib/akb.ts` API wrappers, `AKBRead` type in api.ts
+
+### Added (B-13 — OBPPC Price-Pack-Channel matrix, 2026-04-10)
+
+**Backend:**
+- Model: `OBPPCEntry` (project × SKU × channel × pack_format, price_tier
+  premium/mainstream/value, pack_size_ml, price_point, is_active).
+  UNIQUE(project_id, sku_id, channel_id, pack_format).
+- CRUD: GET/POST/PATCH/DELETE /api/projects/{id}/obppc
+- `obppc_service`: list/get/create/update/delete with selectinload(sku, channel)
+- 8 new tests (443 total)
+
+**Frontend:**
+- `ObppcTab` component: SKU/channel/tier/format selectors, price inputs,
+  strategy matrix table with tier labels, inactive row dimming
+- New tab "OBPPC" in project detail page
+- `lib/obppc.ts` API wrappers, `OBPPCRead`/`PriceTier` types in api.ts
+
 ### Added (B-15 — MinIO/S3 for media storage, 2026-04-10)
 
 **Infra:**

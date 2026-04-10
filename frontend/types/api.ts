@@ -719,6 +719,50 @@ export interface AIGeneratedImageRead {
   created_at: string;
 }
 
+// ============================================================
+// AKB — distribution plan (B-12)
+// ============================================================
+
+export interface AKBRead {
+  id: number;
+  project_id: number;
+  channel_id: number;
+  channel: { id: number; code: string; name: string };
+  universe_outlets: number | null;
+  target_outlets: number | null;
+  coverage_pct: string | null; // Decimal as string
+  weighted_distribution: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+// ============================================================
+// OBPPC — Price-Pack-Channel matrix (B-13)
+// ============================================================
+
+export type PriceTier = "premium" | "mainstream" | "value";
+
+export interface OBPPCRead {
+  id: number;
+  project_id: number;
+  sku_id: number;
+  sku: { id: number; brand: string; name: string };
+  channel_id: number;
+  channel: { id: number; code: string; name: string };
+  occasion: string | null;
+  price_tier: PriceTier;
+  pack_format: string;
+  pack_size_ml: number | null;
+  price_point: string | null; // Decimal as string
+  is_active: boolean;
+  notes: string | null;
+  created_at: string;
+}
+
+// ============================================================
+// AI Usage
+// ============================================================
+
 export interface AIUsageResponse {
   project_id: number;
   month_start: string;

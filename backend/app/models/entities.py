@@ -872,6 +872,120 @@ class AIGeneratedImage(Base):
 # ============================================================
 
 
+# ============================================================
+# AKB — Active retail base / distribution plan (B-12)
+# ============================================================
+
+
+class AKBEntry(Base, TimestampMixin):
+    """План дистрибуции по каналам (B-12).
+
+    Одна строка = один канал в проекте с метриками покрытия:
+    universe (сколько ТТ в канале), target (сколько планируем охватить),
+    coverage % и weighted distribution. Дополняет ProjectSKUChannel.nd_target
+    данными о физической базе торговых точек.
+
+    UNIQUE(project_id, channel_id): один канал — одна запись.
+    """
+
+    __tablename__ = "akb_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    channel_id: Mapped[int] = mapped_column(
+        ForeignKey("channels.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+
+    universe_outlets: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    target_outlets: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    coverage_pct: Mapped[Decimal | None] = mapped_column(
+        Numeric(8, 6), nullable=True
+    )
+    weighted_distribution: Mapped[Decimal | None] = mapped_column(
+        Numeric(8, 6), nullable=True
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    channel: Mapped["Channel"] = relationship(lazy="raise_on_sql")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id", "channel_id",
+            name="uq_akb_entries_project_channel",
+        ),
+    )
+
+
+# ============================================================
+# OBPPC — Price-Pack-Channel matrix (B-13)
+# ============================================================
+
+
+class OBPPCEntry(Base, TimestampMixin):
+    """Стратегическая матрица Price-Pack-Channel (B-13).
+
+    Одна строка = одна комбинация (SKU × канал × pack format)
+    с ценовым позиционированием и стратегическими параметрами.
+
+    UNIQUE(project_id, sku_id, channel_id, pack_format): одна уникальная
+    комбинация per project.
+    """
+
+    __tablename__ = "obppc_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    sku_id: Mapped[int] = mapped_column(
+        ForeignKey("skus.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    channel_id: Mapped[int] = mapped_column(
+        ForeignKey("channels.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+
+    occasion: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    price_tier: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="mainstream"
+    )
+    pack_format: Mapped[str] = mapped_column(
+        String(100), nullable=False, default="bottle"
+    )
+    pack_size_ml: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    price_point: Mapped[Decimal | None] = mapped_column(
+        Numeric(15, 4), nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    sku: Mapped["SKU"] = relationship(lazy="raise_on_sql")
+    channel: Mapped["Channel"] = relationship(lazy="raise_on_sql")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id", "sku_id", "channel_id", "pack_format",
+            name="uq_obppc_entries_project_sku_channel_pack",
+        ),
+        CheckConstraint(
+            "price_tier IN ('premium', 'mainstream', 'value')",
+            name="ck_obppc_entries_price_tier",
+        ),
+    )
+
+
 class AIUsageLog(Base):
     """Журнал вызовов Polza AI — для cost monitoring и debugging.
 

@@ -66,8 +66,8 @@
 | B-09 | 🟢 P3 | Интеграция с 1С / BI-кубами | Архитектурно предусмотрено, реализация — Этап 2+ |
 | B-10 | ✅ Done | Версионность сценариев в UI | Реализовано 2026-04-10: history endpoint, ValueHistoryDialog, per-period "..." buttons, 419 pytest |
 | B-11 | ✅ Done | Интерактивный Tornado chart | Реализовано 2026-04-10: recharts horizontal BarChart, sorted by impact, integrated in sensitivity tab |
-| B-12 | 🟢 P3 | AKB / план дистрибуции | Отдельный АКБ-экран из GORJI+ — развёрнутый план по ТТ |
-| B-13 | 🟢 P3 | OBPPC матрица (Price-Pack-Channel) | Стратегия Price-Pack-Channel — маркетинговый блок |
+| B-12 | ✅ Done | AKB / план дистрибуции | Реализовано 2026-04-10: AKBEntry model, CRUD API, AkbTab frontend, 443 pytest |
+| B-13 | ✅ Done | OBPPC матрица (Price-Pack-Channel) | Реализовано 2026-04-10: OBPPCEntry model, CRUD API, ObppcTab frontend, 443 pytest |
 | B-14 | 🟠 P1 | MFA / SSO / LDAP | Этап 2 вместе с Keycloak (B-01) |
 | B-15 | ✅ Done | MinIO / S3 для media storage | Реализовано 2026-04-10: MinIO docker service, boto3 SDK, s3_storage backend, media_service dual-mode, 428 pytest |
 | B-16 | ✅ Done | Frontend e2e тесты (Playwright) | Реализовано 2026-04-10: 5 smoke tests (login, create project, health, redirect), Playwright + Chromium |

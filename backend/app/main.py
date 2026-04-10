@@ -10,12 +10,14 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.api import actual_import as actual_import_router
 from app.api import ai as ai_router
+from app.api import akb as akb_router
 from app.api import auth as auth_router
 from app.api import bom as bom_router
 from app.api import channels as channels_router
 from app.api import financial_plan as financial_plan_router
 from app.api import ingredients as ingredients_router
 from app.api import media as media_router
+from app.api import obppc as obppc_router
 from app.api import period_values as period_values_router
 from app.api import project_sku_channels as project_sku_channels_router
 from app.api import project_skus as project_skus_router
@@ -67,6 +69,8 @@ app.include_router(ingredients_router.router)
 app.include_router(media_router.router)
 app.include_router(tasks_router.router)
 app.include_router(ai_router.router)
+app.include_router(akb_router.router)
+app.include_router(obppc_router.router)
 app.include_router(actual_import_router.router)
 
 
