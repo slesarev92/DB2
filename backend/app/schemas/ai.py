@@ -211,3 +211,53 @@ class LLMExecutiveSummaryOutput(BaseModel):
 class AIExecutiveSummarySaveRequest(BaseModel):
     """PATCH body для сохранения отредактированного executive summary."""
     ai_executive_summary: str = Field(..., min_length=1, max_length=10000)
+
+
+# ============================================================
+# USAGE + BUDGET (Phase 7.5)
+# ============================================================
+
+
+class AIUsageDailyEntry(BaseModel):
+    """Один день в daily_history."""
+    date: str  # ISO date "2026-04-09"
+    spent_rub: Decimal
+    calls: int
+
+
+class AIUsageRecentCall(BaseModel):
+    """Одна запись из recent_calls."""
+    id: int
+    timestamp: str  # ISO datetime
+    endpoint: str
+    model: str
+    prompt_tokens: int
+    completion_tokens: int
+    cost_rub: Decimal | None
+    latency_ms: int
+    error: str | None
+    cached: bool
+
+
+class AIUsageResponse(BaseModel):
+    """GET /api/projects/{id}/ai/usage — агрегированная статистика."""
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: int
+    month_start: str  # ISO date "2026-04-01"
+    spent_rub: Decimal
+    budget_rub: Decimal | None
+    budget_remaining_rub: Decimal | None
+    budget_percent_used: float  # 0..1, None-safe
+    daily_history: list[AIUsageDailyEntry]
+    recent_calls: list[AIUsageRecentCall]
+    cache_hit_rate_24h: float  # 0..1
+
+
+class AIBudgetUpdateRequest(BaseModel):
+    """PATCH /api/projects/{id}/ai/budget."""
+    ai_budget_rub_monthly: Decimal | None = Field(
+        default=None,
+        description="Новый лимит в рублях. null = unlimited.",
+        ge=0,
+    )

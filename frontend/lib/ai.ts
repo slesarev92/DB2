@@ -10,7 +10,7 @@
  * найдены. Все эти случаи ловим через ApiError в вызывающем компоненте.
  */
 
-import { apiPost } from "./api";
+import { apiGet, apiPatch, apiPost } from "./api";
 import { getAccessToken } from "./auth";
 
 import type {
@@ -19,6 +19,7 @@ import type {
   AIKpiExplanationResponse,
   AISensitivityExplanationRequest,
   AISensitivityExplanationResponse,
+  AIUsageResponse,
 } from "@/types/api";
 
 export async function requestExplainKpi(
@@ -128,4 +129,21 @@ export function formatCostRub(cost: string | number): string {
   if (Number.isNaN(num)) return "— ₽";
   if (num < 0.01) return "< 0.01 ₽";
   return `${num.toFixed(2)} ₽`;
+}
+
+// ============================================================
+// Phase 7.5 — Usage + Budget
+// ============================================================
+
+export function fetchAIUsage(projectId: number): Promise<AIUsageResponse> {
+  return apiGet<AIUsageResponse>(`/api/projects/${projectId}/ai/usage`);
+}
+
+export function updateAIBudget(
+  projectId: number,
+  budgetRub: number | null,
+): Promise<AIUsageResponse> {
+  return apiPatch<AIUsageResponse>(`/api/projects/${projectId}/ai/budget`, {
+    ai_budget_rub_monthly: budgetRub,
+  });
 }

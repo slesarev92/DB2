@@ -69,6 +69,13 @@ class ProjectBase(BaseModel):
     roadmap_tasks: list[Any] | None = None
     approvers: list[Any] | None = None
 
+    # 7.5: AI budget — месячный лимит расходов на AI в рублях.
+    # None = server_default 500₽ при создании; явный None через PATCH =
+    # unlimited (бюджет не ограничен).
+    ai_budget_rub_monthly: Decimal | None = Field(
+        default=Decimal("500.00"), ge=0
+    )
+
 
 class ProjectCreate(ProjectBase):
     """Тело POST /api/projects."""
@@ -110,6 +117,7 @@ class ProjectUpdate(BaseModel):
     function_readiness: dict[str, Any] | None = None
     roadmap_tasks: list[Any] | None = None
     approvers: list[Any] | None = None
+    ai_budget_rub_monthly: Decimal | None = None
 
 
 class ProjectRead(ProjectBase):

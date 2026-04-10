@@ -9,6 +9,37 @@
 
 ## [Unreleased]
 
+### Added (Phase 7.5 — Cost monitoring + budget enforcement, 2026-04-10)
+
+**Backend:**
+- Migration `4160c5e248b5`: `Project.ai_budget_rub_monthly` (Numeric(12,2),
+  server_default 500₽, nullable) + `AIUsageLog.user_id` FK
+- `check_project_budget()` — project monthly budget enforcement на всех
+  AI endpoints. 429 при превышении с structured detail
+- `check_daily_user_budget()` — refactored: per-user filtering по реальному
+  `user_id` (ранее глобальный). Structured JSON detail вместо plaintext
+- `log_ai_usage()` — принимает `user_id` kwarg, записывает в лог
+- `get_project_usage_stats()` — агрегация: spent/budget/remaining/percent,
+  daily_history, recent_calls (20), cache_hit_rate_24h
+- `GET /api/projects/{id}/ai/usage` — read-only AI usage statistics
+- `PATCH /api/projects/{id}/ai/budget` — обновление бюджета, null=unlimited
+- 22 новых теста (371 total): project budget enforcement (happy/at_limit/
+  over_limit/null), per-user daily filtering, usage endpoint, budget PATCH
+
+**Frontend:**
+- `ai-panel-context.tsx` — real data: `fetchAIUsage()` при mount с
+  projectId, `refreshUsage()` after each AI call, budget/spent/remaining state
+- `ai-panel-balance-widget.tsx` — Polza dashboard link + project budget
+  progress bar + cache hit rate + refresh button
+- `ai-panel-budget-progress.tsx` — real budget data, null=unlimited display,
+  80%+ warning, 100% "бюджет исчерпан" message
+- `ai-panel-history.tsx` — real recent_calls from backend, endpoint labels,
+  error display, timestamp formatting
+- `lib/ai.ts` — `fetchAIUsage()` + `updateAIBudget()` API client functions
+- `types/api.ts` — `AIUsageResponse`, `AIUsageRecentCall`, `AIUsageDailyEntry`
+- All 4 inline AI components + chat: `refreshUsage()` after success
+- `projects/[id]/page.tsx` — `setProjectId()` syncs AI panel with project
+
 ### Added (Phase 7.2 — AI Explain KPI + full scaffolding, 2026-04-10)
 
 **Phase 7.2 — самая большая задача Phase 7.** Одновременно построен весь

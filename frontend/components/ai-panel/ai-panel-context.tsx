@@ -1,20 +1,14 @@
 "use client";
 
 /**
- * AIPanelProvider — React Context для правого AI Panel drawer'а (Phase 7.2).
+ * AIPanelProvider — React Context для правого AI Panel drawer'а.
  *
- * По образцу `auth-provider.tsx` — держим state в useState, exposit'им через
- * `useAIPanel()` хук. Почему Context, а не Zustand: консистентно с auth,
- * ноль новых зависимостей, достаточно для нашего объёма state.
+ * Phase 7.2: initial scaffolding с localStorage persistence.
+ * Phase 7.5: real data из GET /api/projects/{id}/ai/usage.
  *
- * **Persistent state** — `isOpen` и `activeTab` сохраняются в localStorage
- * чтобы переключение табов внутри проекта не теряло drawer state.
- * History и balance — runtime-only (restore при монтировании через API
- * в 7.5, пока mock).
- *
- * **Ctrl+K** — keyboard listener на window в отдельном useEffect. Без
- * cmdk, плоский handler. Работает в любом защищённом layout'е, потому
- * что Provider монтируется один раз в `(app)/layout.tsx`.
+ * **Persistent state** — `isOpen` и `activeTab` сохраняются в localStorage.
+ * **Budget + history** — fetched from backend при mount + refresh after calls.
+ * **Ctrl+K** — toggle drawer shortcut.
  */
 
 import {
@@ -26,7 +20,8 @@ import {
   useState,
 } from "react";
 
-import type { AIUsageHistoryEntry } from "@/types/api";
+import { fetchAIUsage } from "@/lib/ai";
+import type { AIUsageRecentCall, AIUsageHistoryEntry } from "@/types/api";
 
 /** Вкладки AI Panel drawer'а. */
 export type AIPanelTab =
@@ -39,18 +34,22 @@ export type AIPanelTab =
 interface AIPanelState {
   isOpen: boolean;
   activeTab: AIPanelTab;
-  /** История вызовов AI (runtime; real restore в 7.5). */
+  /** История вызовов AI (runtime + restored from backend). */
   history: AIUsageHistoryEntry[];
-  /**
-   * Project budget usage за текущий месяц, ₽. Null = ещё не загружен
-   * (7.5 добавит real endpoint `/api/projects/{id}/ai/usage`).
-   */
+  /** Project budget usage за текущий месяц, ₽. Null = loading. */
   projectMonthSpentRub: number | null;
-  /**
-   * Project monthly budget cap, ₽. Дефолт 500 по Phase 7 решению #6.
-   * В 7.5 читается из `Project.ai_budget_rub_monthly`.
-   */
-  projectBudgetRub: number;
+  /** Project monthly budget cap, ₽. Null = unlimited. */
+  projectBudgetRub: number | null;
+  /** Budget remaining ₽. */
+  projectBudgetRemainingRub: number | null;
+  /** 0..1 usage ratio. */
+  budgetPercentUsed: number;
+  /** Recent calls from backend. */
+  recentCalls: AIUsageRecentCall[];
+  /** Cache hit rate 24h. */
+  cacheHitRate24h: number;
+  /** Usage loading state. */
+  usageLoading: boolean;
 }
 
 interface AIPanelContextValue extends AIPanelState {
@@ -60,6 +59,11 @@ interface AIPanelContextValue extends AIPanelState {
   setActiveTab: (tab: AIPanelTab) => void;
   pushHistory: (entry: AIUsageHistoryEntry) => void;
   clearHistory: () => void;
+  /** Project ID для которого загружены данные. */
+  projectId: number | null;
+  setProjectId: (id: number | null) => void;
+  /** Перезагрузить usage stats (вызывается после AI calls). */
+  refreshUsage: () => void;
 }
 
 const AIPanelContext = createContext<AIPanelContextValue | null>(null);
@@ -110,14 +114,48 @@ export function AIPanelProvider({
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [activeTab, setActiveTabState] = useState<AIPanelTab>("actions");
   const [history, setHistory] = useState<AIUsageHistoryEntry[]>([]);
-  const [projectMonthSpentRub] = useState<number | null>(null);
 
-  // Project budget — mock в 7.2, real в 7.5 (Project.ai_budget_rub_monthly).
-  const projectBudgetRub = 500;
+  // Phase 7.5: real budget data from backend
+  const [projectId, setProjectId] = useState<number | null>(null);
+  const [projectMonthSpentRub, setProjectMonthSpentRub] = useState<number | null>(null);
+  const [projectBudgetRub, setProjectBudgetRub] = useState<number | null>(500);
+  const [projectBudgetRemainingRub, setProjectBudgetRemainingRub] = useState<number | null>(500);
+  const [budgetPercentUsed, setBudgetPercentUsed] = useState(0);
+  const [recentCalls, setRecentCalls] = useState<AIUsageRecentCall[]>([]);
+  const [cacheHitRate24h, setCacheHitRate24h] = useState(0);
+  const [usageLoading, setUsageLoading] = useState(false);
+
+  // Fetch usage data from backend
+  const refreshUsage = useCallback(() => {
+    if (!projectId) return;
+    setUsageLoading(true);
+    fetchAIUsage(projectId)
+      .then((data) => {
+        setProjectMonthSpentRub(parseFloat(data.spent_rub));
+        setProjectBudgetRub(
+          data.budget_rub !== null ? parseFloat(data.budget_rub) : null,
+        );
+        setProjectBudgetRemainingRub(
+          data.budget_remaining_rub !== null
+            ? parseFloat(data.budget_remaining_rub)
+            : null,
+        );
+        setBudgetPercentUsed(data.budget_percent_used);
+        setRecentCalls(data.recent_calls);
+        setCacheHitRate24h(data.cache_hit_rate_24h);
+      })
+      .catch(() => {
+        // Silently fail — usage stats non-critical
+      })
+      .finally(() => setUsageLoading(false));
+  }, [projectId]);
+
+  // Auto-fetch when projectId changes
+  useEffect(() => {
+    if (projectId) refreshUsage();
+  }, [projectId, refreshUsage]);
 
   // Восстановление persistent state из localStorage при монтировании.
-  // Делается в useEffect (не в useState initializer) чтобы не ломать
-  // SSR hydration — сервер не знает localStorage.
   useEffect(() => {
     setIsOpen(readPersistedBool(STORAGE_KEY_OPEN, false));
     setActiveTabState(
@@ -125,11 +163,9 @@ export function AIPanelProvider({
     );
   }, []);
 
-  // Ctrl+K global shortcut — toggle drawer + фокус на chat input (7.3).
-  // В 7.2 просто toggle'им, фокус добавим когда chat tab будет живым.
+  // Ctrl+K global shortcut
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      // Ctrl+K на Windows/Linux, Cmd+K на Mac
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setIsOpen((prev) => {
@@ -199,12 +235,20 @@ export function AIPanelProvider({
       history,
       projectMonthSpentRub,
       projectBudgetRub,
+      projectBudgetRemainingRub,
+      budgetPercentUsed,
+      recentCalls,
+      cacheHitRate24h,
+      usageLoading,
+      projectId,
+      setProjectId,
       open,
       close,
       toggle,
       setActiveTab,
       pushHistory,
       clearHistory,
+      refreshUsage,
     }),
     [
       isOpen,
@@ -212,12 +256,19 @@ export function AIPanelProvider({
       history,
       projectMonthSpentRub,
       projectBudgetRub,
+      projectBudgetRemainingRub,
+      budgetPercentUsed,
+      recentCalls,
+      cacheHitRate24h,
+      usageLoading,
+      projectId,
       open,
       close,
       toggle,
       setActiveTab,
       pushHistory,
       clearHistory,
+      refreshUsage,
     ],
   );
 

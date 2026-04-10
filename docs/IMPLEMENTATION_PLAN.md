@@ -2922,9 +2922,10 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
   (SSE streaming, Redis conversation history)
 - [x] 7.4 AI executive summary (DB-cached, экспорт PPT/PDF читает
   `Project.ai_executive_summary` из БД, не вызывает AI live)
-- [ ] 7.5 Cost monitoring polish (project budget 500₽ default,
+- [x] 7.5 Cost monitoring polish (project budget 500₽ default,
   daily user limit 100₽, real Polza balance widget, usage endpoint,
-  budget editing UI)
+  budget editing UI) *(закрыта 2026-04-10, migration 4160c5e248b5,
+  7 routes total, 371/371 pytest, tsc clean)*
 - [ ] 7.6 AI generate content fields (Haiku default для 15 полей,
   inline collapsible panel вместо модалки, batch cost < 8₽)
 - [ ] 7.7 AI marketing research (web search Discovery → implementation,
@@ -2934,7 +2935,7 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
   остаются в MediaAsset)
 - [ ] 7.3 AI-комментарий чувствительности (POST .../ai/explain-sensitivity)
 - [x] 7.4 AI executive summary slide в PPT-экспорте *(закрыта 2026-04-10)*
-- [ ] 7.5 Cost monitoring + бюджет проекта + rate limiting
+- [x] 7.5 Cost monitoring + бюджет проекта + rate limiting *(закрыта 2026-04-10)*
 - [ ] 7.6 AI генерация text content fields паспорта (15+ промптов для
   полей из 4.5.1, кнопка «✨ Сгенерировать AI» в content tab)
 - [ ] 7.7 AI marketing research через web search (новое поле

@@ -43,6 +43,7 @@ from app.models import (
     Scenario,
     ScenarioResult,
     ScenarioType,
+    User,
 )
 from app.services import ai_cache, ai_service
 
@@ -431,6 +432,7 @@ async def test_explain_kpi_daily_budget_exceeded_returns_429(
     db_session: AsyncSession,
     gorji_project: Project,
     base_scenario: Scenario,
+    test_user: User,
     mock_polza: AsyncMock,
     mock_redis: MagicMock,
 ) -> None:
@@ -443,6 +445,7 @@ async def test_explain_kpi_daily_budget_exceeded_returns_429(
             completion_tokens=20000,
             cost_rub=Decimal("100"),
             latency_ms=5000,
+            user_id=test_user.id,
         )
     )
     await db_session.flush()
@@ -455,7 +458,7 @@ async def test_explain_kpi_daily_budget_exceeded_returns_429(
         },
     )
     assert resp.status_code == 429
-    assert "лимит" in resp.json()["detail"].lower()
+    assert "daily_user_budget_exceeded" in resp.json()["detail"]["error"]
     # Polza не вызывался
     mock_polza.assert_not_awaited()
 
@@ -890,3 +893,222 @@ async def test_save_executive_summary_deleted_project(
         json={"ai_executive_summary": "text"},
     )
     assert resp.status_code == 404
+
+
+# ============================================================
+# Phase 7.5 — PROJECT BUDGET ENFORCEMENT
+# ============================================================
+
+
+async def test_explain_kpi_project_budget_exceeded_returns_429(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+    base_scenario: Scenario,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """Месячный бюджет проекта исчерпан → 429."""
+    # Default budget = 500₽ (server_default)
+    db_session.add(
+        AIUsageLog(
+            project_id=gorji_project.id,
+            endpoint="explain_kpi",
+            model="anthropic/claude-sonnet-4.6",
+            cost_rub=Decimal("500"),
+            latency_ms=1000,
+        )
+    )
+    await db_session.flush()
+
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/explain-kpi",
+        json={
+            "scenario_id": base_scenario.id,
+            "scope": "y1y5",
+        },
+    )
+    assert resp.status_code == 429
+    assert "project_budget_exceeded" in resp.json()["detail"]["error"]
+    mock_polza.assert_not_awaited()
+
+
+async def test_explain_kpi_null_budget_allows_unlimited(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+    base_scenario: Scenario,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """ai_budget_rub_monthly = NULL → unlimited, запрос проходит."""
+    gorji_project.ai_budget_rub_monthly = None
+    db_session.add(
+        AIUsageLog(
+            project_id=gorji_project.id,
+            endpoint="explain_kpi",
+            model="anthropic/claude-sonnet-4.6",
+            cost_rub=Decimal("999999"),
+            latency_ms=1000,
+        )
+    )
+    await db_session.flush()
+
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/explain-kpi",
+        json={
+            "scenario_id": base_scenario.id,
+            "scope": "y1y5",
+        },
+    )
+    # Должен пройти — бюджет без лимита
+    assert resp.status_code == 200
+    mock_polza.assert_awaited_once()
+
+
+# ============================================================
+# Phase 7.5 — GET /ai/usage
+# ============================================================
+
+
+async def test_get_ai_usage_requires_auth(
+    client: AsyncClient, gorji_project: Project
+) -> None:
+    """401 без JWT."""
+    resp = await client.get(
+        f"/api/projects/{gorji_project.id}/ai/usage"
+    )
+    assert resp.status_code == 401
+
+
+async def test_get_ai_usage_empty(
+    auth_client: AsyncClient,
+    gorji_project: Project,
+) -> None:
+    """Нет вызовов → zero stats с правильной структурой."""
+    resp = await auth_client.get(
+        f"/api/projects/{gorji_project.id}/ai/usage"
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["project_id"] == gorji_project.id
+    assert Decimal(data["spent_rub"]) == Decimal("0")
+    assert Decimal(data["budget_rub"]) == Decimal("500.00")
+    assert Decimal(data["budget_remaining_rub"]) == Decimal("500.00")
+    assert data["budget_percent_used"] == 0.0
+    assert data["daily_history"] == []
+    assert data["recent_calls"] == []
+
+
+async def test_get_ai_usage_with_calls(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+) -> None:
+    """Есть вызовы → correct aggregation."""
+    for i in range(5):
+        db_session.add(
+            AIUsageLog(
+                project_id=gorji_project.id,
+                endpoint="explain_kpi" if i < 4 else "explain_kpi_cache",
+                model="anthropic/claude-sonnet-4.6",
+                cost_rub=Decimal("5") if i < 4 else Decimal("0"),
+                latency_ms=1000,
+                prompt_tokens=1000,
+                completion_tokens=200,
+            )
+        )
+    await db_session.flush()
+
+    resp = await auth_client.get(
+        f"/api/projects/{gorji_project.id}/ai/usage"
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert Decimal(data["spent_rub"]) == Decimal("20")
+    assert len(data["recent_calls"]) == 5
+    cached_calls = [c for c in data["recent_calls"] if c["cached"]]
+    assert len(cached_calls) == 1
+
+
+# ============================================================
+# Phase 7.5 — PATCH /ai/budget
+# ============================================================
+
+
+async def test_update_ai_budget_requires_auth(
+    client: AsyncClient, gorji_project: Project
+) -> None:
+    """401 без JWT."""
+    resp = await client.patch(
+        f"/api/projects/{gorji_project.id}/ai/budget",
+        json={"ai_budget_rub_monthly": 1000},
+    )
+    assert resp.status_code == 401
+
+
+async def test_update_ai_budget_happy_path(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+) -> None:
+    """Обновление бюджета → возвращает AIUsageResponse с новым лимитом."""
+    resp = await auth_client.patch(
+        f"/api/projects/{gorji_project.id}/ai/budget",
+        json={"ai_budget_rub_monthly": "1000.00"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert Decimal(data["budget_rub"]) == Decimal("1000.00")
+    assert Decimal(data["budget_remaining_rub"]) == Decimal("1000.00")
+
+    # Verify in DB
+    await db_session.refresh(gorji_project)
+    assert gorji_project.ai_budget_rub_monthly == Decimal("1000.00")
+
+
+async def test_update_ai_budget_to_null_means_unlimited(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+) -> None:
+    """null → unlimited (no budget enforcement)."""
+    resp = await auth_client.patch(
+        f"/api/projects/{gorji_project.id}/ai/budget",
+        json={"ai_budget_rub_monthly": None},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["budget_rub"] is None
+    assert data["budget_remaining_rub"] is None
+
+    await db_session.refresh(gorji_project)
+    assert gorji_project.ai_budget_rub_monthly is None
+
+
+async def test_update_ai_budget_deleted_project(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+) -> None:
+    """Deleted project → 404."""
+    gorji_project.deleted_at = datetime.now(timezone.utc)
+    await db_session.flush()
+
+    resp = await auth_client.patch(
+        f"/api/projects/{gorji_project.id}/ai/budget",
+        json={"ai_budget_rub_monthly": 1000},
+    )
+    assert resp.status_code == 404
+
+
+async def test_update_ai_budget_negative_rejected(
+    auth_client: AsyncClient,
+    gorji_project: Project,
+) -> None:
+    """Negative budget → 422 validation error."""
+    resp = await auth_client.patch(
+        f"/api/projects/{gorji_project.id}/ai/budget",
+        json={"ai_budget_rub_monthly": -100},
+    )
+    assert resp.status_code == 422

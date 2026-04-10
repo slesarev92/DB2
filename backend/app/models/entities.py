@@ -244,6 +244,16 @@ class Project(Base, TimestampMixin):
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
+    # ============================================================
+    # AI Budget (Фаза 7.5)
+    # ============================================================
+    # Месячный лимит AI-расходов проекта в рублях. NULL = без лимита.
+    # Default 500₽ (ADR-16 решение #6). Обновляется через
+    # PATCH /api/projects/{id}/ai/budget.
+    ai_budget_rub_monthly: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2), nullable=True, server_default="500.00"
+    )
+
     # Soft delete: устанавливается при DELETE /api/projects/{id}.
     # Все запросы фильтруют WHERE deleted_at IS NULL.
     # Финансовый продукт — данные не теряем при ошибочном удалении.
@@ -671,6 +681,12 @@ class AIUsageLog(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[int | None] = mapped_column(
         ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # Phase 7.5: кто выполнил вызов — для per-user daily budget.
+    # Nullable для backward compat со старыми записями (до 7.5).
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
     # Какой сервис-метод / endpoint выполнил вызов — для агрегации

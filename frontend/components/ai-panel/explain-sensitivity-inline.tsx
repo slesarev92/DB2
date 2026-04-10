@@ -30,7 +30,7 @@ export function ExplainSensitivityInline({
   projectName,
   scenarioId,
 }: Props) {
-  const { pushHistory } = useAIPanel();
+  const { pushHistory, refreshUsage } = useAIPanel();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AISensitivityExplanationResponse | null>(
     null,
@@ -62,6 +62,7 @@ export function ExplainSensitivityInline({
         project_name: projectName,
         cached: response.cached,
       });
+      refreshUsage();
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         setError("Отменено");
@@ -74,7 +75,7 @@ export function ExplainSensitivityInline({
       setLoading(false);
       abortRef.current = null;
     }
-  }, [projectId, projectName, scenarioId, pushHistory]);
+  }, [projectId, projectName, scenarioId, pushHistory, refreshUsage]);
 
   const cost = AI_FEATURE_COST_ESTIMATES_RUB.explain_sensitivity;
 

@@ -26,6 +26,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { useAIPanel } from "@/components/ai-panel/ai-panel-context";
 import { ApiError } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { getProject } from "@/lib/projects";
@@ -38,6 +39,13 @@ export default function ProjectDetailPage() {
   const projectId = Number(params.id);
   const [project, setProject] = useState<ProjectRead | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { setProjectId } = useAIPanel();
+
+  // Phase 7.5: sync AI panel with current project for usage/budget fetch
+  useEffect(() => {
+    if (!Number.isNaN(projectId)) setProjectId(projectId);
+    return () => setProjectId(null);
+  }, [projectId, setProjectId]);
 
   useEffect(() => {
     if (Number.isNaN(projectId)) {

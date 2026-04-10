@@ -606,3 +606,38 @@ export interface AIUsageHistoryEntry {
   project_name: string;
   cached: boolean;
 }
+
+// ============================================================
+// AI Usage + Budget (Phase 7.5)
+// ============================================================
+
+export interface AIUsageDailyEntry {
+  date: string;
+  spent_rub: string;
+  calls: number;
+}
+
+export interface AIUsageRecentCall {
+  id: number;
+  timestamp: string;
+  endpoint: string;
+  model: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  cost_rub: string | null;
+  latency_ms: number;
+  error: string | null;
+  cached: boolean;
+}
+
+export interface AIUsageResponse {
+  project_id: number;
+  month_start: string;
+  spent_rub: string;
+  budget_rub: string | null;
+  budget_remaining_rub: string | null;
+  budget_percent_used: number;
+  daily_history: AIUsageDailyEntry[];
+  recent_calls: AIUsageRecentCall[];
+  cache_hit_rate_24h: number;
+}

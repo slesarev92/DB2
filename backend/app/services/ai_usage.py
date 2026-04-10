@@ -1,4 +1,4 @@
-"""AI usage logging + daily budget enforcement (Phase 7.2).
+"""AI usage logging + budget enforcement (Phase 7.2 → 7.5).
 
 Разделение ответственности:
 
@@ -7,24 +7,22 @@
 - `ai_cache.py` — Redis cache/dedupe.
 - `ai_usage.py` (этот файл) — БД → ai_usage_log + daily/monthly budget.
 
-Endpoint flow (Phase 7.2):
-    1. `check_daily_user_budget(session, user_id)` — 429 если превышен
-    2. Context build → cache check → ai_service.complete_json(...)
-    3. `log_ai_usage(session, user_id, project_id, feature, result, ...)`
-
-В Phase 7.5 добавится `check_project_monthly_budget(...)` — проверка
-`Project.ai_budget_rub_monthly` (поле добавится тогда же).
+Endpoint flow (Phase 7.5):
+    1. `check_daily_user_budget(session, user_id)` — 429 если > 100₽/день
+    2. `check_project_budget(session, project_id)` — 429 если > monthly limit
+    3. Context build → cache check → ai_service.complete_json(...)
+    4. `log_ai_usage(session, user_id, project_id, feature, result, ...)`
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.entities import AIUsageLog
+from app.models.entities import AIUsageLog, Project
 from app.services.ai_service import (
     AICallResult,
     AIFeature,
@@ -34,7 +32,6 @@ from app.services.ai_service import (
 # Safety net: per-user daily cap, защищает от bugged UI loops
 # (useEffect вызывает endpoint в бесконечном цикле). Ratified
 # 2026-04-09 в Phase 7 architectural decisions (#6, L3 system-level).
-# Значение не настраивается per-user в MVP — глобальный hard limit.
 DEFAULT_DAILY_USER_BUDGET_RUB = Decimal("100")
 
 
@@ -45,62 +42,104 @@ async def check_daily_user_budget(
 ) -> Decimal:
     """Проверить что пользователь не превысил daily cap на AI.
 
-    Считает SUM(cost_rub) по `ai_usage_log` за последние 24 часа (не
-    календарный день — чтобы не было скачков в полночь UTC). Если
-    превышен — raises HTTP 429.
-
-    Args:
-        session: AsyncSession из Depends(get_db).
-        user_id: current_user.id из Depends(get_current_user).
-        limit_rub: override для тестов. В проде — DEFAULT.
+    Phase 7.5: фильтрует по `ai_usage_log.user_id` — реальный
+    per-user лимит (ранее в 7.2 был глобальный).
 
     Returns:
-        Текущий daily spend в рублях (для отображения в UI после
-        успешной проверки). Может быть 0.
+        Текущий daily spend в рублях.
 
     Raises:
-        HTTPException 429: daily cap превышен. Detail содержит
-            текущий spend и лимит для user-facing сообщения.
+        HTTPException 429: daily cap превышен.
     """
     day_ago = datetime.now(timezone.utc) - timedelta(hours=24)
 
-    # AIUsageLog не имеет user_id колонки в Phase 7.1 модели — добавим
-    # в миграцию Phase 7.5. Пока MVP: фильтруем через JOIN с Project
-    # (который имеет created_by). Это не идеально, но позволяет нам
-    # ввести daily budget уже в 7.2. Альтернатива — добавлять колонку
-    # user_id сейчас, что требует миграции и усложняет 7.2.
-    #
-    # TODO Phase 7.5: добавить AIUsageLog.user_id + migrate + упростить
-    # этот запрос до простого WHERE user_id = :uid.
-    #
-    # Для MVP считаем что user имеет daily cap по сумме cost_rub всех
-    # вызовов — это conservative, лимит ниже ожидаемого, что норм для
-    # safety net.
     stmt = select(
         func.coalesce(func.sum(AIUsageLog.cost_rub), 0)
-    ).where(AIUsageLog.created_at >= day_ago)
-    # Фильтр по user добавится в 7.5. Сейчас лимит глобальный на инстанс —
-    # это override safety net, не per-user fair limit. Логируем явно:
-    del user_id  # будет использоваться в 7.5
+    ).where(
+        AIUsageLog.created_at >= day_ago,
+        AIUsageLog.user_id == user_id,
+    )
 
     total: Decimal = Decimal(str((await session.scalar(stmt)) or 0))
 
     if total >= limit_rub:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=(
-                f"Дневной лимит AI {limit_rub}₽ исчерпан "
-                f"(текущий расход: {total}₽). Попробуйте завтра."
-            ),
+            detail={
+                "error": "daily_user_budget_exceeded",
+                "spent_rub": str(total),
+                "limit_rub": str(limit_rub),
+                "message": (
+                    f"Дневной лимит AI {limit_rub}₽ исчерпан "
+                    f"(текущий расход: {total}₽). Попробуйте завтра."
+                ),
+            },
         )
 
     return total
+
+
+async def check_project_budget(
+    session: AsyncSession,
+    project_id: int,
+) -> tuple[Decimal, Decimal | None]:
+    """Проверить месячный AI-бюджет проекта.
+
+    Считает SUM(cost_rub) из `ai_usage_log` за текущий календарный
+    месяц (с 1-го числа 00:00 UTC). Сравнивает с
+    `Project.ai_budget_rub_monthly`.
+
+    Returns:
+        (spent_rub, budget_rub) — текущий расход и лимит (None = unlimited).
+
+    Raises:
+        HTTPException 429: бюджет проекта исчерпан.
+        HTTPException 404: проект не найден.
+    """
+    project = await session.get(Project, project_id)
+    if project is None or project.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project {project_id} не найден",
+        )
+
+    budget_rub = project.ai_budget_rub_monthly
+    if budget_rub is None:
+        # Budget не задан = unlimited, пропускаем проверку
+        return Decimal("0"), None
+
+    month_start = _current_month_start()
+    stmt = select(
+        func.coalesce(func.sum(AIUsageLog.cost_rub), 0)
+    ).where(
+        AIUsageLog.project_id == project_id,
+        AIUsageLog.created_at >= month_start,
+    )
+    spent: Decimal = Decimal(str((await session.scalar(stmt)) or 0))
+
+    if spent >= budget_rub:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "error": "project_budget_exceeded",
+                "spent_rub": str(spent),
+                "limit_rub": str(budget_rub),
+                "message": (
+                    f"Месячный AI-бюджет проекта исчерпан "
+                    f"({spent}₽ / {budget_rub}₽). "
+                    f"Увеличьте лимит в Параметрах проекта."
+                ),
+            },
+        )
+
+    return spent, budget_rub
 
 
 async def log_ai_usage(
     session: AsyncSession,
     *,
     project_id: int | None,
+    user_id: int | None = None,
     endpoint: str,
     result: AICallResult | None = None,
     model: str | None = None,
@@ -108,21 +147,7 @@ async def log_ai_usage(
 ) -> AIUsageLog:
     """Записать один вызов AI в `ai_usage_log`.
 
-    Args:
-        session: AsyncSession. Caller должен flush/commit сам.
-        project_id: Связанный проект (nullable — будущие admin-операции).
-        endpoint: Имя фичи/endpoint'а (`explain_kpi`, `explain_kpi_cache`,
-            `explain_kpi_debug`, ...). Используется для агрегации
-            расходов в 7.5 dashboard.
-        result: `AICallResult` от `ai_service.complete_json` — содержит
-            usage метрики. None при cache hit / error (тогда заполняем
-            нулями).
-        model: Явный model identifier (для cache_hit / error случая,
-            когда result=None но мы знаем что планировали вызвать).
-        error: Текст ошибки при failure. None при успехе / cache hit.
-
-    Returns:
-        Созданный AIUsageLog (flushed, но не committed).
+    Phase 7.5: добавлен `user_id` — записывает кто выполнил вызов.
     """
     if result is not None:
         log_model = result.model
@@ -141,6 +166,7 @@ async def log_ai_usage(
 
     usage = AIUsageLog(
         project_id=project_id,
+        user_id=user_id,
         endpoint=endpoint,
         model=log_model,
         prompt_tokens=prompt_tokens,
@@ -173,3 +199,128 @@ def estimate_cost_for_feature(feature: AIFeature) -> Decimal:
         AIFeature.PACKAGE_MOCKUP: Decimal("8"),
     }
     return estimates.get(feature, Decimal("3"))
+
+
+def _current_month_start() -> datetime:
+    """UTC datetime первого числа текущего месяца."""
+    now = datetime.now(timezone.utc)
+    return datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+
+
+async def get_project_usage_stats(
+    session: AsyncSession,
+    project_id: int,
+) -> dict:
+    """Собрать агрегированную статистику AI-расходов проекта.
+
+    Используется endpoint'ом GET /api/projects/{id}/ai/usage.
+    """
+    project = await session.get(Project, project_id)
+    if project is None or project.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project {project_id} не найден",
+        )
+
+    month_start = _current_month_start()
+    budget_rub = project.ai_budget_rub_monthly
+
+    # 1. Total spent this month
+    stmt_month = select(
+        func.coalesce(func.sum(AIUsageLog.cost_rub), 0)
+    ).where(
+        AIUsageLog.project_id == project_id,
+        AIUsageLog.created_at >= month_start,
+    )
+    spent_rub: Decimal = Decimal(str((await session.scalar(stmt_month)) or 0))
+
+    # 2. Daily history (current month, group by date)
+    stmt_daily = (
+        select(
+            func.date_trunc("day", AIUsageLog.created_at).label("day"),
+            func.coalesce(func.sum(AIUsageLog.cost_rub), 0).label("spent"),
+            func.count().label("calls"),
+        )
+        .where(
+            AIUsageLog.project_id == project_id,
+            AIUsageLog.created_at >= month_start,
+        )
+        .group_by("day")
+        .order_by("day")
+    )
+    daily_rows = (await session.execute(stmt_daily)).all()
+    daily_history = [
+        {
+            "date": row.day.strftime("%Y-%m-%d") if row.day else "",
+            "spent_rub": Decimal(str(row.spent)),
+            "calls": row.calls,
+        }
+        for row in daily_rows
+    ]
+
+    # 3. Recent calls (last 20)
+    stmt_recent = (
+        select(AIUsageLog)
+        .where(AIUsageLog.project_id == project_id)
+        .order_by(AIUsageLog.created_at.desc())
+        .limit(20)
+    )
+    recent_rows = (await session.scalars(stmt_recent)).all()
+    recent_calls = [
+        {
+            "id": row.id,
+            "timestamp": row.created_at.isoformat(),
+            "endpoint": row.endpoint,
+            "model": row.model,
+            "prompt_tokens": row.prompt_tokens,
+            "completion_tokens": row.completion_tokens,
+            "cost_rub": row.cost_rub,
+            "latency_ms": row.latency_ms,
+            "error": row.error,
+            "cached": row.endpoint.endswith("_cache") or row.endpoint.endswith("_dedupe"),
+        }
+        for row in recent_rows
+    ]
+
+    # 4. Cache hit rate (24h)
+    day_ago = datetime.now(timezone.utc) - timedelta(hours=24)
+    stmt_total_24h = (
+        select(func.count())
+        .select_from(AIUsageLog)
+        .where(
+            AIUsageLog.project_id == project_id,
+            AIUsageLog.created_at >= day_ago,
+        )
+    )
+    stmt_cache_24h = (
+        select(func.count())
+        .select_from(AIUsageLog)
+        .where(
+            AIUsageLog.project_id == project_id,
+            AIUsageLog.created_at >= day_ago,
+            AIUsageLog.endpoint.like("%_cache"),
+        )
+    )
+    total_24h = (await session.scalar(stmt_total_24h)) or 0
+    cache_24h = (await session.scalar(stmt_cache_24h)) or 0
+    cache_hit_rate = cache_24h / total_24h if total_24h > 0 else 0.0
+
+    # Budget calculations
+    if budget_rub is not None:
+        remaining = max(budget_rub - spent_rub, Decimal("0"))
+        percent = float(spent_rub / budget_rub) if budget_rub > 0 else 0.0
+    else:
+        remaining = None
+        percent = 0.0
+
+    return {
+        "project_id": project_id,
+        "month_start": date(month_start.year, month_start.month, 1).isoformat(),
+        "spent_rub": spent_rub,
+        "budget_rub": budget_rub,
+        "budget_remaining_rub": remaining,
+        "budget_percent_used": min(percent, 1.0),
+        "daily_history": daily_history,
+        "recent_calls": recent_calls,
+        "cache_hit_rate_24h": round(cache_hit_rate, 4),
+    }

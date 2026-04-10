@@ -36,7 +36,7 @@ export function AIPanelChat() {
   const params = useParams();
   const projectId = params?.id ? Number(params.id) : null;
 
-  const { pushHistory } = useAIPanel();
+  const { pushHistory, refreshUsage } = useAIPanel();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -128,6 +128,7 @@ export function AIPanelChat() {
 
       // Push to history
       if (lastModel) {
+        refreshUsage();
         pushHistory({
           timestamp: new Date().toISOString(),
           feature: "freeform_chat",
@@ -160,7 +161,7 @@ export function AIPanelChat() {
       setStreaming(false);
       abortRef.current = null;
     }
-  }, [input, streaming, projectId, conversationId, tier, messages.length, pushHistory]);
+  }, [input, streaming, projectId, conversationId, tier, messages.length, pushHistory, refreshUsage]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

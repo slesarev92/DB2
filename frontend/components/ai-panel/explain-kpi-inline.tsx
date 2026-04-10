@@ -49,7 +49,7 @@ export function ExplainKpiInline({
   scenarioId,
   scope,
 }: Props) {
-  const { pushHistory } = useAIPanel();
+  const { pushHistory, refreshUsage } = useAIPanel();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AIKpiExplanationResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -84,6 +84,7 @@ export function ExplainKpiInline({
         project_name: projectName,
         cached: response.cached,
       });
+      refreshUsage();
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         setError("Отменено");
@@ -96,7 +97,7 @@ export function ExplainKpiInline({
       setLoading(false);
       abortRef.current = null;
     }
-  }, [projectId, projectName, scenarioId, scope, tier, pushHistory]);
+  }, [projectId, projectName, scenarioId, scope, tier, pushHistory, refreshUsage]);
 
   const handleAbort = useCallback(() => {
     abortRef.current?.abort();

@@ -1,26 +1,29 @@
 "use client";
 
 /**
- * Budget progress bar (Phase 7.2 mock + 7.5 real data).
+ * Budget progress bar (Phase 7.5 — real data from backend).
  *
- * Цветовая шкала по Phase 7 решению #6 + #8:
+ * Цветовая шкала:
  * - <60% — green
  * - 60-80% — yellow
- * - >80% — red (confirmation dialog при клике на AI-кнопку)
+ * - >80% — red
  *
- * В 7.2: читает `projectMonthSpentRub` из context'а (null = loading / mock).
- * В 7.5: real endpoint + live update после каждого AI вызова.
+ * null budget = unlimited (показываем только spent, без бара).
  */
 
 import { useAIPanel } from "./ai-panel-context";
 import { cn } from "@/lib/utils";
 
 export function AIPanelBudgetProgress() {
-  const { projectMonthSpentRub, projectBudgetRub } = useAIPanel();
+  const {
+    projectMonthSpentRub,
+    projectBudgetRub,
+    budgetPercentUsed,
+    usageLoading,
+  } = useAIPanel();
 
   const spent = projectMonthSpentRub ?? 0;
-  const percent =
-    projectBudgetRub > 0 ? Math.min(100, (spent / projectBudgetRub) * 100) : 0;
+  const percent = Math.min(100, budgetPercentUsed * 100);
 
   const colorClass =
     percent < 60
@@ -29,24 +32,40 @@ export function AIPanelBudgetProgress() {
         ? "bg-yellow-500"
         : "bg-red-500";
 
+  const budgetLabel =
+    projectBudgetRub === null
+      ? "∞"
+      : projectBudgetRub.toFixed(0);
+
   return (
     <div className="text-xs">
       <div className="flex items-center justify-between">
         <span className="text-muted-foreground">Бюджет проекта (месяц)</span>
         <span className="font-medium">
-          {projectMonthSpentRub === null ? (
+          {usageLoading ? (
+            <span className="text-muted-foreground">загрузка…</span>
+          ) : projectMonthSpentRub === null ? (
             <span className="text-muted-foreground">—</span>
           ) : (
-            `${spent.toFixed(0)} / ${projectBudgetRub} ₽`
+            `${spent.toFixed(0)} / ${budgetLabel} ₽`
           )}
         </span>
       </div>
-      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <div
-          className={cn("h-full transition-all", colorClass)}
-          style={{ width: `${percent}%` }}
-        />
-      </div>
+      {projectBudgetRub !== null && (
+        <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className={cn("h-full transition-all", colorClass)}
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+      )}
+      {percent >= 80 && projectBudgetRub !== null && (
+        <p className="mt-1 text-red-500">
+          {percent >= 100
+            ? "Бюджет исчерпан — AI-функции заблокированы"
+            : `Внимание: ${percent.toFixed(0)}% бюджета использовано`}
+        </p>
+      )}
     </div>
   );
 }

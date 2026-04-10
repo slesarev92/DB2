@@ -50,7 +50,7 @@ export function ExecutiveSummaryInline({
   savedSummary,
   onSaved,
 }: Props) {
-  const { pushHistory } = useAIPanel();
+  const { pushHistory, refreshUsage } = useAIPanel();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<ExecSummaryData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -90,6 +90,7 @@ export function ExecutiveSummaryInline({
         project_name: projectName,
         cached: resp.cached,
       });
+      refreshUsage();
     } catch (err) {
       setError(
         err instanceof ApiError ? err.detail ?? err.message : "Ошибка",
@@ -97,7 +98,7 @@ export function ExecutiveSummaryInline({
     } finally {
       setLoading(false);
     }
-  }, [projectId, projectName, pushHistory]);
+  }, [projectId, projectName, pushHistory, refreshUsage]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);

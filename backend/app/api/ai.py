@@ -34,6 +34,7 @@ from app.core.rate_limit import limiter
 from app.db import get_db
 from app.models import User
 from app.schemas.ai import (
+    AIBudgetUpdateRequest,
     AIChatRequest,
     AIExecutiveSummaryRequest,
     AIExecutiveSummaryResponse,
@@ -42,6 +43,7 @@ from app.schemas.ai import (
     AIKpiExplanationResponse,
     AISensitivityExplanationRequest,
     AISensitivityExplanationResponse,
+    AIUsageResponse,
     LLMExecutiveSummaryOutput,
     LLMKpiOutput,
     LLMSensitivityOutput,
@@ -64,7 +66,12 @@ from app.services.ai_service import (
     calculate_cost,
     resolve_model,
 )
-from app.services.ai_usage import check_daily_user_budget, log_ai_usage
+from app.services.ai_usage import (
+    check_daily_user_budget,
+    check_project_budget,
+    get_project_usage_stats,
+    log_ai_usage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -144,9 +151,9 @@ async def explain_kpi(
     - Bugged LLM output → Pydantic fail → через
       AIServiceUnavailableError → 503
     """
-    # 0. Daily budget safety net (отдельно от slowapi — slowapi не
-    #    умеет cost-based лимиты)
+    # 0. Budget checks
     await check_daily_user_budget(session, user_id=current_user.id)
+    await check_project_budget(session, project_id)
 
     # 1. Build context
     builder = AIContextBuilder(session)
@@ -157,7 +164,6 @@ async def explain_kpi(
             scope=body.scope,
         )
     except AIContextBuilderError as exc:
-        # Это не AI-проблема — это состояние данных. 404.
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
@@ -174,10 +180,10 @@ async def explain_kpi(
 
     cached = await ai_cache.get_cached(cache_key)
     if cached is not None:
-        # Логируем cache hit с нулевой стоимостью для observability
         await log_ai_usage(
             session,
             project_id=project_id,
+            user_id=current_user.id,
             endpoint="explain_kpi_cache",
             model=cached.get("model", "unknown"),
             result=None,
@@ -187,7 +193,7 @@ async def explain_kpi(
             cached=True,
         )
 
-    # 3. Dedupe lock: если другой запрос в полёте — ждём его
+    # 3. Dedupe lock
     lock_acquired = await ai_cache.acquire_dedupe_lock(lock_key)
     if not lock_acquired:
         cached = await ai_cache.wait_for_cache(cache_key)
@@ -195,6 +201,7 @@ async def explain_kpi(
             await log_ai_usage(
                 session,
                 project_id=project_id,
+                user_id=current_user.id,
                 endpoint="explain_kpi_dedupe",
                 model=cached.get("model", "unknown"),
                 result=None,
@@ -203,7 +210,6 @@ async def explain_kpi(
                 **{k: v for k, v in cached.items() if k != "cached"},
                 cached=True,
             )
-        # Timeout — fallback на прямой вызов (lock, видимо, stale)
 
     # 4. Polza call
     try:
@@ -220,10 +226,10 @@ async def explain_kpi(
             endpoint="explain_kpi",
         )
     except AIServiceUnavailableError as exc:
-        # Log failure для observability — пустой log entry с error text
         await log_ai_usage(
             session,
             project_id=project_id,
+            user_id=current_user.id,
             endpoint="explain_kpi",
             error=str(exc),
         )
@@ -243,6 +249,7 @@ async def explain_kpi(
     await log_ai_usage(
         session,
         project_id=project_id,
+        user_id=current_user.id,
         endpoint="explain_kpi",
         result=result,
     )
@@ -252,7 +259,6 @@ async def explain_kpi(
         "cost_rub": cost_rub,
         "model": result.model,
     }
-    # Cache payload без `cached` поля — его endpoint добавляет при возврате
     await ai_cache.set_cached(cache_key, _jsonable(response_payload))
     await ai_cache.release_dedupe_lock(lock_key)
 
@@ -286,6 +292,7 @@ async def explain_sensitivity(
 ) -> AISensitivityExplanationResponse:
     """Sensitivity analysis interpretation: какой параметр critical и почему."""
     await check_daily_user_budget(session, user_id=current_user.id)
+    await check_project_budget(session, project_id)
 
     builder = AIContextBuilder(session)
     try:
@@ -311,6 +318,7 @@ async def explain_sensitivity(
         await log_ai_usage(
             session,
             project_id=project_id,
+            user_id=current_user.id,
             endpoint="explain_sensitivity_cache",
             model=cached.get("model", "unknown"),
             result=None,
@@ -327,6 +335,7 @@ async def explain_sensitivity(
             await log_ai_usage(
                 session,
                 project_id=project_id,
+                user_id=current_user.id,
                 endpoint="explain_sensitivity_dedupe",
                 model=cached.get("model", "unknown"),
                 result=None,
@@ -353,6 +362,7 @@ async def explain_sensitivity(
         await log_ai_usage(
             session,
             project_id=project_id,
+            user_id=current_user.id,
             endpoint="explain_sensitivity",
             error=str(exc),
         )
@@ -368,6 +378,7 @@ async def explain_sensitivity(
     await log_ai_usage(
         session,
         project_id=project_id,
+        user_id=current_user.id,
         endpoint="explain_sensitivity",
         result=result,
     )
@@ -410,6 +421,7 @@ async def generate_executive_summary(
     переделывают).
     """
     await check_daily_user_budget(session, user_id=current_user.id)
+    await check_project_budget(session, project_id)
 
     builder = AIContextBuilder(session)
     try:
@@ -434,6 +446,7 @@ async def generate_executive_summary(
         await log_ai_usage(
             session,
             project_id=project_id,
+            user_id=current_user.id,
             endpoint="executive_summary_cache",
             model=cached.get("model", "unknown"),
             result=None,
@@ -450,6 +463,7 @@ async def generate_executive_summary(
             await log_ai_usage(
                 session,
                 project_id=project_id,
+                user_id=current_user.id,
                 endpoint="executive_summary_dedupe",
                 model=cached.get("model", "unknown"),
                 result=None,
@@ -476,6 +490,7 @@ async def generate_executive_summary(
         await log_ai_usage(
             session,
             project_id=project_id,
+            user_id=current_user.id,
             endpoint="executive_summary",
             error=str(exc),
         )
@@ -489,8 +504,11 @@ async def generate_executive_summary(
         result.model, result.prompt_tokens, result.completion_tokens
     )
     await log_ai_usage(
-        session, project_id=project_id,
-        endpoint="executive_summary", result=result,
+        session,
+        project_id=project_id,
+        user_id=current_user.id,
+        endpoint="executive_summary",
+        result=result,
     )
 
     response_payload: dict = {
@@ -569,6 +587,7 @@ async def freeform_chat(
     разговор.
     """
     await check_daily_user_budget(session, user_id=current_user.id)
+    await check_project_budget(session, project_id)
 
     # Context builder
     builder = AIContextBuilder(session)
@@ -668,6 +687,7 @@ async def freeform_chat(
             await log_ai_usage(
                 session,
                 project_id=project_id,
+                user_id=current_user.id,
                 endpoint="freeform_chat",
                 result=ai_service.AICallResult(
                     parsed=None,  # type: ignore[arg-type]
@@ -692,3 +712,54 @@ async def freeform_chat(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ============================================================
+# USAGE + BUDGET (Phase 7.5)
+# ============================================================
+
+
+@router.get(
+    "/usage",
+    response_model=AIUsageResponse,
+    summary="AI usage statistics для проекта",
+)
+async def get_ai_usage(
+    project_id: int,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> AIUsageResponse:
+    """Агрегированная статистика AI-расходов проекта.
+
+    Без rate limit — read-only endpoint, не дёргает Polza.
+    """
+    stats = await get_project_usage_stats(session, project_id)
+    return AIUsageResponse(**stats)
+
+
+@router.patch(
+    "/budget",
+    response_model=AIUsageResponse,
+    summary="Обновить AI-бюджет проекта",
+)
+@limiter.limit("10/minute", key_func=_rate_limit_key)
+async def update_ai_budget(
+    request: Request,
+    project_id: int,
+    body: AIBudgetUpdateRequest,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(_set_rate_limit_user)],
+) -> AIUsageResponse:
+    """Обновить месячный AI-бюджет проекта. null = unlimited."""
+    project = await session.get(Project, project_id)
+    if project is None or project.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project {project_id} не найден",
+        )
+
+    project.ai_budget_rub_monthly = body.ai_budget_rub_monthly
+    await session.flush()
+
+    stats = await get_project_usage_stats(session, project_id)
+    return AIUsageResponse(**stats)
