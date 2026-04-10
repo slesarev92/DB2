@@ -260,13 +260,14 @@ export interface BOMItemRead {
 }
 
 // ============================================================
-// Channel (глобальный справочник, read-only)
+// Channel (глобальный справочник, B-05: region + CRUD)
 // ============================================================
 
 export interface Channel {
   id: number;
   code: string;
   name: string;
+  region: string | null;
   universe_outlets: number | null;
   created_at: string;
 }

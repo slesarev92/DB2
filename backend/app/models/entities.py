@@ -104,13 +104,20 @@ class SKU(Base, TimestampMixin):
 
 
 class Channel(Base, TimestampMixin):
-    """Справочник каналов сбыта (HM, SM, MM, TT, E-COM_OZ, E-COM_OZ_Fresh)."""
+    """Справочник каналов сбыта (HM, SM, MM, TT, E-COM_OZ, E-COM_OZ_Fresh).
+
+    B-05: поле `region` для региональной детализации. Если NULL —
+    канал общефедеральный. Если заполнено (напр. "Москва", "Урал") —
+    региональная версия канала. UNIQUE(code) гарантирует уникальность
+    кода (напр. "HM_MSK", "HM_URAL").
+    """
 
     __tablename__ = "channels"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    region: Mapped[str | None] = mapped_column(String(100), nullable=True)
     universe_outlets: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 

@@ -9,6 +9,18 @@
 
 ## [Unreleased]
 
+### Added (B-05 — Regional channel detail, 2026-04-10)
+
+**Backend:**
+- `Channel.region` nullable VARCHAR(100) for regional split (e.g. "Москва")
+- Migration `ec721a2bf16d`: ADD COLUMN region
+- Full CRUD: POST/PATCH/DELETE /api/channels (was read-only)
+- GET /api/channels?region=... filter
+- Schemas: ChannelCreate, ChannelUpdate
+
+**Frontend:**
+- `Channel.region` field in types/api.ts
+
 ### Added (B-16 — Frontend e2e tests with Playwright, 2026-04-10)
 
 **Frontend:**
