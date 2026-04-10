@@ -424,9 +424,19 @@ async def complete_json(
             "Polza AI вернул choices[0].message.content=None"
         )
 
+    # --- Strip markdown code fences (```json ... ```) if present ---
+    cleaned = content.strip()
+    if cleaned.startswith("```"):
+        # Remove opening fence (```json or ```)
+        first_newline = cleaned.index("\n") if "\n" in cleaned else len(cleaned)
+        cleaned = cleaned[first_newline + 1:]
+        # Remove closing fence
+        if cleaned.rstrip().endswith("```"):
+            cleaned = cleaned.rstrip()[:-3].rstrip()
+
     # --- Parse JSON ---
     try:
-        raw_dict: dict[str, Any] = json.loads(content)
+        raw_dict: dict[str, Any] = json.loads(cleaned)
     except json.JSONDecodeError as exc:
         raise AIServiceUnavailableError(
             f"Polza AI вернул невалидный JSON: {exc}; content={content[:200]!r}"
@@ -533,8 +543,16 @@ async def complete_vision(
     if not content:
         raise AIServiceUnavailableError("Polza AI: content=None")
 
+    # Strip markdown code fences if present
+    cleaned = content.strip()
+    if cleaned.startswith("```"):
+        first_newline = cleaned.index("\n") if "\n" in cleaned else len(cleaned)
+        cleaned = cleaned[first_newline + 1:]
+        if cleaned.rstrip().endswith("```"):
+            cleaned = cleaned.rstrip()[:-3].rstrip()
+
     try:
-        raw_dict: dict[str, Any] = json.loads(content)
+        raw_dict: dict[str, Any] = json.loads(cleaned)
     except json.JSONDecodeError as exc:
         raise AIServiceUnavailableError(
             f"Invalid JSON from vision: {exc}; content={content[:200]!r}"

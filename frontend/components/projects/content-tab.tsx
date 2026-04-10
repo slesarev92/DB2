@@ -123,6 +123,40 @@ function mergeFunctionReadiness(
   return base;
 }
 
+/** AI-генерируемые поля (Phase 7.6). */
+const AI_FIELDS = new Set([
+  "project_goal", "target_audience", "concept_text", "rationale",
+  "growth_opportunity", "idea_short", "technology", "rnd_progress",
+  "replacement_target", "description", "innovation_type",
+  "geography", "production_type",
+]);
+
+/** Label с кнопкой AI — вынесен из ContentTab чтобы избежать remount при parent re-render. */
+function FieldLabel({
+  field,
+  projectId,
+  onApply,
+  children,
+}: {
+  field: ScalarField;
+  projectId: number;
+  onApply: (field: ScalarField, text: string) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center">
+      <Label htmlFor={field}>{children}</Label>
+      {AI_FIELDS.has(field) && (
+        <ContentFieldAI
+          projectId={projectId}
+          field={field}
+          onApply={(text) => onApply(field, text)}
+        />
+      )}
+    </div>
+  );
+}
+
 export function ContentTab({ projectId }: ContentTabProps) {
   const [project, setProject] = useState<ProjectRead | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -214,32 +248,16 @@ export function ContentTab({ projectId }: ContentTabProps) {
     setScalars((prev) => (prev ? { ...prev, [field]: value } : prev));
   }
 
-  /** AI-генерируемые поля (Phase 7.6). */
-  const AI_FIELDS = new Set([
-    "project_goal", "target_audience", "concept_text", "rationale",
-    "growth_opportunity", "idea_short", "technology", "rnd_progress",
-    "replacement_target", "description", "innovation_type",
-    "geography", "production_type",
-  ]);
 
-  /** Label с кнопкой AI для генерируемых полей. */
-  function FieldLabel({ field, children }: { field: ScalarField; children: React.ReactNode }) {
-    return (
-      <div className="flex items-center">
-        <Label htmlFor={field}>{children}</Label>
-        {AI_FIELDS.has(field) && (
-          <ContentFieldAI
-            projectId={projectId}
-            field={field}
-            onApply={async (text) => {
-              setScalarField(field, text);
-              await patchProject(field, { [field]: text } as ProjectUpdate);
-            }}
-          />
-        )}
-      </div>
-    );
-  }
+
+  /** Callback для AI apply — стабильная ссылка через useCallback. */
+  const handleAIApply = useCallback(
+    async (field: ScalarField, text: string) => {
+      setScalarField(field, text);
+      await patchProject(field, { [field]: text } as ProjectUpdate);
+    },
+    [patchProject],
+  );
 
   if (loadError !== null) {
     return (
@@ -348,7 +366,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
           </div>
 
           <div className="space-y-1">
-            <FieldLabel field="description">Описание проекта</FieldLabel>
+            <FieldLabel field="description" projectId={projectId} onApply={handleAIApply}>Описание проекта</FieldLabel>
             <Textarea
               id="description"
               rows={3}
@@ -359,7 +377,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
           </div>
 
           <div className="space-y-1">
-            <FieldLabel field="project_goal">Цель проекта</FieldLabel>
+            <FieldLabel field="project_goal" projectId={projectId} onApply={handleAIApply}>Цель проекта</FieldLabel>
             <Textarea
               id="project_goal"
               rows={2}
@@ -371,7 +389,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-1">
-              <FieldLabel field="innovation_type">Тип инновации</FieldLabel>
+              <FieldLabel field="innovation_type" projectId={projectId} onApply={handleAIApply}>Тип инновации</FieldLabel>
               <Input
                 id="innovation_type"
                 value={scalars.innovation_type}
@@ -380,7 +398,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
               />
             </div>
             <div className="space-y-1">
-              <FieldLabel field="geography">География</FieldLabel>
+              <FieldLabel field="geography" projectId={projectId} onApply={handleAIApply}>География</FieldLabel>
               <Input
                 id="geography"
                 value={scalars.geography}
@@ -389,7 +407,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
               />
             </div>
             <div className="space-y-1">
-              <FieldLabel field="production_type">Тип производства</FieldLabel>
+              <FieldLabel field="production_type" projectId={projectId} onApply={handleAIApply}>Тип производства</FieldLabel>
               <Input
                 id="production_type"
                 value={scalars.production_type}
@@ -413,7 +431,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1">
-            <FieldLabel field="growth_opportunity">Growth opportunity</FieldLabel>
+            <FieldLabel field="growth_opportunity" projectId={projectId} onApply={handleAIApply}>Growth opportunity</FieldLabel>
             <Textarea
               id="growth_opportunity"
               rows={2}
@@ -424,7 +442,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
           </div>
 
           <div className="space-y-1">
-            <FieldLabel field="concept_text">Концепция (полный текст)</FieldLabel>
+            <FieldLabel field="concept_text" projectId={projectId} onApply={handleAIApply}>Концепция (полный текст)</FieldLabel>
             <Textarea
               id="concept_text"
               rows={4}
@@ -435,7 +453,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
           </div>
 
           <div className="space-y-1">
-            <FieldLabel field="rationale">Обоснование</FieldLabel>
+            <FieldLabel field="rationale" projectId={projectId} onApply={handleAIApply}>Обоснование</FieldLabel>
             <Textarea
               id="rationale"
               rows={3}
@@ -446,7 +464,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
           </div>
 
           <div className="space-y-1">
-            <FieldLabel field="idea_short">Короткая идея</FieldLabel>
+            <FieldLabel field="idea_short" projectId={projectId} onApply={handleAIApply}>Короткая идея</FieldLabel>
             <Input
               id="idea_short"
               value={scalars.idea_short}
@@ -456,7 +474,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
           </div>
 
           <div className="space-y-1">
-            <FieldLabel field="target_audience">Целевая аудитория</FieldLabel>
+            <FieldLabel field="target_audience" projectId={projectId} onApply={handleAIApply}>Целевая аудитория</FieldLabel>
             <Textarea
               id="target_audience"
               rows={2}
@@ -467,7 +485,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
           </div>
 
           <div className="space-y-1">
-            <FieldLabel field="replacement_target">Кого замещаем</FieldLabel>
+            <FieldLabel field="replacement_target" projectId={projectId} onApply={handleAIApply}>Кого замещаем</FieldLabel>
             <Input
               id="replacement_target"
               value={scalars.replacement_target}
@@ -477,7 +495,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
           </div>
 
           <div className="space-y-1">
-            <FieldLabel field="technology">Технология</FieldLabel>
+            <FieldLabel field="technology" projectId={projectId} onApply={handleAIApply}>Технология</FieldLabel>
             <Textarea
               id="technology"
               rows={2}
@@ -488,7 +506,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
           </div>
 
           <div className="space-y-1">
-            <FieldLabel field="rnd_progress">Прогресс R&D</FieldLabel>
+            <FieldLabel field="rnd_progress" projectId={projectId} onApply={handleAIApply}>Прогресс R&D</FieldLabel>
             <Textarea
               id="rnd_progress"
               rows={2}
