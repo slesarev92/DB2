@@ -262,6 +262,49 @@ async def get_values_compare(
 
 
 # ============================================================
+# B-10: Version history
+# ============================================================
+
+
+async def get_value_history(
+    session: AsyncSession,
+    psk_channel_id: int,
+    scenario_id: int,
+    period_id: int,
+) -> list[dict[str, Any]]:
+    """Все версии PeriodValue для (psk_channel × scenario × period).
+
+    Возвращает все source_type/version'ы, отсортированные от новых к старым.
+    Формат: [{source_type, version_id, values, is_overridden, created_at}, ...]
+    """
+    rows = (
+        await session.scalars(
+            select(PeriodValue)
+            .where(
+                PeriodValue.psk_channel_id == psk_channel_id,
+                PeriodValue.scenario_id == scenario_id,
+                PeriodValue.period_id == period_id,
+            )
+            .order_by(
+                PeriodValue.source_type.desc(),
+                PeriodValue.version_id.desc(),
+            )
+        )
+    ).all()
+
+    return [
+        {
+            "source_type": pv.source_type.value,
+            "version_id": pv.version_id,
+            "values": pv.values,
+            "is_overridden": pv.is_overridden,
+            "created_at": pv.created_at.isoformat() if pv.created_at else None,
+        }
+        for pv in rows
+    ]
+
+
+# ============================================================
 # Write: append-only versioning
 # ============================================================
 

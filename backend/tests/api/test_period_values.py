@@ -560,3 +560,69 @@ async def test_patch_with_foreign_scenario_returns_400(
 
     assert resp.status_code == 400
     assert "does not belong" in resp.json()["detail"].lower()
+
+
+# ============================================================
+# B-10: GET /values/{period_id}/history — version history
+# ============================================================
+
+
+async def test_get_value_history_returns_all_versions(
+    auth_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """History endpoint returns predict + finetuned versions, newest first."""
+    _, scenario_id, psk_channel_id = await _setup_psk_channel(
+        auth_client, db_session
+    )
+    period_id = await _get_period(db_session, 1)
+
+    # Add predict layer
+    await _add_layer_directly(
+        db_session, psk_channel_id, scenario_id, period_id,
+        SourceType.PREDICT, {"nd": 0.10}, version_id=1,
+    )
+
+    # Add two finetuned versions via PATCH
+    await auth_client.patch(
+        f"/api/project-sku-channels/{psk_channel_id}/values/{period_id}"
+        f"?scenario_id={scenario_id}",
+        json={"values": {"nd": 0.20}},
+    )
+    await auth_client.patch(
+        f"/api/project-sku-channels/{psk_channel_id}/values/{period_id}"
+        f"?scenario_id={scenario_id}",
+        json={"values": {"nd": 0.30}},
+    )
+
+    resp = await auth_client.get(
+        f"/api/project-sku-channels/{psk_channel_id}/values/{period_id}/history"
+        f"?scenario_id={scenario_id}",
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 3  # 1 predict + 2 finetuned
+
+    # Newest finetuned first
+    assert data[0]["source_type"] == "predict"
+    assert data[1]["source_type"] == "finetuned"
+    assert data[1]["version_id"] == 2
+    assert data[1]["values"]["nd"] == 0.30
+    assert data[2]["source_type"] == "finetuned"
+    assert data[2]["version_id"] == 1
+
+
+async def test_get_value_history_empty(
+    auth_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """History for a period with no data returns empty list."""
+    _, scenario_id, psk_channel_id = await _setup_psk_channel(
+        auth_client, db_session
+    )
+    period_id = await _get_period(db_session, 5)
+
+    resp = await auth_client.get(
+        f"/api/project-sku-channels/{psk_channel_id}/values/{period_id}/history"
+        f"?scenario_id={scenario_id}",
+    )
+    assert resp.status_code == 200
+    assert resp.json() == []

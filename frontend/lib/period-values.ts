@@ -86,6 +86,25 @@ export function batchPatchPeriodValues(
   );
 }
 
+export interface PeriodValueHistoryEntry {
+  source_type: string;
+  version_id: number;
+  values: Record<string, number | string | null>;
+  is_overridden: boolean;
+  created_at: string | null;
+}
+
+export function getPeriodValueHistory(
+  pskChannelId: number,
+  periodId: number,
+  scenarioId: number,
+): Promise<PeriodValueHistoryEntry[]> {
+  const params = new URLSearchParams({ scenario_id: String(scenarioId) });
+  return apiGet<PeriodValueHistoryEntry[]>(
+    `/api/project-sku-channels/${pskChannelId}/values/${periodId}/history?${params}`,
+  );
+}
+
 export function resetPeriodOverride(
   pskChannelId: number,
   periodId: number,

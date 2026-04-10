@@ -11,6 +11,7 @@ import {
 import { AgGridReact } from "ag-grid-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { ValueHistoryDialog } from "@/components/projects/value-history-dialog";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
 import {
@@ -366,6 +367,34 @@ export function PeriodsGrid({
           suppressMovableColumns
         />
       </div>
+
+      {/* B-10: Version history per-period */}
+      {overrideCount > 0 && (
+        <div className="flex items-center gap-1 flex-wrap">
+          <span className="text-xs text-muted-foreground mr-1">
+            История:
+          </span>
+          {items
+            .filter((it) => it.is_overridden)
+            .map((it) => {
+              const p = periods?.find((pp) => pp.id === it.period_id);
+              const label = p
+                ? p.period_number <= 36
+                  ? `M${p.period_number}`
+                  : `Y${p.model_year}`
+                : `#${it.period_id}`;
+              return (
+                <ValueHistoryDialog
+                  key={it.period_id}
+                  pskChannelId={pskChannelId}
+                  periodId={it.period_id}
+                  scenarioId={scenarioId}
+                  periodLabel={label}
+                />
+              );
+            })}
+        </div>
+      )}
     </div>
   );
 }

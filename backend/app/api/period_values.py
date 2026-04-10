@@ -149,6 +149,29 @@ async def patch_value_endpoint(
 
 
 # ============================================================
+# GET /values/{period_id}/history — all versions (B-10)
+# ============================================================
+
+
+@router.get("/{psk_channel_id}/values/{period_id}/history")
+async def get_value_history_endpoint(
+    psk_channel_id: int,
+    period_id: int,
+    scenario_id: int,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> Any:
+    """Все версии PeriodValue для (psk_channel × scenario × period).
+
+    Возвращает append-only историю: predict → finetuned (v1, v2, ...) → actual.
+    """
+    await _validate_or_raise(session, psk_channel_id, scenario_id, period_id)
+    return await period_value_service.get_value_history(
+        session, psk_channel_id, scenario_id, period_id
+    )
+
+
+# ============================================================
 # PATCH /values/batch — batch fine-tune (B-17)
 # ============================================================
 

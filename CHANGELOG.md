@@ -9,6 +9,20 @@
 
 ## [Unreleased]
 
+### Added (B-10 — Version history UI, 2026-04-10)
+
+**Backend:**
+- `period_value_service.get_value_history()`: all PeriodValue versions for
+  (psk_channel × scenario × period), sorted newest first
+- GET /api/project-sku-channels/{id}/values/{period_id}/history?scenario_id
+- 2 new tests (419 total)
+
+**Frontend:**
+- `getPeriodValueHistory()` API function + `PeriodValueHistoryEntry` type
+- `ValueHistoryDialog` component: modal with version table (source_type,
+  version_id, values, created_at). Triggered by "..." button.
+- Integrated in periods-grid: history buttons appear for overridden periods
+
 ### Added (B-06 — Per-SKU/channel scenario deltas, 2026-04-10)
 
 **Backend:**

@@ -64,7 +64,7 @@
 | B-07 | 🟢 P3 | ROAD MAP / Gantt визуализация | В 4.5.3 сделан текстовый список roadmap_tasks. Gantt-визуализация отложена |
 | B-08 | 🟡 P2 | Согласование / approval flow | Требует RBAC (связан с B-01). В 4.5 сохранили только список approvers, без workflow |
 | B-09 | 🟢 P3 | Интеграция с 1С / BI-кубами | Архитектурно предусмотрено, реализация — Этап 2+ |
-| B-10 | 🟢 P3 | Версионность сценариев в UI | History log в интерфейсе. Данные хранятся (append-only PeriodValue), UI-просмотр — Этап 2 |
+| B-10 | ✅ Done | Версионность сценариев в UI | Реализовано 2026-04-10: history endpoint, ValueHistoryDialog, per-period "..." buttons, 419 pytest |
 | B-11 | ✅ Done | Интерактивный Tornado chart | Реализовано 2026-04-10: recharts horizontal BarChart, sorted by impact, integrated in sensitivity tab |
 | B-12 | 🟢 P3 | AKB / план дистрибуции | Отдельный АКБ-экран из GORJI+ — развёрнутый план по ТТ |
 | B-13 | 🟢 P3 | OBPPC матрица (Price-Pack-Channel) | Стратегия Price-Pack-Channel — маркетинговый блок |
