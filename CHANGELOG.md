@@ -20,7 +20,14 @@
 ### Fixed
 - `mock_polza_mockup` test fixture: `generate_image` (httpx path) не мокался,
   mockup-тесты падали с 503 (pre-existing bug)
-- 448 pytest passed (440 + 1 новый mockup iteration test; 4 pre-existing kpi failures)
+- **explain-kpi endpoint 500:** `body.period_scope` → `body.scope` (2 вхождения
+  в ai.py) — schema поле `scope`, а не `period_scope`. Ломало endpoint и 4 теста.
+- **Prod: 500 на upload ai_reference:** PermissionError — media dir owned by root,
+  backend работает как appuser. Исправлено chown + задокументировано.
+- **Prod: frontend + celery-worker unhealthy:** celery наследовал curl :8000
+  healthcheck из backend image; frontend wget использовал localhost → IPv6.
+  Добавлены compose-level healthcheck overrides.
+- 448 pytest passed (все 12 explain_kpi tests зелёные)
 
 ---
 
