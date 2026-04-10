@@ -614,16 +614,20 @@ async def generate_image(
 
     async with httpx.AsyncClient(timeout=180) as http:
         # 1. Submit via Media API (POST /v1/media)
+        input_params: dict[str, Any] = {
+            "prompt": prompt,
+            "aspect_ratio": aspect_ratio,
+        }
+        # image_resolution only supported by flux models
+        if "flux" in model:
+            input_params["image_resolution"] = "1K"
+
         resp = await http.post(
             f"{base_url}/media",
             headers=headers,
             json={
                 "model": model,
-                "input": {
-                    "prompt": prompt,
-                    "aspect_ratio": aspect_ratio,
-                    "image_resolution": "1K",
-                },
+                "input": input_params,
                 "async": True,
             },
         )
