@@ -1254,6 +1254,7 @@ async def generate_package_mockup(
     )
     session.add(gen_img)
     await session.flush()
+    await session.commit()
 
     return AIPackageMockupResponse(
         id=gen_img.id,
