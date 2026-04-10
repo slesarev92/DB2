@@ -2914,7 +2914,7 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
   миграция c341fb0685fe для ai_usage_log, 8 unit-тестов с моками,
   live smoke-тест passed на Claude 4.6 Sonnet, URL+model naming
   corrections в ADR-16, 286/286 pytest)
-- [ ] **7.2** Explain KPI + архитектурный scaffolding всей Phase 7
+- [x] **7.2** Explain KPI + архитектурный scaffolding всей Phase 7 *(закрыта 2026-04-10, 3 commits: 6c471d9 / b883837 / 8b5589d, 338 tests, 52 новых)*
   (tier registry, context builders, Redis cache, rate limit middleware,
   AI Panel drawer skeleton, inline ✨ на ResultsTab, 4-layer cost
   protection activation, A/B Prompt Lab dev-only) ← **следующий шаг**

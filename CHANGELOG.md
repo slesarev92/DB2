@@ -9,6 +9,52 @@
 
 ## [Unreleased]
 
+### Added (Phase 7.2 — AI Explain KPI + full scaffolding, 2026-04-10)
+
+**Phase 7.2 — самая большая задача Phase 7.** Одновременно построен весь
+архитектурный фундамент AI-интеграции + первая реальная фича `explain-kpi`.
+
+**Backend scaffolding (commit 1, `6c471d9`):**
+- `AIModelTier` enum (5 уровней) + `AIFeature` enum (7 фич)
+- `TIER_MODEL` + `FEATURE_DEFAULT_TIER` — tier registry, hard-code модели
+  в endpoint'ах запрещён
+- `resolve_model(feature, tier_override)` — единственный resolver
+- `MODEL_PRICING` ₽/1k tokens + `calculate_cost()` → Decimal(12,6)
+- `AIContextBuilder.for_kpi_explanation()` — project+3 scenarios×3 scopes
+  + top-3 SKU → dict ~2-4k tokens для LLM
+- `ai_cache.py` — Redis cache (24h TTL) + SHA-256 hash + dedupe SETNX lock
+- `ai_usage.py` — `log_ai_usage()` в `ai_usage_log` + `check_daily_user_budget()` 100₽/day safety net
+- `slowapi>=0.1.9` — rate limit 10 req/min/user/feature
+- Latent-bug cleanup: `config.py` default URL `/v1` → `/api/v1`,
+  docstring/комментарии с точечным model naming
+
+**Explain-KPI endpoint (commit 2, `b883837`):**
+- `POST /api/projects/{id}/ai/explain-kpi` — полный flow:
+  auth → daily budget → context build → cache → dedupe → Polza → log → cache set
+- `BASE_TONE_PROMPT` — tone-of-voice: формальный финансовый стиль,
+  без маркетинга, опора на числа, критичность
+- `KPI_EXPLAIN_SYSTEM` — go/no-go/review с жёсткими критериями
+  (NPV>0 all scenarios + IRR-WACC gap >3pp + payback <5y)
+- `AIKpiExplanationResponse` — summary, key_drivers[], risks[],
+  recommendation, confidence, rationale + cost_rub/model/cached metadata
+- `LLMKpiOutput` — Pydantic schema для JSON от LLM
+- `docs/ai_samples/explain_kpi_gorji.md` — shell для регрессионного якоря
+
+**Frontend AI Panel (commit 3, `8b5589d`):**
+- `AIPanelProvider` — React Context (без zustand/cmdk, 0 новых deps)
+- `AIPanelDrawer` — правый slide-in, Tailwind translate-x
+- 5 tabs: Actions, History, Chat (stub), Settings, 🧪 Lab (dev-only)
+- `AIPanelBalanceWidget` + `AIPanelBudgetProgress` — placeholders → 7.5
+- Ctrl+K global shortcut — нативный keyboard listener
+- Sidebar "AI Assistant" toggle button с kbd hint
+- `ExplainKpiInline` — inline карточка на ResultsTab под Go/No-Go hero:
+  pre-flight cost estimate, Standard/Deep tier toggle, AbortController,
+  🟢GO/🔴NO-GO/🟡REVIEW recommendation badge, confidence %, drivers, risks
+- `types/api.ts` — AI types. `lib/ai.ts` — API client + cost estimates
+
+**Тесты:** 52 новых (42 scaffolding + 10 endpoint), все mocked.
+**Итого:** 338/338 passed, `tsc --noEmit` 0 errors.
+
 ### Fixed (Phase 7.1 — Polza AI base URL и model naming, 2026-04-09)
 
 **Live smoke-тест Phase 7.1 выявил две ошибки в ADR-16** при первом
