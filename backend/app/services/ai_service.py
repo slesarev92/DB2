@@ -626,7 +626,7 @@ async def generate_image(
                 "response_format": "b64_json",
             },
         )
-        if resp.status_code != 200:
+        if resp.status_code >= 300:
             raise AIServiceUnavailableError(
                 f"Polza image submit {resp.status_code}: {resp.text[:300]}"
             )
