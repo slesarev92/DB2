@@ -510,3 +510,239 @@ async def test_explain_kpi_tier_override_uses_heavy_model(
     # Проверяем что в Polza улетела opus модель
     call_kwargs = mock_polza.await_args.kwargs
     assert call_kwargs["model"] == "anthropic/claude-opus-4.6"
+
+
+# ============================================================
+# Phase 7.3 — EXPLAIN SENSITIVITY
+# ============================================================
+
+
+@pytest.fixture
+def mock_sensitivity(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Подменяет compute_sensitivity чтобы не прогонять pipeline в тестах."""
+    from app.services import ai_context_builder
+
+    async def fake_compute(session, project_id, scenario_id):
+        return {
+            "base_npv_y1y10": 80000000.0,
+            "base_cm_ratio": 0.35,
+            "deltas": [-0.20, -0.10, 0.0, 0.10, 0.20],
+            "params": ["nd", "offtake", "shelf_price", "cogs"],
+            "cells": [
+                {"parameter": p, "delta": d, "npv_y1y10": 80000000.0 * (1 + d), "cm_ratio": 0.35}
+                for p in ["nd", "offtake", "shelf_price", "cogs"]
+                for d in [-0.20, -0.10, 0.0, 0.10, 0.20]
+            ],
+        }
+
+    monkeypatch.setattr(ai_context_builder, "compute_sensitivity", fake_compute)
+
+
+@pytest.fixture
+def mock_polza_sensitivity(mock_polza: AsyncMock) -> AsyncMock:
+    """Override mock_polza return для sensitivity schema."""
+    sensitivity_output = {
+        "most_sensitive_param": "nd",
+        "most_sensitive_impact": "+20% ND → +16 млн ₽ NPV",
+        "least_sensitive_param": "cogs",
+        "narrative": "ND является главным драйвером NPV. При +20% увеличении ND NPV растёт на 16 млн ₽.",
+        "actionable_levers": ["Увеличить ND в первые 12 месяцев", "Расширить дистрибуцию"],
+        "warning_flags": [],
+    }
+    mock_polza.return_value = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(content=json.dumps(sensitivity_output))
+            )
+        ],
+        usage=SimpleNamespace(
+            prompt_tokens=1500, completion_tokens=300, total_tokens=1800
+        ),
+        model="anthropic/claude-sonnet-4.6",
+    )
+    return mock_polza
+
+
+async def test_explain_sensitivity_happy_path(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+    base_scenario: Scenario,
+    mock_polza_sensitivity: AsyncMock,
+    mock_redis: MagicMock,
+    mock_sensitivity: None,
+) -> None:
+    """Successful sensitivity interpretation → 200 + correct structure."""
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/explain-sensitivity",
+        json={"scenario_id": base_scenario.id},
+    )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["most_sensitive_param"] == "nd"
+    assert "ND" in data["most_sensitive_impact"]
+    assert data["cached"] is False
+    assert data["model"] == "anthropic/claude-sonnet-4.6"
+
+    mock_polza_sensitivity.assert_awaited_once()
+
+    logs = (
+        await db_session.scalars(
+            select(AIUsageLog).where(AIUsageLog.endpoint == "explain_sensitivity")
+        )
+    ).all()
+    assert len(logs) == 1
+
+
+async def test_explain_sensitivity_cache_hit(
+    auth_client: AsyncClient,
+    gorji_project: Project,
+    base_scenario: Scenario,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+    mock_sensitivity: None,
+) -> None:
+    """Cache hit → cached=true, Polza not called."""
+    cached_payload = {
+        "most_sensitive_param": "nd",
+        "most_sensitive_impact": "cached",
+        "least_sensitive_param": "cogs",
+        "narrative": "cached narrative",
+        "actionable_levers": ["lever1"],
+        "warning_flags": [],
+        "cost_rub": "1.2",
+        "model": "anthropic/claude-sonnet-4.6",
+    }
+    mock_redis.get.return_value = json.dumps(cached_payload)
+
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/explain-sensitivity",
+        json={"scenario_id": base_scenario.id},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["cached"] is True
+    mock_polza.assert_not_awaited()
+
+
+async def test_explain_sensitivity_missing_scenario(
+    auth_client: AsyncClient,
+    gorji_project: Project,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+    mock_sensitivity: None,
+) -> None:
+    """Non-existent scenario → 404."""
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/explain-sensitivity",
+        json={"scenario_id": 999999},
+    )
+    assert resp.status_code == 404
+
+
+async def test_explain_sensitivity_polza_unavailable(
+    auth_client: AsyncClient,
+    gorji_project: Project,
+    base_scenario: Scenario,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+    mock_sensitivity: None,
+) -> None:
+    """Polza down → 503."""
+    from openai import APIConnectionError
+    mock_polza.side_effect = APIConnectionError(request=MagicMock())
+
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/explain-sensitivity",
+        json={"scenario_id": base_scenario.id},
+    )
+    assert resp.status_code == 503
+
+
+# ============================================================
+# Phase 7.3 — FREEFORM CHAT (SSE)
+# ============================================================
+
+
+@pytest.fixture
+def mock_polza_stream(mock_polza: AsyncMock) -> AsyncMock:
+    """Мок для streaming chat — возвращает async iterator of chunks."""
+
+    class _FakeChunk:
+        def __init__(self, content: str | None, usage=None):
+            self.choices = [SimpleNamespace(delta=SimpleNamespace(content=content))]
+            self.usage = usage
+
+    async def fake_stream():
+        yield _FakeChunk("Привет")
+        yield _FakeChunk(", NPV")
+        yield _FakeChunk(" положителен.")
+        yield _FakeChunk(None, usage=SimpleNamespace(prompt_tokens=5000, completion_tokens=50))
+
+    # Override mock — chat endpoint calls client.chat.completions.create
+    # with stream=True, which returns an async iterator
+    mock_polza.return_value = fake_stream()
+    return mock_polza
+
+
+async def test_chat_happy_path_sse(
+    auth_client: AsyncClient,
+    gorji_project: Project,
+    mock_polza_stream: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """Chat SSE: first event=conversation_id, tokens, done with cost."""
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/chat",
+        json={"question": "Почему NPV положителен?"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/event-stream")
+
+    body = resp.text
+    events = [
+        json.loads(line.removeprefix("data: "))
+        for line in body.strip().split("\n")
+        if line.startswith("data: ")
+    ]
+
+    # First event: conversation_id
+    assert events[0]["type"] == "conversation_id"
+    assert "id" in events[0]
+
+    # Token events
+    token_events = [e for e in events if e["type"] == "token"]
+    assert len(token_events) >= 2
+    full_text = "".join(e["content"] for e in token_events)
+    assert "NPV" in full_text
+
+    # Done event
+    done_events = [e for e in events if e["type"] == "done"]
+    assert len(done_events) == 1
+    assert "cost_rub" in done_events[0]
+    assert "model" in done_events[0]
+
+
+async def test_chat_requires_auth(
+    client: AsyncClient, gorji_project: Project
+) -> None:
+    """401 без JWT."""
+    resp = await client.post(
+        f"/api/projects/{gorji_project.id}/ai/chat",
+        json={"question": "test"},
+    )
+    assert resp.status_code == 401
+
+
+async def test_chat_empty_question_returns_422(
+    auth_client: AsyncClient, gorji_project: Project,
+    mock_polza: AsyncMock, mock_redis: MagicMock,
+) -> None:
+    """Empty question → 422 validation error."""
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/chat",
+        json={"question": ""},
+    )
+    assert resp.status_code == 422

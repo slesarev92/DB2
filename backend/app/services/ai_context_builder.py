@@ -33,15 +33,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models import (
+    Channel,
     PeriodScope,
     Project,
     ProjectSKU,
+    ProjectSKUChannel,
     SKU,
     Scenario,
     ScenarioResult,
     ScenarioType,
 )
 from app.services.scenario_service import SCENARIO_ORDER, SCOPE_ORDER
+from app.services.sensitivity_service import compute_sensitivity
 
 
 class AIContextBuilderError(Exception):
@@ -182,6 +185,178 @@ class AIContextBuilder:
                 for s in scenarios
             ],
             "top_skus": [_serialize_project_sku(ps) for ps in project_skus],
+        }
+
+
+    async def for_sensitivity_interpretation(
+        self,
+        *,
+        project_id: int,
+        scenario_id: int,
+    ) -> dict[str, Any]:
+        """Контекст для интерпретации sensitivity analysis (~1k токенов).
+
+        Вызывает `compute_sensitivity` для получения матрицы 4×5, затем
+        компактно сериализует. LLM видит: какой параметр двигает NPV
+        сильнее всего, есть ли нелинейности, WACC для контекста.
+
+        Sensitivity computation = 20 in-memory pipeline runs (~50ms total),
+        поэтому re-computation на каждый вызов допустима — результат
+        кэшируется на уровне Redis (ai_cache) через input_hash.
+
+        Raises:
+            AIContextBuilderError: project не найден или удалён.
+        """
+        project = await self._session.get(Project, project_id)
+        if project is None or project.deleted_at is not None:
+            raise AIContextBuilderError(
+                f"Project {project_id} не найден или удалён"
+            )
+
+        # Валидируем что scenario принадлежит проекту
+        scenario = await self._session.get(Scenario, scenario_id)
+        if scenario is None or scenario.project_id != project_id:
+            raise AIContextBuilderError(
+                f"Scenario {scenario_id} не принадлежит project {project_id}"
+            )
+
+        # Compute sensitivity matrix
+        matrix = await compute_sensitivity(
+            self._session, project_id, scenario_id
+        )
+
+        return {
+            "project": {
+                "id": project.id,
+                "name": project.name,
+                "params": {
+                    "wacc": float(project.wacc),
+                    "currency": project.currency,
+                },
+            },
+            "scenario": {
+                "id": scenario.id,
+                "type": scenario.type.value,
+            },
+            "sensitivity": {
+                "base_npv_y1y10": matrix["base_npv_y1y10"],
+                "base_cm_ratio": matrix["base_cm_ratio"],
+                "deltas": matrix["deltas"],
+                "params": matrix["params"],
+                "cells": matrix["cells"],
+            },
+        }
+
+    async def for_freeform_chat(
+        self,
+        *,
+        project_id: int,
+        user_question: str,
+    ) -> dict[str, Any]:
+        """Широкий контекст для freeform chat (~8-12k токенов).
+
+        Включает всё что аналитик мог бы спросить: KPI, params, SKU
+        summary, channels summary, content fields summary. Это самый
+        «дорогой» по токенам метод — используется только для FREEFORM_CHAT
+        feature, не для targeted фич.
+
+        `user_question` включается для reference (LLM видит вопрос в
+        user_prompt, не здесь), но мы добавляем его в контекст для
+        стабильности input_hash — разные вопросы = разный hash = разный cache.
+
+        Raises:
+            AIContextBuilderError: project не найден или удалён.
+        """
+        project = await self._session.get(Project, project_id)
+        if project is None or project.deleted_at is not None:
+            raise AIContextBuilderError(
+                f"Project {project_id} не найден или удалён"
+            )
+
+        # All scenarios + results
+        scenarios_stmt = select(Scenario).where(
+            Scenario.project_id == project_id
+        )
+        scenarios = list(
+            (await self._session.scalars(scenarios_stmt)).all()
+        )
+        scenarios.sort(key=lambda s: SCENARIO_ORDER[s.type])
+
+        scenario_ids = [s.id for s in scenarios]
+        results_stmt = select(ScenarioResult).where(
+            ScenarioResult.scenario_id.in_(scenario_ids)
+        )
+        results = list((await self._session.scalars(results_stmt)).all())
+        results_by_scenario: dict[int, list[ScenarioResult]] = {}
+        for r in results:
+            results_by_scenario.setdefault(r.scenario_id, []).append(r)
+        for rows in results_by_scenario.values():
+            rows.sort(key=lambda r: SCOPE_ORDER[r.period_scope])
+
+        # All included SKUs (not just top-3)
+        skus_stmt = (
+            select(ProjectSKU)
+            .where(ProjectSKU.project_id == project_id)
+            .where(ProjectSKU.include.is_(True))
+            .options(selectinload(ProjectSKU.sku))
+            .order_by(ProjectSKU.id)
+        )
+        project_skus = list(
+            (await self._session.scalars(skus_stmt)).all()
+        )
+
+        # Channel summary
+        channels_stmt = select(Channel).order_by(Channel.id)
+        all_channels = list(
+            (await self._session.scalars(channels_stmt)).all()
+        )
+        channel_map = {c.id: c.name for c in all_channels}
+
+        # Channel distribution per SKU (simplified: just names)
+        psku_ids = [ps.id for ps in project_skus]
+        psc_stmt = select(ProjectSKUChannel).where(
+            ProjectSKUChannel.project_sku_id.in_(psku_ids)
+        ) if psku_ids else None
+        sku_channels: dict[int, list[str]] = {}
+        if psc_stmt is not None:
+            psc_rows = list(
+                (await self._session.scalars(psc_stmt)).all()
+            )
+            for psc in psc_rows:
+                ch_name = channel_map.get(psc.channel_id, f"ch#{psc.channel_id}")
+                sku_channels.setdefault(psc.project_sku_id, []).append(ch_name)
+
+        return {
+            "project": {
+                "id": project.id,
+                "name": project.name,
+                "horizon_years": project.horizon_years,
+                "gate_stage": project.gate_stage,
+                "project_goal": _trim(project.project_goal, 500),
+                "target_audience": _trim(project.target_audience, 300),
+                "description": _trim(project.description, 500),
+                "concept_text": _trim(project.concept_text, 500),
+                "rationale": _trim(project.rationale, 500),
+                "params": {
+                    "wacc": float(project.wacc),
+                    "tax_rate": float(project.tax_rate),
+                    "wc_rate": float(project.wc_rate),
+                    "vat_rate": float(project.vat_rate),
+                    "currency": project.currency,
+                },
+            },
+            "scenarios": [
+                _serialize_scenario(s, results_by_scenario.get(s.id, []))
+                for s in scenarios
+            ],
+            "skus": [
+                {
+                    **_serialize_project_sku(ps),
+                    "channels": sku_channels.get(ps.id, []),
+                }
+                for ps in project_skus
+            ],
+            "user_question": _trim(user_question, 1000),
         }
 
 

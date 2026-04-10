@@ -91,12 +91,7 @@ class AIKpiExplanationResponse(BaseModel):
 
 
 class LLMKpiOutput(BaseModel):
-    """То, что LLM возвращает как JSON — подмножество response.
-
-    Отдельная схема, потому что endpoint добавляет cost_rub/model/cached
-    к LLM-ответу перед возвратом клиенту. LLM не должен ничего знать
-    про стоимость своего вызова.
-    """
+    """То, что LLM возвращает как JSON — подмножество response."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -106,3 +101,66 @@ class LLMKpiOutput(BaseModel):
     recommendation: Literal["go", "no-go", "review"]
     confidence: float = Field(ge=0, le=1)
     rationale: str
+
+
+# ============================================================
+# EXPLAIN SENSITIVITY (Phase 7.3)
+# ============================================================
+
+
+class AISensitivityExplanationRequest(BaseModel):
+    """Request body для POST /api/projects/{id}/ai/explain-sensitivity."""
+
+    scenario_id: int
+    tier_override: AIModelTier | None = None
+
+
+class AISensitivityExplanationResponse(BaseModel):
+    """Structured ответ от explain-sensitivity."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    most_sensitive_param: str
+    most_sensitive_impact: str
+    least_sensitive_param: str
+    narrative: str
+    actionable_levers: list[str] = Field(default_factory=list)
+    warning_flags: list[str] = Field(default_factory=list)
+    cost_rub: Decimal
+    model: str
+    cached: bool
+
+
+class LLMSensitivityOutput(BaseModel):
+    """LLM JSON output для sensitivity interpretation."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    most_sensitive_param: str
+    most_sensitive_impact: str
+    least_sensitive_param: str
+    narrative: str
+    actionable_levers: list[str]
+    warning_flags: list[str] = Field(default_factory=list)
+
+
+# ============================================================
+# FREEFORM CHAT (Phase 7.3)
+# ============================================================
+
+
+class AIChatRequest(BaseModel):
+    """Request body для POST /api/projects/{id}/ai/chat."""
+
+    question: str = Field(
+        ..., min_length=1, max_length=2000,
+        description="Вопрос пользователя.",
+    )
+    conversation_id: str | None = Field(
+        default=None,
+        description=(
+            "ID разговора для продолжения. None = новый разговор. "
+            "Redis TTL 1h, после timeout'а — новый."
+        ),
+    )
+    tier_override: AIModelTier | None = None
