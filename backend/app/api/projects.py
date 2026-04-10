@@ -15,6 +15,7 @@ from app.schemas.project import (
     ProjectRead,
     ProjectUpdate,
 )
+from app.schemas.pricing import PricingSummaryResponse
 from app.schemas.sensitivity import SensitivityResponse
 from app.services import project_service
 
@@ -238,6 +239,110 @@ async def sensitivity_analysis_endpoint(
         )
 
     return SensitivityResponse(**result)
+
+
+@router.get(
+    "/{project_id}/pricing-summary",
+    response_model=PricingSummaryResponse,
+    summary="Pricing summary: shelf / ex-factory / COGS по SKU × канал",
+)
+async def pricing_summary_endpoint(
+    project_id: int,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> PricingSummaryResponse:
+    """Сводная ценовая таблица (Phase 8.1).
+
+    Для каждого SKU × Channel:
+    - shelf_price_reg, shelf_price_promo, shelf_price_weighted
+    - ex_factory (с VAT-коррекцией / (1+VAT))
+    - channel_margin, promo_discount, promo_share
+    - COGS per unit из BOM
+    """
+    from decimal import Decimal
+
+    from sqlalchemy.orm import selectinload as sil
+
+    from app.models import BOMItem, ProjectSKU, ProjectSKUChannel
+    from app.schemas.pricing import PricingCell, SKUPricingColumn
+
+    project = await project_service.get_project(session, project_id)
+    if project is None:
+        raise _not_found
+
+    vat_rate = project.vat_rate
+
+    # Load all PSKs with SKU + channels
+    from sqlalchemy import select
+
+    psk_stmt = (
+        select(ProjectSKU)
+        .where(ProjectSKU.project_id == project_id, ProjectSKU.include.is_(True))
+        .options(sil(ProjectSKU.sku))
+        .order_by(ProjectSKU.id)
+    )
+    psks = (await session.scalars(psk_stmt)).all()
+
+    skus: list[SKUPricingColumn] = []
+    for psk in psks:
+        # COGS per unit from BOM
+        boms = (
+            await session.scalars(
+                select(BOMItem).where(BOMItem.project_sku_id == psk.id)
+            )
+        ).all()
+        cogs = Decimal("0")
+        for b in boms:
+            cogs += b.quantity_per_unit * b.price_per_unit * (Decimal("1") + b.loss_pct)
+
+        # Channels
+        psc_stmt = (
+            select(ProjectSKUChannel)
+            .where(ProjectSKUChannel.project_sku_id == psk.id)
+            .options(sil(ProjectSKUChannel.channel))
+            .order_by(ProjectSKUChannel.id)
+        )
+        pscs = (await session.scalars(psc_stmt)).all()
+
+        channels: list[PricingCell] = []
+        for psc in pscs:
+            sp_reg = psc.shelf_price_reg
+            sp_promo = sp_reg * (Decimal("1") - psc.promo_discount)
+            sp_weighted = (
+                sp_reg * (Decimal("1") - psc.promo_share)
+                + sp_promo * psc.promo_share
+            )
+            ex_factory = (
+                sp_weighted
+                / (Decimal("1") + vat_rate)
+                * (Decimal("1") - psc.channel_margin)
+            )
+            channels.append(
+                PricingCell(
+                    channel_code=psc.channel.code,
+                    channel_name=psc.channel.name,
+                    shelf_price_reg=sp_reg,
+                    shelf_price_promo=sp_promo,
+                    shelf_price_weighted=sp_weighted,
+                    ex_factory=ex_factory,
+                    channel_margin=psc.channel_margin,
+                    promo_discount=psc.promo_discount,
+                    promo_share=psc.promo_share,
+                )
+            )
+
+        skus.append(
+            SKUPricingColumn(
+                sku_brand=psk.sku.brand,
+                sku_name=psk.sku.name,
+                sku_format=psk.sku.format,
+                sku_volume_l=psk.sku.volume_l,
+                cogs_per_unit=cogs,
+                channels=channels,
+            )
+        )
+
+    return PricingSummaryResponse(vat_rate=vat_rate, skus=skus)
 
 
 @router.get(

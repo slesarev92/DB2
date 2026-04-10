@@ -42,6 +42,7 @@ export function useProjectProgress(
     scenarios: true,
     results: false,
     sensitivity: false,
+    pricing: false,
   });
   const [loading, setLoading] = useState(true);
 
@@ -64,6 +65,7 @@ export function useProjectProgress(
         scenarios: true,       // always filled — auto-created
         results: false,
         sensitivity: false,    // always empty — on-demand
+        pricing: false,        // derived from channels — on-demand
       };
 
       // Content: ≥3 of key fields filled

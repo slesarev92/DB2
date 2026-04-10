@@ -33,6 +33,7 @@ export const TAB_ORDER = [
   "scenarios",
   "results",
   "sensitivity",
+  "pricing",
 ] as const;
 
 export type TabValue = (typeof TAB_ORDER)[number];
@@ -50,6 +51,7 @@ export const SECTION_LABELS: Record<TabValue, string> = {
   scenarios: "Сценарии",
   results: "Результаты",
   sensitivity: "Чувствительность",
+  pricing: "Цены",
 };
 
 export interface SectionGroup {
@@ -64,7 +66,7 @@ export const SECTION_GROUPS: readonly SectionGroup[] = [
   { key: "product", label: "Продукт", number: "②", tabs: ["skus", "ingredients"] },
   { key: "distribution", label: "Дистрибуция", number: "③", tabs: ["channels", "akb", "obppc"] },
   { key: "modeling", label: "Моделирование", number: "④", tabs: ["periods", "scenarios"] },
-  { key: "analysis", label: "Анализ", number: "⑤", tabs: ["results", "sensitivity"] },
+  { key: "analysis", label: "Анализ", number: "⑤", tabs: ["results", "sensitivity", "pricing"] },
 ];
 
 /* ── Progress types ── */

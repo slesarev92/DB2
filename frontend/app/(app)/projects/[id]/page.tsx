@@ -13,6 +13,7 @@ import { PeriodsTab } from "@/components/projects/periods-tab";
 import { ResultsTab } from "@/components/projects/results-tab";
 import { ScenariosTab } from "@/components/projects/scenarios-tab";
 import { SensitivityTab } from "@/components/projects/sensitivity-tab";
+import { PricingTab } from "@/components/projects/pricing-tab";
 import { SkusTab } from "@/components/projects/skus-tab";
 import { Button } from "@/components/ui/button";
 import {
@@ -273,6 +274,8 @@ export default function ProjectDetailPage() {
       {activeTab === "results" && <ResultsTab projectId={projectId} />}
 
       {activeTab === "sensitivity" && <SensitivityTab projectId={projectId} />}
+
+      {activeTab === "pricing" && <PricingTab projectId={projectId} />}
     </div>
   );
 }
