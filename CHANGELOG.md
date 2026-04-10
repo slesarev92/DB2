@@ -55,6 +55,31 @@
 **Тесты:** 52 новых (42 scaffolding + 10 endpoint), все mocked.
 **Итого:** 338/338 passed, `tsc --noEmit` 0 errors.
 
+### Added (Phase 7.3 — Sensitivity interpretation + Freeform Chat, 2026-04-10)
+
+**Backend:**
+- `POST /api/projects/{id}/ai/explain-sensitivity` — интерпретация
+  матрицы 4×5 (nd/offtake/shelf_price/cogs × ±20%). Определяет most/least
+  sensitive param, narrative, actionable levers, warning flags.
+- `POST /api/projects/{id}/ai/chat` — SSE streaming freeform chat.
+  Redis conversation history (TTL 1h, last 20 messages). Единственный
+  non-JSON endpoint (plain text streaming).
+- `AIContextBuilder.for_sensitivity_interpretation()` — ~1k tokens
+- `AIContextBuilder.for_freeform_chat()` — ~8-12k tokens (widest context)
+- `SENSITIVITY_EXPLAIN_SYSTEM` + `CHAT_SYSTEM_PROMPT` prompts
+
+**Frontend:**
+- `ExplainSensitivityInline` — inline ✨ на SensitivityTab (между Base
+  reference и матрицей): most/least sensitive params, narrative, levers
+- `AIPanelChat` — полная SSE реализация заменяет заглушку 7.2:
+  messages scroll, token-by-token streaming, Enter/Shift+Enter,
+  abort controller, Standard/Deep tier toggle, Clear conversation
+- `streamChat()` в lib/ai.ts — fetch + ReadableStream (не EventSource,
+  т.к. ES не поддерживает POST body + Auth headers)
+
+**Тесты:** +7 backend (sensitivity happy/cache/missing/503 + chat SSE/auth/422).
+**Итого:** 345/345 passed, tsc 0 errors.
+
 ### Fixed (Phase 7.1 — Polza AI base URL и model naming, 2026-04-09)
 
 **Live smoke-тест Phase 7.1 выявил две ошибки в ADR-16** при первом

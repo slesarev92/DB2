@@ -2918,7 +2918,7 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
   (tier registry, context builders, Redis cache, rate limit middleware,
   AI Panel drawer skeleton, inline ✨ на ResultsTab, 4-layer cost
   protection activation, A/B Prompt Lab dev-only) ← **следующий шаг**
-- [ ] 7.3 Sensitivity interpretation + Freeform Chat в AI Panel
+- [x] 7.3 Sensitivity interpretation + Freeform Chat в AI Panel *(закрыта 2026-04-10, 345+ tests)*
   (SSE streaming, Redis conversation history)
 - [ ] 7.4 AI executive summary (DB-cached, экспорт PPT/PDF читает
   `Project.ai_executive_summary` из БД, не вызывает AI live)

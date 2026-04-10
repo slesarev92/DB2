@@ -559,6 +559,39 @@ export interface AIKpiExplanationResponse {
   cached: boolean;
 }
 
+/** Request body для POST /api/projects/{id}/ai/explain-sensitivity. */
+export interface AISensitivityExplanationRequest {
+  scenario_id: number;
+  tier_override?: AIModelTier | null;
+}
+
+/** Response от /ai/explain-sensitivity (Phase 7.3). */
+export interface AISensitivityExplanationResponse {
+  most_sensitive_param: string;
+  most_sensitive_impact: string;
+  least_sensitive_param: string;
+  narrative: string;
+  actionable_levers: string[];
+  warning_flags: string[];
+  cost_rub: string;
+  model: string;
+  cached: boolean;
+}
+
+/** Request body для POST /api/projects/{id}/ai/chat (Phase 7.3). */
+export interface AIChatRequest {
+  question: string;
+  conversation_id?: string | null;
+  tier_override?: AIModelTier | null;
+}
+
+/** SSE event types from /ai/chat stream. */
+export type AIChatSSEEvent =
+  | { type: "conversation_id"; id: string }
+  | { type: "token"; content: string }
+  | { type: "done"; cost_rub: string; model: string }
+  | { type: "error"; message: string };
+
 /**
  * Запись в AI usage history (для AI Panel). В Phase 7.2 — локальный
  * mock state, реальный endpoint `/ai/usage` добавится в 7.5.

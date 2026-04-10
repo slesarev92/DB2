@@ -11,10 +11,14 @@
  */
 
 import { apiPost } from "./api";
+import { getAccessToken } from "./auth";
 
 import type {
+  AIChatSSEEvent,
   AIKpiExplanationRequest,
   AIKpiExplanationResponse,
+  AISensitivityExplanationRequest,
+  AISensitivityExplanationResponse,
 } from "@/types/api";
 
 export async function requestExplainKpi(
@@ -27,6 +31,78 @@ export async function requestExplainKpi(
     body,
     { signal: options?.signal },
   );
+}
+
+export async function requestExplainSensitivity(
+  projectId: number,
+  body: AISensitivityExplanationRequest,
+  options?: { signal?: AbortSignal },
+): Promise<AISensitivityExplanationResponse> {
+  return apiPost<AISensitivityExplanationResponse>(
+    `/api/projects/${projectId}/ai/explain-sensitivity`,
+    body,
+    { signal: options?.signal },
+  );
+}
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+/**
+ * SSE streaming chat с Polza AI.
+ *
+ * Использует fetch + ReadableStream вместо EventSource, потому что
+ * EventSource не поддерживает POST body и custom headers (Authorization).
+ */
+export async function streamChat(
+  projectId: number,
+  body: { question: string; conversation_id?: string | null; tier_override?: string | null },
+  onEvent: (event: AIChatSSEEvent) => void,
+  options?: { signal?: AbortSignal },
+): Promise<void> {
+  const token = getAccessToken();
+  const resp = await fetch(
+    `${API_URL}/api/projects/${projectId}/ai/chat`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(body),
+      signal: options?.signal,
+    },
+  );
+
+  if (!resp.ok) {
+    const detail = await resp.text();
+    throw new Error(`Chat error ${resp.status}: ${detail}`);
+  }
+
+  const reader = resp.body?.getReader();
+  if (!reader) throw new Error("No response body");
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        try {
+          const event = JSON.parse(line.slice(6)) as AIChatSSEEvent;
+          onEvent(event);
+        } catch {
+          // Corrupt SSE line — skip
+        }
+      }
+    }
+  }
 }
 
 /**

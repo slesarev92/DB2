@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { ExplainSensitivityInline } from "@/components/ai-panel/explain-sensitivity-inline";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,6 +21,7 @@ import {
 } from "@/components/ui/table";
 import { ApiError } from "@/lib/api";
 import { formatMoney, formatPercent } from "@/lib/format";
+import { listProjectScenarios } from "@/lib/scenarios";
 import { computeSensitivity } from "@/lib/sensitivity";
 
 import type { SensitivityCell, SensitivityResponse } from "@/types/api";
@@ -75,6 +77,17 @@ export function SensitivityTab({ projectId }: SensitivityTabProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasFetched, setHasFetched] = useState(false);
+  const [baseScenarioId, setBaseScenarioId] = useState<number | null>(null);
+
+  // Fetch base scenario ID for AI inline
+  useEffect(() => {
+    listProjectScenarios(projectId)
+      .then((scenarios) => {
+        const base = scenarios.find((s) => s.type === "base");
+        if (base) setBaseScenarioId(base.id);
+      })
+      .catch(() => {});
+  }, [projectId]);
 
   const handleCompute = useCallback(async () => {
     setLoading(true);
@@ -160,6 +173,15 @@ export function SensitivityTab({ projectId }: SensitivityTabProps) {
               </div>
             </CardContent>
           </Card>
+
+          {/* AI interpretation (Phase 7.3) */}
+          {baseScenarioId !== null && (
+            <ExplainSensitivityInline
+              projectId={projectId}
+              projectName="Проект"
+              scenarioId={baseScenarioId}
+            />
+          )}
 
           {/* Sensitivity table */}
           <Card>
