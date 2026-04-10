@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict
 
 # Whitelist kind значений (синхронизировано с CHECK constraint
 # `ck_media_assets_kind` в миграции 2e7b824682be).
-MediaKind = Literal["package_image", "concept_design", "other"]
+MediaKind = Literal["package_image", "concept_design", "ai_reference", "ai_generated", "other"]
 
 
 class MediaAssetRead(BaseModel):
