@@ -4,6 +4,8 @@
   GET    /api/scenarios/{scenario_id}             ← один сценарий
   PATCH  /api/scenarios/{scenario_id}             ← изменить дельты/notes
   GET    /api/scenarios/{scenario_id}/results     ← результаты расчёта (3 scope)
+  GET    /api/scenarios/{scenario_id}/channel-deltas  ← per-channel overrides (B-06)
+  PUT    /api/scenarios/{scenario_id}/channel-deltas  ← replace per-channel overrides
 """
 from typing import Annotated
 
@@ -13,7 +15,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.db import get_db
 from app.models import User
-from app.schemas.scenario import ScenarioRead, ScenarioResultRead, ScenarioUpdate
+from app.schemas.scenario import (
+    ChannelDeltaItem,
+    ChannelDeltaRequest,
+    ScenarioRead,
+    ScenarioResultRead,
+    ScenarioUpdate,
+)
 from app.services import project_service, scenario_service
 
 router = APIRouter(tags=["scenarios"])
@@ -114,3 +122,45 @@ async def get_scenario_results_endpoint(
         )
 
     return [ScenarioResultRead.model_validate(r) for r in results]
+
+
+# ============================================================
+# B-06: Per-channel delta overrides
+# ============================================================
+
+
+@router.get(
+    "/api/scenarios/{scenario_id}/channel-deltas",
+    response_model=list[ChannelDeltaItem],
+)
+async def get_channel_deltas_endpoint(
+    scenario_id: int,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> list[ChannelDeltaItem]:
+    """Per-channel delta overrides для сценария."""
+    scenario = await scenario_service.get_scenario(session, scenario_id)
+    if scenario is None:
+        raise _scenario_not_found
+    return await scenario_service.list_channel_deltas(session, scenario_id)
+
+
+@router.put(
+    "/api/scenarios/{scenario_id}/channel-deltas",
+    response_model=list[ChannelDeltaItem],
+)
+async def put_channel_deltas_endpoint(
+    scenario_id: int,
+    body: ChannelDeltaRequest,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> list[ChannelDeltaItem]:
+    """Полная замена per-channel overrides. Items без записей → fallback."""
+    scenario = await scenario_service.get_scenario(session, scenario_id)
+    if scenario is None:
+        raise _scenario_not_found
+    result = await scenario_service.replace_channel_deltas(
+        session, scenario_id, body.items
+    )
+    await session.commit()
+    return result

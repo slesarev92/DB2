@@ -423,6 +423,17 @@ export interface ScenarioUpdate {
   notes?: string | null;
 }
 
+/** Per-channel delta override (B-06). */
+export interface ChannelDeltaItem {
+  psk_channel_id: number;
+  delta_nd: string;
+  delta_offtake: string;
+}
+
+export interface ChannelDeltaRequest {
+  items: ChannelDeltaItem[];
+}
+
 export interface ScenarioResultRead {
   id: number;
   scenario_id: number;

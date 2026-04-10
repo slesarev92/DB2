@@ -201,6 +201,7 @@ async def _build_line_input(
     scenario: Scenario,
     sorted_periods: list[Period],
     inflation_profile: "RefInflation | None" = None,
+    channel_delta_map: dict[int, tuple[float, float]] | None = None,
 ) -> PipelineInput:
     """Собирает PipelineInput для одной (psk × psc × scenario) линии."""
     # Effective values по периодам
@@ -300,10 +301,14 @@ async def _build_line_input(
             month_num.append(None)
         model_year.append(period.model_year)
 
-    # Применение scenario delta к ND и offtake (Conservative/Aggressive)
+    # Применение scenario delta к ND и offtake (Conservative/Aggressive).
+    # B-06: per-channel override > scenario-level fallback.
     # delta_nd = -0.10 → −10% от base
-    delta_nd = float(scenario.delta_nd)
-    delta_offtake = float(scenario.delta_offtake)
+    if channel_delta_map and psc.id in channel_delta_map:
+        delta_nd, delta_offtake = channel_delta_map[psc.id]
+    else:
+        delta_nd = float(scenario.delta_nd)
+        delta_offtake = float(scenario.delta_offtake)
     if delta_nd != 0.0:
         nd_arr = [v * (1.0 + delta_nd) for v in nd_arr]
     if delta_offtake != 0.0:
@@ -414,6 +419,11 @@ async def build_line_inputs(
             RefInflation, project.inflation_profile_id
         )
 
+    # B-06: per-channel delta overrides
+    from app.services.scenario_service import get_channel_delta_map
+
+    ch_delta_map = await get_channel_delta_map(session, scenario_id)
+
     inputs: list[PipelineInput] = []
     for psk in psk_rows:
         # ProjectSKUChannel'ы для этого PSK
@@ -433,6 +443,7 @@ async def build_line_inputs(
                 scenario=scenario,
                 sorted_periods=sorted_periods,
                 inflation_profile=inflation_profile,
+                channel_delta_map=ch_delta_map if ch_delta_map else None,
             )
             inputs.append(inp)
 

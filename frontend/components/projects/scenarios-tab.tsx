@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { ChannelDeltasEditor } from "@/components/projects/channel-deltas-editor";
 import { GoNoGoBadge } from "@/components/go-no-go-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -435,6 +436,9 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* === B-06: Per-channel delta overrides === */}
+      <ChannelDeltasEditor projectId={projectId} />
 
       {/* === Compare таблица: KPI × scenarios для каждого scope === */}
       {notCalculated && baseResults === null ? (

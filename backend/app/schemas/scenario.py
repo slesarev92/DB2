@@ -41,6 +41,24 @@ class ScenarioUpdate(BaseModel):
     notes: str | None = Field(default=None, max_length=5000)
 
 
+class ChannelDeltaItem(BaseModel):
+    """Per-channel delta override (B-06)."""
+
+    psk_channel_id: int
+    delta_nd: Decimal = Field(default=Decimal("0"), ge=-1, le=1)
+    delta_offtake: Decimal = Field(default=Decimal("0"), ge=-1, le=1)
+
+
+class ChannelDeltaRequest(BaseModel):
+    """PUT /api/scenarios/{id}/channel-deltas.
+
+    Полная замена per-channel overrides. Items для psk_channel_id
+    которых нет в списке → удаляются (fallback к scenario-level delta).
+    """
+
+    items: list[ChannelDeltaItem] = Field(default_factory=list)
+
+
 class ScenarioResultRead(BaseModel):
     """Финансовые KPI сценария на одном горизонте (Y1-3 / Y1-5 / Y1-10).
 

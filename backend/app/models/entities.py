@@ -317,6 +317,40 @@ class Scenario(Base, TimestampMixin):
     )
 
 
+class ScenarioChannelDelta(Base, TimestampMixin):
+    """Per-SKU/Channel дельты сценария (B-06).
+
+    Позволяет задать отдельные delta_nd/delta_offtake для конкретного
+    (scenario × psk_channel). Если записи нет — используется delta
+    уровня сценария (Scenario.delta_nd/delta_offtake) как fallback.
+    """
+
+    __tablename__ = "scenario_channel_deltas"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    scenario_id: Mapped[int] = mapped_column(
+        ForeignKey("scenarios.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    psk_channel_id: Mapped[int] = mapped_column(
+        ForeignKey("project_sku_channels.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    delta_nd: Mapped[Decimal] = mapped_column(
+        Numeric(8, 6), nullable=False, default=Decimal("0")
+    )
+    delta_offtake: Mapped[Decimal] = mapped_column(
+        Numeric(8, 6), nullable=False, default=Decimal("0")
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "scenario_id", "psk_channel_id",
+            name="uq_scenario_channel_deltas_scenario_psc",
+        ),
+    )
+
+
 class ProjectSKU(Base, TimestampMixin):
     """SKU включённый в проект, со специфичными для проекта параметрами."""
 

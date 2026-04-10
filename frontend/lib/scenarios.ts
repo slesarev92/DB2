@@ -8,9 +8,11 @@
  *   GET   /api/scenarios/{id}/results          → 3 ScenarioResult по 3 скоупам
  */
 
-import { apiGet, apiPatch } from "./api";
+import { apiGet, apiPatch, apiPut } from "./api";
 
 import type {
+  ChannelDeltaItem,
+  ChannelDeltaRequest,
   ScenarioRead,
   ScenarioResultRead,
   ScenarioUpdate,
@@ -31,6 +33,24 @@ export function updateScenario(
   data: ScenarioUpdate,
 ): Promise<ScenarioRead> {
   return apiPatch<ScenarioRead>(`/api/scenarios/${scenarioId}`, data);
+}
+
+export function listChannelDeltas(
+  scenarioId: number,
+): Promise<ChannelDeltaItem[]> {
+  return apiGet<ChannelDeltaItem[]>(
+    `/api/scenarios/${scenarioId}/channel-deltas`,
+  );
+}
+
+export function putChannelDeltas(
+  scenarioId: number,
+  body: ChannelDeltaRequest,
+): Promise<ChannelDeltaItem[]> {
+  return apiPut<ChannelDeltaItem[]>(
+    `/api/scenarios/${scenarioId}/channel-deltas`,
+    body,
+  );
 }
 
 export function listScenarioResults(

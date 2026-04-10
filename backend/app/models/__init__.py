@@ -29,6 +29,7 @@ from app.models.entities import (
     RefSeasonality,
     SKU,
     Scenario,
+    ScenarioChannelDelta,
     ScenarioResult,
     User,
 )
@@ -60,6 +61,7 @@ __all__ = [
     "RefSeasonality",
     "SKU",
     "Scenario",
+    "ScenarioChannelDelta",
     "ScenarioResult",
     "User",
 ]

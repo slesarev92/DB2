@@ -9,6 +9,25 @@
 
 ## [Unreleased]
 
+### Added (B-06 — Per-SKU/channel scenario deltas, 2026-04-10)
+
+**Backend:**
+- Model `ScenarioChannelDelta` — per (scenario × psk_channel) delta_nd/delta_offtake
+  overrides. UNIQUE(scenario_id, psk_channel_id), CASCADE DELETE.
+- Migration `ebd9ab2577f2`: CREATE TABLE scenario_channel_deltas
+- `ChannelDeltaItem` / `ChannelDeltaRequest` schemas
+- `scenario_service`: list/replace/get_channel_delta_map
+- `calculation_service`: per-channel override > scenario-level fallback
+- GET/PUT /api/scenarios/{id}/channel-deltas
+- 5 new tests (417 total)
+
+**Frontend:**
+- `ChannelDeltaItem`, `ChannelDeltaRequest` types
+- `listChannelDeltas`, `putChannelDeltas` API functions
+- `ChannelDeltasEditor` component: per-channel ND%/Offtake% inputs
+  for Conservative + Aggressive, empty = fallback to global delta
+- Integrated in scenarios-tab below global deltas
+
 ### Added (B-11 — Tornado chart, 2026-04-10)
 
 **Frontend:**
