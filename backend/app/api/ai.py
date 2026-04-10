@@ -75,6 +75,8 @@ from app.services.ai_prompts import (
     KPI_EXPLAIN_SYSTEM,
     MARKETING_RESEARCH_SYSTEM,
     MARKETING_RESEARCH_TOPIC_PROMPTS,
+    PACKAGE_ITERATION_BLOCK,
+    PACKAGE_ITERATION_ENTRY,
     PACKAGE_VISION_SYSTEM,
     PACKAGE_VISION_WITH_PROMPT,
     SENSITIVITY_EXPLAIN_SYSTEM,
@@ -1180,6 +1182,37 @@ async def generate_package_mockup(
         )
 
     sku = psku.sku
+
+    # Load project for context enrichment
+    project = await session.get(Project, project_id)
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project {project_id} не найден",
+        )
+
+    # Load last 3 iterations for this SKU (oldest first for chronological context)
+    history_stmt = (
+        select(AIGeneratedImage)
+        .where(AIGeneratedImage.project_sku_id == body.project_sku_id)
+        .order_by(AIGeneratedImage.created_at.desc())
+        .limit(3)
+    )
+    prev_rows = list((await session.scalars(history_stmt)).all())
+    prev_rows.reverse()  # oldest first
+
+    iteration_history = ""
+    if prev_rows:
+        entries = "\n".join(
+            PACKAGE_ITERATION_ENTRY.format(
+                n=i + 1,
+                prompt=row.prompt_text[:300],
+                art_direction=row.art_direction[:500],
+            )
+            for i, row in enumerate(prev_rows)
+        )
+        iteration_history = PACKAGE_ITERATION_BLOCK.format(entries=entries)
+
     art_direction = ""
     vision_cost = Decimal("0")
 
@@ -1203,11 +1236,19 @@ async def generate_package_mockup(
 
         user_prompt = PACKAGE_VISION_WITH_PROMPT.format(
             user_prompt=body.prompt,
+            target_audience=project.target_audience or "не указана",
+            concept_text=project.concept_text or "не указана",
+            geography=project.geography or "не указана",
+            innovation_type=project.innovation_type or "не указан",
+            idea_short=project.idea_short or "не указана",
+            production_type=project.production_type or "не указан",
+            project_goal=project.project_goal or "не указана",
             brand=sku.brand,
             sku_name=sku.name,
             format=sku.format or "не указан",
             volume=f"{sku.volume_l}L" if sku.volume_l else "не указан",
             segment=sku.segment or "не указан",
+            iteration_history=iteration_history,
         )
 
         try:
@@ -1248,12 +1289,29 @@ async def generate_package_mockup(
             ) from exc
     else:
         # No reference — use prompt directly as art direction
-        art_direction = (
+        ctx_parts = [
             f"Product packaging mockup for FMCG brand '{sku.brand}', "
             f"product '{sku.name}', segment '{sku.segment or 'mainstream'}', "
-            f"format '{sku.format or 'bottle'}', volume {sku.volume_l or '0.5'}L. "
-            f"User request: {body.prompt}"
-        )
+            f"format '{sku.format or 'bottle'}', volume {sku.volume_l or '0.5'}L.",
+        ]
+        if project.target_audience:
+            ctx_parts.append(f"Target audience: {project.target_audience}.")
+        if project.concept_text:
+            ctx_parts.append(f"Product concept: {project.concept_text}.")
+        if project.geography:
+            ctx_parts.append(f"Market/geography: {project.geography}.")
+        if project.innovation_type:
+            ctx_parts.append(f"Innovation type: {project.innovation_type}.")
+        if project.idea_short:
+            ctx_parts.append(f"Idea: {project.idea_short}.")
+        ctx_parts.append(f"User request: {body.prompt}")
+        if prev_rows:
+            last = prev_rows[-1]
+            ctx_parts.append(
+                f"PREVIOUS ART DIRECTION (keep style, apply user changes): "
+                f"{last.art_direction[:500]}"
+            )
+        art_direction = " ".join(ctx_parts)
 
     # Step 2: Generate image via flux
     flux_prompt = (

@@ -25,6 +25,24 @@
 
 ## Записи
 
+## [2026-04-10] mock_polza_mockup fixture не мокала generate_image (mockup тесты 503)
+
+**Проблема:** 3 mockup-теста (without_reference, with_reference, set_primary)
+падали с 503 — `Polza media submit 401: Некорректный API ключ`.
+
+**Контекст:** `generate_image()` в `ai_service.py` использует `httpx.AsyncClient`
+напрямую (Polza Media API), а не OpenAI-совместимый клиент. Fixture мокала только
+`_get_client()` (OpenAI client), но `generate_image` вызывался без мока.
+
+**Решение:** Добавлен `monkeypatch.setattr(ai_service, "generate_image", gen_img_mock)`
+в `mock_polza_mockup` fixture — теперь перехватывается httpx-путь.
+
+**Урок:** При мокировании AI-сервиса проверять какой HTTP-клиент используется
+конкретной функцией. `_get_client()` (OpenAI SDK) и `generate_image()` (raw httpx)
+— два разных пути, оба нужно мокать.
+
+---
+
 ## [2026-04-09] Polza AI base URL и model naming — две ошибки в ADR-16, выявленные live smoke-тестом Phase 7.1
 
 **Проблема:** После того как пользователь положил реальный

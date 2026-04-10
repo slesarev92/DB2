@@ -1598,7 +1598,15 @@ def mock_polza_mockup(monkeypatch: pytest.MonkeyPatch) -> dict:
         "app.core.config.settings.polza_ai_api_key", "fake-test-key"
     )
 
-    return {"vision": vision_mock, "flux": flux_mock}
+    # generate_image uses httpx directly (not OpenAI client) — mock it too
+    gen_img_mock = AM(return_value={
+        "b64_json": fake_png_b64,
+        "model": "openai/gpt-image-1.5",
+        "latency_ms": 100,
+    })
+    monkeypatch.setattr(ai_service, "generate_image", gen_img_mock)
+
+    return {"vision": vision_mock, "flux": gen_img_mock}
 
 
 async def test_generate_mockup_without_reference(
@@ -1747,3 +1755,42 @@ async def test_set_mockup_as_primary(
     # Verify in DB
     await db_session.refresh(gorji_sku)
     assert gorji_sku.package_image_id == media_asset_id
+
+
+async def test_generate_mockup_iteration_includes_history(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+    gorji_sku: "ProjectSKU",
+    mock_polza_mockup: dict,
+    mock_redis: MagicMock,
+) -> None:
+    """Second mockup generation includes art_direction from the first one."""
+    # First generation
+    resp1 = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/generate-mockup",
+        json={
+            "project_sku_id": gorji_sku.id,
+            "prompt": "Minimalist bottle",
+        },
+    )
+    assert resp1.status_code == 200, resp1.text
+
+    # Second generation — should carry history from the first
+    resp2 = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/generate-mockup",
+        json={
+            "project_sku_id": gorji_sku.id,
+            "prompt": "Make the background darker",
+        },
+    )
+    assert resp2.status_code == 200, resp2.text
+
+    # Verify that generate_image was called with prompt containing
+    # previous art direction context
+    flux_call = mock_polza_mockup["flux"]
+    assert flux_call.await_count == 2
+    second_call_kwargs = flux_call.call_args_list[1].kwargs
+    flux_prompt = second_call_kwargs.get("prompt", "")
+    # The no-reference path injects "PREVIOUS ART DIRECTION" into the prompt
+    assert "PREVIOUS ART DIRECTION" in flux_prompt

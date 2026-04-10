@@ -2933,6 +2933,9 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
 - [x] 7.8 AI package mockups (flux-2-pro, vision+flux two-step, inline
   panel + style presets, confirmation dialog >5₽, unselected variants
   остаются в MediaAsset)
+- [x] 7.8.1 Mockup prompt enrichment: project context (target_audience,
+  concept_text, geography и др.) + iteration history (последние 3 mockup'а
+  для SKU инжектируются в промпт для итерационного дизайна)
 - [ ] 7.3 AI-комментарий чувствительности (POST .../ai/explain-sensitivity)
 - [x] 7.4 AI executive summary slide в PPT-экспорте *(закрыта 2026-04-10)*
 - [x] 7.5 Cost monitoring + бюджет проекта + rate limiting *(закрыта 2026-04-10)*

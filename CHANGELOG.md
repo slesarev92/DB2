@@ -7,6 +7,23 @@
 
 ---
 
+## [Unreleased]
+
+### Enhanced
+- **AI Mockup prompt enrichment:** промпт генерации mockup'а упаковки обогащён
+  контекстом проекта (target_audience, concept_text, geography, innovation_type,
+  idea_short, production_type, project_goal) — и для vision-пути, и для fallback
+- **AI Mockup iteration history:** при повторной генерации mockup'а для SKU
+  последние 3 итерации (prompt_text + art_direction) инжектируются в промпт,
+  позволяя Claude эволюционировать дизайн вместо генерации с нуля
+
+### Fixed
+- `mock_polza_mockup` test fixture: `generate_image` (httpx path) не мокался,
+  mockup-тесты падали с 503 (pre-existing bug)
+- 448 pytest passed (440 + 1 новый mockup iteration test; 4 pre-existing kpi failures)
+
+---
+
 ## [0.1.0] — 2026-04-10
 
 MVP release. Полный цикл: создание проекта → расчёт KPI → экспорт паспорта.
