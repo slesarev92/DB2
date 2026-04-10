@@ -574,6 +574,7 @@ async def save_executive_summary(
     project.ai_commentary_updated_at = datetime.now(timezone.utc)
     project.ai_commentary_updated_by = current_user.id
     await session.flush()
+    await session.commit()
 
     return {"status": "saved", "project_id": project_id}
 
@@ -985,6 +986,7 @@ async def generate_marketing_research(
         project.marketing_research = research
         flag_modified(project, "marketing_research")
         await session.flush()
+        await session.commit()
 
     return AIMarketingResearchResponse(
         topic=body.topic,
@@ -1030,6 +1032,7 @@ async def edit_marketing_research(
     project.marketing_research = research
     flag_modified(project, "marketing_research")
     await session.flush()
+    await session.commit()
 
     return {"status": "saved", "topic": body.topic}
 
@@ -1065,6 +1068,7 @@ async def delete_marketing_research(
     project.marketing_research = research or None
     flag_modified(project, "marketing_research")
     await session.flush()
+    await session.commit()
 
     return {"status": "deleted", "topic": topic}
 
@@ -1329,6 +1333,7 @@ async def set_mockup_as_primary(
 
     psku.package_image_id = gen_img.media_asset_id
     await session.flush()
+    await session.commit()
 
     return {"status": "set", "package_image_id": gen_img.media_asset_id}
 
@@ -1379,6 +1384,7 @@ async def update_ai_budget(
 
     project.ai_budget_rub_monthly = body.ai_budget_rub_monthly
     await session.flush()
+    await session.commit()
 
     stats = await get_project_usage_stats(session, project_id)
     return AIUsageResponse(**stats)
