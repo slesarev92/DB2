@@ -108,7 +108,7 @@ TIER_MODEL: dict[AIModelTier, str] = {
     AIModelTier.BALANCED: DEFAULT_CHAT_MODEL,  # claude-sonnet-4.6
     AIModelTier.HEAVY: COMPLEX_CHAT_MODEL,  # claude-opus-4.6
     AIModelTier.RESEARCH: COMPLEX_CHAT_MODEL,  # + web_search tool (7.7)
-    AIModelTier.IMAGE: "black-forest-labs/flux.2-pro",
+    AIModelTier.IMAGE: "openai/gpt-image-1.5",
 }
 """Маппинг tier → Polza model identifier. Изменение — через PR, не runtime."""
 
@@ -579,7 +579,7 @@ async def complete_vision(
 async def generate_image(
     *,
     prompt: str,
-    model: str = "black-forest-labs/flux.2-pro",
+    model: str = "openai/gpt-image-1.5",
     aspect_ratio: str = "1:1",
     n: int = 1,
 ) -> dict[str, Any]:
