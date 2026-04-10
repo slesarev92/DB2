@@ -188,6 +188,85 @@ class AIContextBuilder:
         }
 
 
+    async def for_executive_summary(
+        self,
+        *,
+        project_id: int,
+    ) -> dict[str, Any]:
+        """Контекст для executive summary (~5-8k tokens, Phase 7.4).
+
+        Собирает всё что нужно для обзорного слайда: KPI по всем
+        сценариям × scope, content fields, top SKU, sensitivity hint.
+
+        Raises:
+            AIContextBuilderError: project не найден или удалён.
+        """
+        project = await self._session.get(Project, project_id)
+        if project is None or project.deleted_at is not None:
+            raise AIContextBuilderError(
+                f"Project {project_id} не найден или удалён"
+            )
+
+        # All scenarios + results
+        scenarios_stmt = select(Scenario).where(
+            Scenario.project_id == project_id
+        )
+        scenarios = list(
+            (await self._session.scalars(scenarios_stmt)).all()
+        )
+        scenarios.sort(key=lambda s: SCENARIO_ORDER[s.type])
+
+        scenario_ids = [s.id for s in scenarios]
+        results_stmt = select(ScenarioResult).where(
+            ScenarioResult.scenario_id.in_(scenario_ids)
+        )
+        results = list((await self._session.scalars(results_stmt)).all())
+        results_by_scenario: dict[int, list[ScenarioResult]] = {}
+        for r in results:
+            results_by_scenario.setdefault(r.scenario_id, []).append(r)
+        for rows in results_by_scenario.values():
+            rows.sort(key=lambda r: SCOPE_ORDER[r.period_scope])
+
+        # Top-5 SKU
+        skus_stmt = (
+            select(ProjectSKU)
+            .where(ProjectSKU.project_id == project_id)
+            .where(ProjectSKU.include.is_(True))
+            .options(selectinload(ProjectSKU.sku))
+            .order_by(ProjectSKU.id)
+            .limit(5)
+        )
+        project_skus = list(
+            (await self._session.scalars(skus_stmt)).all()
+        )
+
+        return {
+            "project": {
+                "id": project.id,
+                "name": project.name,
+                "horizon_years": project.horizon_years,
+                "gate_stage": project.gate_stage,
+                "project_goal": _trim(project.project_goal, 500),
+                "target_audience": _trim(project.target_audience, 300),
+                "description": _trim(project.description, 500),
+                "rationale": _trim(project.rationale, 500),
+                "innovation_type": project.innovation_type,
+                "geography": project.geography,
+                "params": {
+                    "wacc": float(project.wacc),
+                    "tax_rate": float(project.tax_rate),
+                    "wc_rate": float(project.wc_rate),
+                    "vat_rate": float(project.vat_rate),
+                    "currency": project.currency,
+                },
+            },
+            "scenarios": [
+                _serialize_scenario(s, results_by_scenario.get(s.id, []))
+                for s in scenarios
+            ],
+            "top_skus": [_serialize_project_sku(ps) for ps in project_skus],
+        }
+
     async def for_sensitivity_interpretation(
         self,
         *,

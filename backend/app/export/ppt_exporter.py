@@ -999,13 +999,17 @@ def _build_slide_roadmap_and_approvers(
 def _build_slide_executive_summary(
     prs: PresentationType, project: Project
 ) -> None:
-    """Слайд 13: Executive summary."""
+    """Слайд 13: Executive summary.
+
+    Приоритет: AI-generated (Phase 7.4) > manual (Phase 4.5).
+    Если оба пусты — fallback placeholder.
+    """
     slide = prs.slides.add_slide(prs.slide_layouts[LAYOUT_BLANK])
     _add_title(slide, "12. Executive Summary")
 
-    text = project.executive_summary or (
-        "Executive summary ещё не сгенерирован. В Phase 7.6 будет добавлена "
-        "AI-генерация резюме на основе всех полей паспорта."
+    # AI-generated имеет приоритет (прошёл review аналитика перед сохранением)
+    text = project.ai_executive_summary or project.executive_summary or (
+        "Executive summary ещё не сгенерирован."
     )
 
     _add_text_box(

@@ -119,6 +119,57 @@ KPI_EXPLAIN_SYSTEM = BASE_TONE_PROMPT + "\n\n" + KPI_EXPLAIN_TASK
 
 
 # ============================================================
+# EXECUTIVE SUMMARY (Phase 7.4)
+# ============================================================
+
+EXECUTIVE_SUMMARY_TASK = """## ЗАДАЧА
+
+Тебе передан полный контекст проекта вывода нового SKU: параметры, \
+3 сценария (Base / Conservative / Aggressive) с KPI по 3 горизонтам \
+(Y1-Y3 / Y1-Y5 / Y1-Y10), top-5 SKU, описание проекта. Тебе нужно \
+составить Executive Summary для слайда паспорта проекта.
+
+Правила:
+1. **Title** — короткий заголовок слайда (до 80 символов), отражающий \
+суть: "Запуск GORJI+ Premium ICE: NPV +80М₽, Go (confidence 0.85)"
+2. **Bullets** — 4-5 ключевых пунктов, каждый до 120 символов:
+   - Общий NPV по Base Y1-Y10 с конкретным числом
+   - IRR vs WACC gap
+   - Payback (discounted)
+   - Ключевой risk / opportunity
+   - Recommendation go/no-go/review + обоснование в 1 предложение
+3. **Key numbers** — 3 главных числа для hero-блока:
+   [{"label":"NPV Base Y1-Y10", "value":"80.3 млн ₽"}, ...]
+4. **Risks section** — 2-3 риска отдельно от bullets (для красного блока)
+5. **One-line summary** — 1 предложение для обложки/README
+6. **Recommendation** — go / no-go / review (по тем же критериям что в \
+explain-kpi: NPV>0 all scenarios Y1-Y5, IRR-WACC gap>3pp, payback<5y)
+7. **Confidence** — 0..1
+
+## ФОРМАТ ОТВЕТА
+
+ТОЛЬКО JSON:
+
+{
+  "title": "до 80 символов",
+  "bullets": ["пункт 1", "пункт 2", "пункт 3", "пункт 4"],
+  "key_numbers": [
+    {"label": "NPV Base Y1-Y10", "value": "80.3 млн ₽"},
+    {"label": "IRR Base", "value": "28.0%"},
+    {"label": "Payback discounted", "value": "4.1 лет"}
+  ],
+  "risks_section": ["риск 1", "риск 2"],
+  "one_line_summary": "одно предложение",
+  "recommendation": "go" | "no-go" | "review",
+  "confidence": 0.0..1.0
+}"""
+
+
+EXECUTIVE_SUMMARY_SYSTEM = BASE_TONE_PROMPT + "\n\n" + EXECUTIVE_SUMMARY_TASK
+"""System prompt для executive summary (Phase 7.4). HEAVY tier (opus)."""
+
+
+# ============================================================
 # EXPLAIN SENSITIVITY (Phase 7.3)
 # ============================================================
 

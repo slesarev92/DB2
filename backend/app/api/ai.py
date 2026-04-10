@@ -35,10 +35,14 @@ from app.db import get_db
 from app.models import User
 from app.schemas.ai import (
     AIChatRequest,
+    AIExecutiveSummaryRequest,
+    AIExecutiveSummaryResponse,
+    AIExecutiveSummarySaveRequest,
     AIKpiExplanationRequest,
     AIKpiExplanationResponse,
     AISensitivityExplanationRequest,
     AISensitivityExplanationResponse,
+    LLMExecutiveSummaryOutput,
     LLMKpiOutput,
     LLMSensitivityOutput,
 )
@@ -47,8 +51,10 @@ from app.services.ai_context_builder import (
     AIContextBuilder,
     AIContextBuilderError,
 )
+from app.models import Project
 from app.services.ai_prompts import (
     CHAT_SYSTEM_PROMPT,
+    EXECUTIVE_SUMMARY_SYSTEM,
     KPI_EXPLAIN_SYSTEM,
     SENSITIVITY_EXPLAIN_SYSTEM,
 )
@@ -375,6 +381,164 @@ async def explain_sensitivity(
     await ai_cache.release_dedupe_lock(lock_key)
 
     return AISensitivityExplanationResponse(**response_payload, cached=False)
+
+
+# ============================================================
+# EXECUTIVE SUMMARY (Phase 7.4)
+# ============================================================
+
+EXEC_SUMMARY_CACHE_TTL = 12 * 3600  # 12h — shorter than default 24h
+
+
+@router.post(
+    "/generate-executive-summary",
+    response_model=AIExecutiveSummaryResponse,
+    summary="Сгенерировать AI executive summary",
+)
+@limiter.limit("10/minute", key_func=_rate_limit_key)
+async def generate_executive_summary(
+    request: Request,
+    project_id: int,
+    body: AIExecutiveSummaryRequest,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(_set_rate_limit_user)],
+) -> AIExecutiveSummaryResponse:
+    """Generate executive summary через opus (HEAVY tier).
+
+    Более дорогой вызов (~10-15₽), поэтому UI показывает confirmation
+    dialog перед отправкой. Cache TTL 12h (не 24h — executive часто
+    переделывают).
+    """
+    await check_daily_user_budget(session, user_id=current_user.id)
+
+    builder = AIContextBuilder(session)
+    try:
+        context = await builder.for_executive_summary(
+            project_id=project_id,
+        )
+    except AIContextBuilderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
+
+    input_hash = ai_cache.hash_context(context)
+    cache_key = ai_cache.make_cache_key(
+        project_id, AIFeature.EXECUTIVE_SUMMARY, input_hash
+    )
+    lock_key = ai_cache.make_lock_key(
+        project_id, AIFeature.EXECUTIVE_SUMMARY, input_hash
+    )
+
+    cached = await ai_cache.get_cached(cache_key)
+    if cached is not None:
+        await log_ai_usage(
+            session,
+            project_id=project_id,
+            endpoint="executive_summary_cache",
+            model=cached.get("model", "unknown"),
+            result=None,
+        )
+        return AIExecutiveSummaryResponse(
+            **{k: v for k, v in cached.items() if k != "cached"},
+            cached=True,
+        )
+
+    lock_acquired = await ai_cache.acquire_dedupe_lock(lock_key)
+    if not lock_acquired:
+        cached = await ai_cache.wait_for_cache(cache_key)
+        if cached is not None:
+            await log_ai_usage(
+                session,
+                project_id=project_id,
+                endpoint="executive_summary_dedupe",
+                model=cached.get("model", "unknown"),
+                result=None,
+            )
+            return AIExecutiveSummaryResponse(
+                **{k: v for k, v in cached.items() if k != "cached"},
+                cached=True,
+            )
+
+    try:
+        user_prompt = (
+            "Составь Executive Summary для слайда паспорта проекта:\n\n"
+            + json.dumps(context, ensure_ascii=False, indent=2)
+        )
+        result = await ai_service.complete_json(
+            system_prompt=EXECUTIVE_SUMMARY_SYSTEM,
+            user_prompt=user_prompt,
+            schema=LLMExecutiveSummaryOutput,
+            feature=AIFeature.EXECUTIVE_SUMMARY,
+            tier_override=body.tier_override,
+            endpoint="executive_summary",
+        )
+    except AIServiceUnavailableError as exc:
+        await log_ai_usage(
+            session,
+            project_id=project_id,
+            endpoint="executive_summary",
+            error=str(exc),
+        )
+        await ai_cache.release_dedupe_lock(lock_key)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"AI executive summary недоступен: {exc}",
+        ) from exc
+
+    cost_rub = calculate_cost(
+        result.model, result.prompt_tokens, result.completion_tokens
+    )
+    await log_ai_usage(
+        session, project_id=project_id,
+        endpoint="executive_summary", result=result,
+    )
+
+    response_payload: dict = {
+        **result.parsed.model_dump(),
+        "cost_rub": cost_rub,
+        "model": result.model,
+    }
+    await ai_cache.set_cached(
+        cache_key, _jsonable(response_payload), ttl=EXEC_SUMMARY_CACHE_TTL
+    )
+    await ai_cache.release_dedupe_lock(lock_key)
+
+    return AIExecutiveSummaryResponse(**response_payload, cached=False)
+
+
+@router.patch(
+    "/executive-summary",
+    summary="Сохранить отредактированный executive summary",
+)
+@limiter.limit("10/minute", key_func=_rate_limit_key)
+async def save_executive_summary(
+    request: Request,
+    project_id: int,
+    body: AIExecutiveSummarySaveRequest,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(_set_rate_limit_user)],
+) -> dict:
+    """Save edited AI executive summary to Project.
+
+    Аналитик генерирует draft через generate endpoint, редактирует в
+    textarea, и сохраняет через этот PATCH. PPT/PDF экспорт читает
+    из `Project.ai_executive_summary`.
+    """
+    from datetime import datetime, timezone
+
+    project = await session.get(Project, project_id)
+    if project is None or project.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project {project_id} не найден",
+        )
+
+    project.ai_executive_summary = body.ai_executive_summary
+    project.ai_commentary_updated_at = datetime.now(timezone.utc)
+    project.ai_commentary_updated_by = current_user.id
+    await session.flush()
+
+    return {"status": "saved", "project_id": project_id}
 
 
 # ============================================================

@@ -217,6 +217,33 @@ class Project(Base, TimestampMixin):
     roadmap_tasks: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     approvers: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
 
+    # ============================================================
+    # AI-генерированный контент (Фаза 7.4, ADR-16 решение #5)
+    # ============================================================
+    # Экспорт НИКОГДА не вызывает AI live — читает из этих полей.
+    # Flow: generate → draft → edit → save → export.
+
+    # Текст executive summary от AI (может быть отредактирован аналитиком).
+    # Если NULL — секция executive summary в PPT/PDF пропускается.
+    ai_executive_summary: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+
+    # Cached KPI commentary (structured JSON):
+    # {"<scenario_id>": {"<scope>": {"summary","drivers","risks",...}}}
+    # Переиспользуется при повторных экспортах без обращения к Polza.
+    ai_kpi_commentary: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
+
+    # Когда и кем последний раз обновлялся AI-контент (для audit).
+    ai_commentary_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    ai_commentary_updated_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
     # Soft delete: устанавливается при DELETE /api/projects/{id}.
     # Все запросы фильтруют WHERE deleted_at IS NULL.
     # Финансовый продукт — данные не теряем при ошибочном удалении.

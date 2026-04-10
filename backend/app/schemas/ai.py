@@ -164,3 +164,50 @@ class AIChatRequest(BaseModel):
         ),
     )
     tier_override: AIModelTier | None = None
+
+
+# ============================================================
+# EXECUTIVE SUMMARY (Phase 7.4)
+# ============================================================
+
+
+class AIExecutiveSummaryRequest(BaseModel):
+    """Request body — пустой (project_id в path), но tier_override допустим."""
+    tier_override: AIModelTier | None = None
+
+
+class KeyNumber(BaseModel):
+    label: str
+    value: str
+
+
+class AIExecutiveSummaryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    bullets: list[str]
+    key_numbers: list[KeyNumber]
+    risks_section: list[str]
+    one_line_summary: str
+    recommendation: Literal["go", "no-go", "review"]
+    confidence: float = Field(ge=0, le=1)
+    cost_rub: Decimal
+    model: str
+    cached: bool
+
+
+class LLMExecutiveSummaryOutput(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    title: str
+    bullets: list[str]
+    key_numbers: list[KeyNumber]
+    risks_section: list[str]
+    one_line_summary: str
+    recommendation: Literal["go", "no-go", "review"]
+    confidence: float = Field(ge=0, le=1)
+
+
+class AIExecutiveSummarySaveRequest(BaseModel):
+    """PATCH body для сохранения отредактированного executive summary."""
+    ai_executive_summary: str = Field(..., min_length=1, max_length=10000)

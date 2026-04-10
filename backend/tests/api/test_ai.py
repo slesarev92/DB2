@@ -746,3 +746,147 @@ async def test_chat_empty_question_returns_422(
         json={"question": ""},
     )
     assert resp.status_code == 422
+
+
+# ============================================================
+# Phase 7.4 — EXECUTIVE SUMMARY
+# ============================================================
+
+
+@pytest.fixture
+def mock_polza_exec_summary(mock_polza: AsyncMock) -> AsyncMock:
+    """Override mock_polza for executive summary schema."""
+    exec_output = {
+        "title": "GORJI+ Premium ICE: NPV +80М₽, Go",
+        "bullets": [
+            "NPV Base Y1-Y10: 80.3 млн ₽",
+            "IRR 28% vs WACC 19% (gap +9 п.п.)",
+            "Payback discounted 4.1 лет",
+            "Ключевой risk: гипер-чувствительность к ND",
+        ],
+        "key_numbers": [
+            {"label": "NPV Base Y1-Y10", "value": "80.3 млн ₽"},
+            {"label": "IRR Base", "value": "28.0%"},
+            {"label": "Payback", "value": "4.1 лет"},
+        ],
+        "risks_section": ["ND sensitivity", "Payback >4 лет"],
+        "one_line_summary": "Проект GORJI+ рекомендован к запуску с NPV 80.3 млн ₽.",
+        "recommendation": "go",
+        "confidence": 0.85,
+    }
+    mock_polza.return_value = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(content=json.dumps(exec_output))
+            )
+        ],
+        usage=SimpleNamespace(
+            prompt_tokens=5000, completion_tokens=800, total_tokens=5800
+        ),
+        model="anthropic/claude-opus-4.6",
+    )
+    return mock_polza
+
+
+async def test_generate_executive_summary_happy_path(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+    mock_polza_exec_summary: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """Executive summary generation → 200 + opus model + correct structure."""
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/generate-executive-summary",
+        json={},
+    )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["title"].startswith("GORJI+")
+    assert len(data["bullets"]) == 4
+    assert len(data["key_numbers"]) == 3
+    assert data["recommendation"] == "go"
+    assert data["model"] == "anthropic/claude-opus-4.6"
+    assert data["cached"] is False
+
+    logs = (
+        await db_session.scalars(
+            select(AIUsageLog).where(
+                AIUsageLog.endpoint == "executive_summary"
+            )
+        )
+    ).all()
+    assert len(logs) == 1
+
+
+async def test_generate_executive_summary_cache_hit(
+    auth_client: AsyncClient,
+    gorji_project: Project,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """Cache hit → cached=true."""
+    cached_payload = {
+        "title": "Cached title",
+        "bullets": ["b1"],
+        "key_numbers": [{"label": "NPV", "value": "10₽"}],
+        "risks_section": [],
+        "one_line_summary": "cached",
+        "recommendation": "review",
+        "confidence": 0.5,
+        "cost_rub": "10.5",
+        "model": "anthropic/claude-opus-4.6",
+    }
+    mock_redis.get.return_value = json.dumps(cached_payload)
+
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/generate-executive-summary",
+        json={},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["cached"] is True
+    mock_polza.assert_not_awaited()
+
+
+async def test_save_executive_summary(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """PATCH saves ai_executive_summary to Project."""
+    resp = await auth_client.patch(
+        f"/api/projects/{gorji_project.id}/ai/executive-summary",
+        json={"ai_executive_summary": "Отредактированный executive summary текст"},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "saved"
+
+    # Verify in DB
+    await db_session.refresh(gorji_project)
+    assert gorji_project.ai_executive_summary == "Отредактированный executive summary текст"
+    assert gorji_project.ai_commentary_updated_at is not None
+
+
+async def test_save_executive_summary_deleted_project(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """PATCH on deleted project → 404."""
+    from datetime import datetime, timezone
+    gorji_project.deleted_at = datetime.now(timezone.utc)
+    await db_session.flush()
+
+    resp = await auth_client.patch(
+        f"/api/projects/{gorji_project.id}/ai/executive-summary",
+        json={"ai_executive_summary": "text"},
+    )
+    assert resp.status_code == 404

@@ -680,12 +680,13 @@
 {# ================================================================== #}
 <div class="section">
   <h2>12. Executive Summary</h2>
-  {% if project.executive_summary %}
+  {% if project.ai_executive_summary %}
+    <p>{{ project.ai_executive_summary }}</p>
+  {% elif project.executive_summary %}
     <p>{{ project.executive_summary }}</p>
   {% else %}
     <p class="empty-hint">
-      Executive summary ещё не сгенерирован. В Phase 7.6 будет добавлена
-      AI-генерация резюме на основе всех полей паспорта.
+      Executive summary ещё не сгенерирован.
     </p>
   {% endif %}
 </div>
