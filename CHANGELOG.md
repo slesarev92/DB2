@@ -7,7 +7,34 @@
 
 ---
 
-## [Unreleased]
+## [0.1.0] — 2026-04-10
+
+MVP release. Полный цикл: создание проекта → расчёт KPI → экспорт паспорта.
+
+### Fixed (Production deploy + AI fixes, 2026-04-10)
+
+**AI integration fixes (Polza API):**
+- JSON markdown fence stripping (`\`\`\`json ... \`\`\`` wrapper from LLM responses)
+- Image generation: rewritten to Polza Media API (`POST /v1/media` + async polling)
+- Model switch: `flux.2-pro` → `openai/gpt-image-1.5` (flux unstable)
+- `session.commit()` added to all 7 AI mutation endpoints (data was rolling back)
+- KPI + sensitivity commentary persisted in DB (survives page reload)
+- Collapsible AI results UI ("Свернуть/Показать" instead of destructive "Закрыть")
+
+**Content fields:**
+- `innovation_type`, `geography`, `production_type` widened to TEXT (was VARCHAR 100)
+- `FieldLabel` extracted from ContentTab body to prevent remount on re-render
+
+**Media & uploads:**
+- `FormData` handling in `apiPost` (was JSON.stringify'ing FormData)
+- `MediaKind` Literal expanded with `ai_reference`, `ai_generated`
+- Cyrillic filename RFC 5987 encoding in Content-Disposition header
+- `GET /api/media/{id}` made public (no auth) for `<img src>` tags
+- Volume mount fixed: `/app/media` (not `/media`)
+
+**Infrastructure:**
+- Docker mirror configured for RU VPS (Docker Hub blocked)
+- npm mirror support via `NPM_REGISTRY` build arg
 
 ### Added (6.2 — CI/CD + Production Dockerfiles + GHCR, 2026-04-10)
 

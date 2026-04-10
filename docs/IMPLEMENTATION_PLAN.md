@@ -2966,6 +2966,13 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
   `beforeunload` on dirty, tab switch blurs first (auto-save trigger).
 - tsc --noEmit 0 errors, 442 pytest passed, frontend HTTP 200.
 
+### ✅ Production deploy + AI hotfixes (2026-04-10)
+- [x] Deployed to VPS 45.144.221.215:8080 (6 Docker services)
+- [x] AI fixes: Polza Media API, JSON fence strip, session.commit, gpt-image-1.5
+- [x] AI persistence: KPI + sensitivity commentary saved in DB JSONB
+- [x] Media fixes: FormData, MediaKind, Cyrillic filenames, public GET, volume mount
+- [x] Docker mirror for RU (Docker Hub blocked), npm mirror support
+
 ### ✅ Финальный этап — CI/CD и production deploy (закрыт 2026-04-10)
 - [x] 6.2 GitHub Actions CI/CD + Production Dockerfiles + GHCR ✅
   - `backend/Dockerfile.prod`: multi-stage, gunicorn 4 workers, non-root appuser, healthcheck
