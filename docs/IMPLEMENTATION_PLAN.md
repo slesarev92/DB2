@@ -2920,7 +2920,7 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
   protection activation, A/B Prompt Lab dev-only) ← **следующий шаг**
 - [x] 7.3 Sensitivity interpretation + Freeform Chat в AI Panel *(закрыта 2026-04-10, 345+ tests)*
   (SSE streaming, Redis conversation history)
-- [ ] 7.4 AI executive summary (DB-cached, экспорт PPT/PDF читает
+- [x] 7.4 AI executive summary (DB-cached, экспорт PPT/PDF читает
   `Project.ai_executive_summary` из БД, не вызывает AI live)
 - [ ] 7.5 Cost monitoring polish (project budget 500₽ default,
   daily user limit 100₽, real Polza balance widget, usage endpoint,
@@ -2933,7 +2933,7 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
   panel + style presets, confirmation dialog >5₽, unselected variants
   остаются в MediaAsset)
 - [ ] 7.3 AI-комментарий чувствительности (POST .../ai/explain-sensitivity)
-- [ ] 7.4 AI executive summary slide в PPT-экспорте
+- [x] 7.4 AI executive summary slide в PPT-экспорте *(закрыта 2026-04-10)*
 - [ ] 7.5 Cost monitoring + бюджет проекта + rate limiting
 - [ ] 7.6 AI генерация text content fields паспорта (15+ промптов для
   полей из 4.5.1, кнопка «✨ Сгенерировать AI» в content tab)

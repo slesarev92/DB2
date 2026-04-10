@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { ExecutiveSummaryInline } from "@/components/ai-panel/executive-summary-inline";
 import { ExplainKpiInline } from "@/components/ai-panel/explain-kpi-inline";
 import { GoNoGoBadge } from "@/components/go-no-go-badge";
 import { KpiCard } from "@/components/projects/kpi-card";
@@ -399,6 +400,16 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
               scope="y1y5"
             />
           )}
+
+          {/* AI Executive Summary (Phase 7.4) */}
+          <ExecutiveSummaryInline
+            projectId={projectId}
+            projectName="Проект"
+            savedSummary={null}
+            onSaved={() => {
+              /* В 7.5 — refresh project data */
+            }}
+          />
 
           {/* NPV row */}
           <div>
