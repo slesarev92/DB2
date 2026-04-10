@@ -41,6 +41,8 @@ interface Props {
   projectName: string;
   scenarioId: number;
   scope: PeriodScope;
+  /** Pre-loaded commentary from Project.ai_kpi_commentary */
+  savedCommentary?: Record<string, unknown> | null;
 }
 
 export function ExplainKpiInline({
@@ -48,10 +50,18 @@ export function ExplainKpiInline({
   projectName,
   scenarioId,
   scope,
+  savedCommentary,
 }: Props) {
   const { pushHistory, refreshUsage } = useAIPanel();
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<AIKpiExplanationResponse | null>(null);
+
+  // Restore from DB if available
+  const savedForKey = savedCommentary?.[`${scenarioId}_${scope}`] as
+    | AIKpiExplanationResponse
+    | undefined;
+  const [result, setResult] = useState<AIKpiExplanationResponse | null>(
+    savedForKey ?? null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [tier, setTier] = useState<AIModelTier>("balanced");
   const abortRef = useRef<AbortController | null>(null);

@@ -23,17 +23,25 @@ interface Props {
   projectId: number;
   projectName: string;
   scenarioId: number;
+  /** Pre-loaded commentary from Project.ai_sensitivity_commentary */
+  savedCommentary?: Record<string, unknown> | null;
 }
 
 export function ExplainSensitivityInline({
   projectId,
   projectName,
   scenarioId,
+  savedCommentary,
 }: Props) {
   const { pushHistory, refreshUsage } = useAIPanel();
   const [loading, setLoading] = useState(false);
+
+  // Restore from DB if available
+  const savedForScenario = savedCommentary?.[String(scenarioId)] as
+    | AISensitivityExplanationResponse
+    | undefined;
   const [result, setResult] = useState<AISensitivityExplanationResponse | null>(
-    null,
+    savedForScenario ?? null,
   );
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);

@@ -22,10 +22,11 @@ import {
 } from "@/components/ui/table";
 import { ApiError } from "@/lib/api";
 import { formatMoney, formatPercent } from "@/lib/format";
+import { getProject } from "@/lib/projects";
 import { listProjectScenarios } from "@/lib/scenarios";
 import { computeSensitivity } from "@/lib/sensitivity";
 
-import type { SensitivityCell, SensitivityResponse } from "@/types/api";
+import type { ProjectRead, SensitivityCell, SensitivityResponse } from "@/types/api";
 
 interface SensitivityTabProps {
   projectId: number;
@@ -79,6 +80,12 @@ export function SensitivityTab({ projectId }: SensitivityTabProps) {
   const [error, setError] = useState<string | null>(null);
   const [hasFetched, setHasFetched] = useState(false);
   const [baseScenarioId, setBaseScenarioId] = useState<number | null>(null);
+  const [project, setProject] = useState<ProjectRead | null>(null);
+
+  // Load project for saved AI commentary
+  useEffect(() => {
+    getProject(projectId).then(setProject).catch(() => {});
+  }, [projectId]);
 
   // Fetch base scenario ID for AI inline
   useEffect(() => {
@@ -179,8 +186,9 @@ export function SensitivityTab({ projectId }: SensitivityTabProps) {
           {baseScenarioId !== null && (
             <ExplainSensitivityInline
               projectId={projectId}
-              projectName="Проект"
+              projectName={project?.name ?? "Проект"}
               scenarioId={baseScenarioId}
+              savedCommentary={project?.ai_sensitivity_commentary as Record<string, unknown> | null}
             />
           )}
 

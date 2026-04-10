@@ -243,6 +243,12 @@ class Project(Base, TimestampMixin):
         JSONB, nullable=True
     )
 
+    # Cached sensitivity commentary (structured JSON):
+    # {"<scenario_id>": {"narrative","most_sensitive_param",...}}
+    ai_sensitivity_commentary: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
+
     # Когда и кем последний раз обновлялся AI-контент (для audit).
     ai_commentary_updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

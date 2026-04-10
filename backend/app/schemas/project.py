@@ -69,6 +69,11 @@ class ProjectBase(BaseModel):
     roadmap_tasks: list[Any] | None = None
     approvers: list[Any] | None = None
 
+    # 7.x: AI cached commentaries (persisted for page reload survival)
+    ai_executive_summary: str | None = None
+    ai_kpi_commentary: dict[str, Any] | None = None
+    ai_sensitivity_commentary: dict[str, Any] | None = None
+
     # 7.5: AI budget — месячный лимит расходов на AI в рублях.
     # None = server_default 500₽ при создании; явный None через PATCH =
     # unlimited (бюджет не ограничен).

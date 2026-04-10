@@ -122,6 +122,10 @@ export interface ProjectContentFields {
   approvers?: Approver[] | null;
   // Phase 7.5: AI budget
   ai_budget_rub_monthly?: string | null;
+  // Phase 7.x: AI cached commentaries (persisted in DB)
+  ai_executive_summary?: string | null;
+  ai_kpi_commentary?: Record<string, unknown> | null;
+  ai_sensitivity_commentary?: Record<string, unknown> | null;
   // Phase 7.7: Marketing research JSONB
   marketing_research?: Record<string, unknown> | null;
 }

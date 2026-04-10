@@ -30,6 +30,7 @@ import {
   downloadProjectXlsx,
 } from "@/lib/export";
 import { formatMoney, formatPercent } from "@/lib/format";
+import { getProject } from "@/lib/projects";
 import {
   listProjectScenarios,
   listScenarioResults,
@@ -37,6 +38,7 @@ import {
 
 import type {
   PeriodScope,
+  ProjectRead,
   ScenarioRead,
   ScenarioResultRead,
 } from "@/types/api";
@@ -96,6 +98,12 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
   const [notCalculated, setNotCalculated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [project, setProject] = useState<ProjectRead | null>(null);
+
+  // Load project for saved AI commentary
+  useEffect(() => {
+    getProject(projectId).then(setProject).catch(() => {});
+  }, [projectId]);
 
   // Recalculate state
   const [recalculating, setRecalculating] = useState(false);
@@ -395,9 +403,10 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
           {selectedScenarioId !== null && (
             <ExplainKpiInline
               projectId={projectId}
-              projectName="Проект"
+              projectName={project?.name ?? "Проект"}
               scenarioId={selectedScenarioId}
               scope="y1y5"
+              savedCommentary={project?.ai_kpi_commentary as Record<string, unknown> | null}
             />
           )}
 

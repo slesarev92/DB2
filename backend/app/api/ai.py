@@ -281,6 +281,19 @@ async def explain_kpi(
     await ai_cache.set_cached(cache_key, _jsonable(response_payload))
     await ai_cache.release_dedupe_lock(lock_key)
 
+    # Persist to Project.ai_kpi_commentary for reload survival
+    from sqlalchemy.orm.attributes import flag_modified as _fm
+
+    project = await session.get(Project, project_id)
+    if project is not None:
+        kpi_cache = project.ai_kpi_commentary or {}
+        cache_key_db = f"{body.scenario_id}_{body.period_scope}"
+        kpi_cache[cache_key_db] = _jsonable(response_payload)
+        project.ai_kpi_commentary = kpi_cache
+        _fm(project, "ai_kpi_commentary")
+        await session.flush()
+        await session.commit()
+
     return AIKpiExplanationResponse(**response_payload, cached=False)
 
 
@@ -409,6 +422,18 @@ async def explain_sensitivity(
     }
     await ai_cache.set_cached(cache_key, _jsonable(response_payload))
     await ai_cache.release_dedupe_lock(lock_key)
+
+    # Persist to Project.ai_sensitivity_commentary for reload survival
+    from sqlalchemy.orm.attributes import flag_modified as _fm2
+
+    project = await session.get(Project, project_id)
+    if project is not None:
+        sens_cache = project.ai_sensitivity_commentary or {}
+        sens_cache[str(body.scenario_id)] = _jsonable(response_payload)
+        project.ai_sensitivity_commentary = sens_cache
+        _fm2(project, "ai_sensitivity_commentary")
+        await session.flush()
+        await session.commit()
 
     return AISensitivityExplanationResponse(**response_payload, cached=False)
 
