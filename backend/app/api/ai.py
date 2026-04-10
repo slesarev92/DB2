@@ -207,6 +207,10 @@ async def explain_kpi(
             model=cached.get("model", "unknown"),
             result=None,
         )
+        # Persist to DB if not yet saved (backfill from Redis)
+        await _persist_kpi_commentary(
+            session, project_id, body.scenario_id, body.period_scope, cached
+        )
         return AIKpiExplanationResponse(
             **{k: v for k, v in cached.items() if k != "cached"},
             cached=True,
@@ -281,20 +285,52 @@ async def explain_kpi(
     await ai_cache.set_cached(cache_key, _jsonable(response_payload))
     await ai_cache.release_dedupe_lock(lock_key)
 
-    # Persist to Project.ai_kpi_commentary for reload survival
-    from sqlalchemy.orm.attributes import flag_modified as _fm
-
-    project = await session.get(Project, project_id)
-    if project is not None:
-        kpi_cache = project.ai_kpi_commentary or {}
-        cache_key_db = f"{body.scenario_id}_{body.period_scope}"
-        kpi_cache[cache_key_db] = _jsonable(response_payload)
-        project.ai_kpi_commentary = kpi_cache
-        _fm(project, "ai_kpi_commentary")
-        await session.flush()
-        await session.commit()
+    await _persist_kpi_commentary(
+        session, project_id, body.scenario_id, body.period_scope, response_payload
+    )
 
     return AIKpiExplanationResponse(**response_payload, cached=False)
+
+
+async def _persist_kpi_commentary(
+    session: AsyncSession,
+    project_id: int,
+    scenario_id: int,
+    scope: str,
+    payload: dict,
+) -> None:
+    """Save KPI commentary to Project.ai_kpi_commentary JSONB."""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    project = await session.get(Project, project_id)
+    if project is None:
+        return
+    cache = project.ai_kpi_commentary or {}
+    cache[f"{scenario_id}_{scope}"] = _jsonable(payload)
+    project.ai_kpi_commentary = cache
+    flag_modified(project, "ai_kpi_commentary")
+    await session.flush()
+    await session.commit()
+
+
+async def _persist_sensitivity_commentary(
+    session: AsyncSession,
+    project_id: int,
+    scenario_id: int,
+    payload: dict,
+) -> None:
+    """Save sensitivity commentary to Project.ai_sensitivity_commentary JSONB."""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    project = await session.get(Project, project_id)
+    if project is None:
+        return
+    cache = project.ai_sensitivity_commentary or {}
+    cache[str(scenario_id)] = _jsonable(payload)
+    project.ai_sensitivity_commentary = cache
+    flag_modified(project, "ai_sensitivity_commentary")
+    await session.flush()
+    await session.commit()
 
 
 def _jsonable(payload: dict) -> dict:
@@ -354,6 +390,9 @@ async def explain_sensitivity(
             endpoint="explain_sensitivity_cache",
             model=cached.get("model", "unknown"),
             result=None,
+        )
+        await _persist_sensitivity_commentary(
+            session, project_id, body.scenario_id, cached
         )
         return AISensitivityExplanationResponse(
             **{k: v for k, v in cached.items() if k != "cached"},
@@ -423,17 +462,9 @@ async def explain_sensitivity(
     await ai_cache.set_cached(cache_key, _jsonable(response_payload))
     await ai_cache.release_dedupe_lock(lock_key)
 
-    # Persist to Project.ai_sensitivity_commentary for reload survival
-    from sqlalchemy.orm.attributes import flag_modified as _fm2
-
-    project = await session.get(Project, project_id)
-    if project is not None:
-        sens_cache = project.ai_sensitivity_commentary or {}
-        sens_cache[str(body.scenario_id)] = _jsonable(response_payload)
-        project.ai_sensitivity_commentary = sens_cache
-        _fm2(project, "ai_sensitivity_commentary")
-        await session.flush()
-        await session.commit()
+    await _persist_sensitivity_commentary(
+        session, project_id, body.scenario_id, response_payload
+    )
 
     return AISensitivityExplanationResponse(**response_payload, cached=False)
 

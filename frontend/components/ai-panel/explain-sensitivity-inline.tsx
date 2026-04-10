@@ -37,6 +37,7 @@ export function ExplainSensitivityInline({
   const [loading, setLoading] = useState(false);
 
   const [result, setResult] = useState<AISensitivityExplanationResponse | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Restore saved commentary from DB when project data arrives
@@ -45,7 +46,10 @@ export function ExplainSensitivityInline({
     const saved = savedCommentary?.[String(scenarioId)] as
       | AISensitivityExplanationResponse
       | undefined;
-    if (saved) setResult({ ...saved, cached: true });
+    if (saved) {
+      setResult({ ...saved, cached: true });
+      setCollapsed(false);
+    }
   }, [savedCommentary, scenarioId]); // eslint-disable-line react-hooks/exhaustive-deps
   const abortRef = useRef<AbortController | null>(null);
 
@@ -106,13 +110,24 @@ export function ExplainSensitivityInline({
             <X className="h-3 w-3" /> Отменить
           </button>
         ) : (
-          <button
-            type="button"
-            onClick={handleRun}
-            className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"
-          >
-            ✨ Интерпретировать (~{cost}₽)
-          </button>
+          <div className="flex gap-2">
+            {result && collapsed && (
+              <button
+                type="button"
+                onClick={() => setCollapsed(false)}
+                className="rounded-md border px-3 py-1.5 text-xs font-medium"
+              >
+                Показать
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleRun}
+              className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"
+            >
+              ✨ {result ? "Обновить" : "Интерпретировать"} (~{cost}₽)
+            </button>
+          </div>
         )}
       </div>
 
@@ -135,7 +150,7 @@ export function ExplainSensitivityInline({
         </div>
       )}
 
-      {result !== null && (
+      {result !== null && !collapsed && (
         <div className="mt-3 space-y-3 text-sm">
           <div className="flex items-center gap-4 rounded-md bg-muted/50 p-2 text-xs">
             <span>
@@ -183,10 +198,10 @@ export function ExplainSensitivityInline({
             <span>{formatCostRub(result.cost_rub)}</span>
             <button
               type="button"
-              onClick={() => { setResult(null); setError(null); }}
+              onClick={() => setCollapsed(true)}
               className="underline"
             >
-              Закрыть
+              Свернуть
             </button>
           </div>
         </div>
