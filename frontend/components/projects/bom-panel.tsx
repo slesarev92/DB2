@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { FieldError } from "@/components/ui/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -32,8 +33,29 @@ import {
   listBomItems,
   updateProjectSku,
 } from "@/lib/skus";
+import {
+  useFieldValidation,
+  type ValidationRules,
+} from "@/lib/use-field-validation";
+import {
+  useSortableTable,
+  sortIndicator,
+  type SortableColumn,
+} from "@/lib/use-sortable-table";
 
 import type { BOMItemRead, ProjectSKUDetail } from "@/types/api";
+
+const BOM_SORT_COLUMNS: SortableColumn<BOMItemRead, string>[] = [
+  { key: "name", accessor: (b) => b.ingredient_name },
+  { key: "qty", accessor: (b) => Number(b.quantity_per_unit) },
+  { key: "loss", accessor: (b) => Number(b.loss_pct) },
+  { key: "price", accessor: (b) => Number(b.price_per_unit) },
+  {
+    key: "cost",
+    accessor: (b) =>
+      Number(b.quantity_per_unit) * Number(b.price_per_unit) * (1 + Number(b.loss_pct)),
+  },
+];
 
 interface BomPanelProps {
   projectId: number;
@@ -52,6 +74,15 @@ const EMPTY_DRAFT: NewBomDraft = {
   quantity_per_unit: "",
   loss_pct: "0",
   price_per_unit: "",
+};
+
+type BomField = keyof NewBomDraft;
+
+const BOM_RULES: ValidationRules<BomField> = {
+  ingredient_name: { required: true, message: "Введите название" },
+  quantity_per_unit: { required: true, numeric: true, min: 0 },
+  loss_pct: { numeric: true, min: 0, max: 1 },
+  price_per_unit: { numeric: true, min: 0 },
 };
 
 /** Σ (qty × price × (1 + loss)) — preview расчёт COGS на единицу. */
@@ -85,6 +116,11 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
   const [draft, setDraft] = useState<NewBomDraft>(EMPTY_DRAFT);
   const [adding, setAdding] = useState(false);
   const [savingRates, setSavingRates] = useState(false);
+  const bomRules = useMemo(() => BOM_RULES, []);
+  const { errors: bomErrors, validateAll: validateBom, clearError: clearBomError } =
+    useFieldValidation<BomField>(bomRules);
+  const { sorted: sortedBom, sortState: bomSortState, toggleSort: toggleBomSort } =
+    useSortableTable(bom ?? [], BOM_SORT_COLUMNS);
 
   // Локальные значения rates для редактирования (PATCH on blur)
   const [productionCostRate, setProductionCostRate] = useState("");
@@ -124,6 +160,7 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
 
   async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!validateBom(draft)) return;
     setError(null);
     setAdding(true);
     try {
@@ -311,16 +348,26 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Ингредиент</TableHead>
-                  <TableHead className="text-right">Кол-во/ед</TableHead>
-                  <TableHead className="text-right">% потерь</TableHead>
-                  <TableHead className="text-right">Цена/ед, ₽</TableHead>
-                  <TableHead className="text-right">Стоимость, ₽</TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleBomSort("name")}>
+                    Ингредиент{sortIndicator(bomSortState, "name")}
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleBomSort("qty")}>
+                    Кол-во/ед{sortIndicator(bomSortState, "qty")}
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleBomSort("loss")}>
+                    % потерь{sortIndicator(bomSortState, "loss")}
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleBomSort("price")}>
+                    Цена/ед, ₽{sortIndicator(bomSortState, "price")}
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleBomSort("cost")}>
+                    Стоимость, ₽{sortIndicator(bomSortState, "cost")}
+                  </TableHead>
                   <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {bom.map((b) => {
+                {sortedBom.map((b) => {
                   const itemCost =
                     Number(b.quantity_per_unit) *
                     Number(b.price_per_unit) *
@@ -373,12 +420,15 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
                 id="bom-name"
                 required
                 value={draft.ingredient_name}
-                onChange={(e) =>
-                  setDraft({ ...draft, ingredient_name: e.target.value })
-                }
+                onChange={(e) => {
+                  setDraft({ ...draft, ingredient_name: e.target.value });
+                  clearBomError("ingredient_name");
+                }}
+                aria-invalid={!!bomErrors.ingredient_name}
                 disabled={adding}
                 placeholder="Сахар"
               />
+              <FieldError error={bomErrors.ingredient_name} />
             </div>
             <div className="col-span-2 space-y-1">
               <Label htmlFor="bom-qty" className="text-xs">
@@ -391,12 +441,15 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
                 min="0"
                 required
                 value={draft.quantity_per_unit}
-                onChange={(e) =>
-                  setDraft({ ...draft, quantity_per_unit: e.target.value })
-                }
+                onChange={(e) => {
+                  setDraft({ ...draft, quantity_per_unit: e.target.value });
+                  clearBomError("quantity_per_unit");
+                }}
+                aria-invalid={!!bomErrors.quantity_per_unit}
                 disabled={adding}
                 placeholder="0.05"
               />
+              <FieldError error={bomErrors.quantity_per_unit} />
             </div>
             <div className="col-span-2 space-y-1">
               <Label htmlFor="bom-loss" className="text-xs">
@@ -409,12 +462,15 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
                 min="0"
                 max="1"
                 value={draft.loss_pct}
-                onChange={(e) =>
-                  setDraft({ ...draft, loss_pct: e.target.value })
-                }
+                onChange={(e) => {
+                  setDraft({ ...draft, loss_pct: e.target.value });
+                  clearBomError("loss_pct");
+                }}
+                aria-invalid={!!bomErrors.loss_pct}
                 disabled={adding}
                 placeholder="0.02"
               />
+              <FieldError error={bomErrors.loss_pct} />
             </div>
             <div className="col-span-2 space-y-1">
               <Label htmlFor="bom-price" className="text-xs">
@@ -426,12 +482,15 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
                 step="0.01"
                 min="0"
                 value={draft.price_per_unit}
-                onChange={(e) =>
-                  setDraft({ ...draft, price_per_unit: e.target.value })
-                }
+                onChange={(e) => {
+                  setDraft({ ...draft, price_per_unit: e.target.value });
+                  clearBomError("price_per_unit");
+                }}
+                aria-invalid={!!bomErrors.price_per_unit}
                 disabled={adding}
                 placeholder="80.00"
               />
+              <FieldError error={bomErrors.price_per_unit} />
             </div>
             <div className="col-span-2">
               <Button type="submit" disabled={adding} className="w-full">

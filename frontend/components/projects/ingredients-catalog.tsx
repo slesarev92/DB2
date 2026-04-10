@@ -37,8 +37,23 @@ import {
   listIngredientPrices,
   listIngredients,
 } from "@/lib/ingredients";
+import {
+  useSortableTable,
+  sortIndicator,
+  type SortableColumn,
+} from "@/lib/use-sortable-table";
 
 import type { IngredientPriceRead, IngredientRead } from "@/types/api";
+
+const ING_SORT_COLUMNS: SortableColumn<IngredientRead, string>[] = [
+  { key: "name", accessor: (i) => i.name },
+  { key: "unit", accessor: (i) => i.unit },
+  { key: "category", accessor: (i) => i.category },
+  {
+    key: "price",
+    accessor: (i) => (i.latest_price !== null ? Number(i.latest_price) : null),
+  },
+];
 
 const CATEGORY_LABELS: Record<string, string> = {
   raw_material: "Сырьё",
@@ -54,6 +69,8 @@ const CATEGORY_LABELS: Record<string, string> = {
  */
 export function IngredientsCatalog() {
   const [ingredients, setIngredients] = useState<IngredientRead[]>([]);
+  const { sorted: sortedIngredients, sortState: ingSortState, toggleSort: toggleIngSort } =
+    useSortableTable(ingredients, ING_SORT_COLUMNS);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -221,15 +238,23 @@ export function IngredientsCatalog() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Название</TableHead>
-                <TableHead className="w-16">Ед.</TableHead>
-                <TableHead className="w-24">Категория</TableHead>
-                <TableHead className="w-28">Цена</TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => toggleIngSort("name")}>
+                  Название{sortIndicator(ingSortState, "name")}
+                </TableHead>
+                <TableHead className="w-16 cursor-pointer select-none" onClick={() => toggleIngSort("unit")}>
+                  Ед.{sortIndicator(ingSortState, "unit")}
+                </TableHead>
+                <TableHead className="w-24 cursor-pointer select-none" onClick={() => toggleIngSort("category")}>
+                  Категория{sortIndicator(ingSortState, "category")}
+                </TableHead>
+                <TableHead className="w-28 cursor-pointer select-none" onClick={() => toggleIngSort("price")}>
+                  Цена{sortIndicator(ingSortState, "price")}
+                </TableHead>
                 <TableHead className="w-24" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {ingredients.map((ing) => (
+              {sortedIngredients.map((ing) => (
                 <>
                   <TableRow key={ing.id}>
                     <TableCell className="font-medium">{ing.name}</TableCell>

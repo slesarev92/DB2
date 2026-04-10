@@ -29,8 +29,21 @@ import {
   listProjectSkuChannels,
 } from "@/lib/channels";
 import { formatPercent } from "@/lib/format";
+import {
+  useSortableTable,
+  sortIndicator,
+  type SortableColumn,
+} from "@/lib/use-sortable-table";
 
 import type { ProjectSKUChannelRead } from "@/types/api";
+
+const CHANNEL_SORT_COLUMNS: SortableColumn<ProjectSKUChannelRead, string>[] = [
+  { key: "channel", accessor: (p) => p.channel.code },
+  { key: "nd", accessor: (p) => Number(p.nd_target) },
+  { key: "offtake", accessor: (p) => Number(p.offtake_target) },
+  { key: "margin", accessor: (p) => Number(p.channel_margin) },
+  { key: "shelf", accessor: (p) => Number(p.shelf_price_reg) },
+];
 
 interface ChannelsPanelProps {
   pskId: number;
@@ -72,6 +85,9 @@ export function ChannelsPanel({ pskId }: ChannelsPanelProps) {
   function reload() {
     setReloadCounter((c) => c + 1);
   }
+
+  const { sorted: sortedItems, sortState: chSortState, toggleSort: toggleChSort } =
+    useSortableTable(items ?? [], CHANNEL_SORT_COLUMNS);
 
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
@@ -129,17 +145,27 @@ export function ChannelsPanel({ pskId }: ChannelsPanelProps) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Канал</TableHead>
-                  <TableHead className="text-right">ND target</TableHead>
-                  <TableHead className="text-right">Off-take</TableHead>
-                  <TableHead className="text-right">Margin</TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleChSort("channel")}>
+                    Канал{sortIndicator(chSortState, "channel")}
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleChSort("nd")}>
+                    ND target{sortIndicator(chSortState, "nd")}
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleChSort("offtake")}>
+                    Off-take{sortIndicator(chSortState, "offtake")}
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleChSort("margin")}>
+                    Margin{sortIndicator(chSortState, "margin")}
+                  </TableHead>
                   <TableHead className="text-right">Promo (%/share)</TableHead>
-                  <TableHead className="text-right">Shelf, ₽</TableHead>
+                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleChSort("shelf")}>
+                    Shelf, ₽{sortIndicator(chSortState, "shelf")}
+                  </TableHead>
                   <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.map((psc) => (
+                {sortedItems.map((psc) => (
                   <TableRow key={psc.id}>
                     <TableCell>
                       <div className="font-medium">{psc.channel.code}</div>

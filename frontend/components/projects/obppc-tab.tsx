@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { FieldError } from "@/components/ui/field-error";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -37,8 +38,35 @@ import {
   listObppcEntries,
 } from "@/lib/obppc";
 import { listSkus } from "@/lib/skus";
+import {
+  useFieldValidation,
+  type ValidationRules,
+} from "@/lib/use-field-validation";
+import {
+  useSortableTable,
+  sortIndicator,
+  type SortableColumn,
+} from "@/lib/use-sortable-table";
 
 import type { Channel, OBPPCRead, PriceTier, SKURead } from "@/types/api";
+
+const OBPPC_SORT_COLUMNS: SortableColumn<OBPPCRead, string>[] = [
+  { key: "sku", accessor: (e) => `${e.sku.brand} — ${e.sku.name}` },
+  { key: "channel", accessor: (e) => e.channel.code },
+  { key: "tier", accessor: (e) => e.price_tier },
+  { key: "format", accessor: (e) => e.pack_format },
+  { key: "ml", accessor: (e) => e.pack_size_ml },
+  { key: "price", accessor: (e) => (e.price_point !== null ? Number(e.price_point) : null) },
+];
+
+type ObppcField = "sku_id" | "channel_id" | "pack_size" | "price_point";
+
+const OBPPC_RULES: ValidationRules<ObppcField> = {
+  sku_id: { required: true, message: "Выберите SKU" },
+  channel_id: { required: true, message: "Выберите канал" },
+  pack_size: { numeric: true, min: 0 },
+  price_point: { numeric: true, min: 0 },
+};
 
 const TIER_LABELS: Record<PriceTier, string> = {
   premium: "Premium",
@@ -65,6 +93,9 @@ export function ObppcTab({ projectId }: ObppcTabProps) {
   const [packSize, setPackSize] = useState("");
   const [pricePoint, setPricePoint] = useState("");
   const [adding, setAdding] = useState(false);
+  const obppcRules = useMemo(() => OBPPC_RULES, []);
+  const { errors: obppcErrors, validateAll: validateObppc, clearError: clearObppcError } =
+    useFieldValidation<ObppcField>(obppcRules);
 
   async function load() {
     setLoading(true);
@@ -91,7 +122,12 @@ export function ObppcTab({ projectId }: ObppcTabProps) {
   }, [projectId]);
 
   async function handleAdd() {
-    if (!selectedSkuId || !selectedChannelId) return;
+    if (!validateObppc({
+      sku_id: selectedSkuId,
+      channel_id: selectedChannelId,
+      pack_size: packSize,
+      price_point: pricePoint,
+    })) return;
     setAdding(true);
     setError(null);
     try {
@@ -118,6 +154,9 @@ export function ObppcTab({ projectId }: ObppcTabProps) {
       setAdding(false);
     }
   }
+
+  const { sorted: sortedEntries, sortState: obSortState, toggleSort: toggleObSort } =
+    useSortableTable(entries, OBPPC_SORT_COLUMNS);
 
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
@@ -153,33 +192,39 @@ export function ObppcTab({ projectId }: ObppcTabProps) {
 
         {/* Add form */}
         <div className="flex items-end gap-2 flex-wrap border-b pb-4 mb-4">
-          <Select value={selectedSkuId} onValueChange={(v) => { if (v) setSelectedSkuId(v); }}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="SKU" />
-            </SelectTrigger>
-            <SelectContent>
-              {skus.map((s) => (
-                <SelectItem key={s.id} value={String(s.id)}>
-                  {s.brand} — {s.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={selectedChannelId}
-            onValueChange={(v) => { if (v) setSelectedChannelId(v); }}
-          >
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="Канал" />
-            </SelectTrigger>
-            <SelectContent>
-              {channels.map((c) => (
-                <SelectItem key={c.id} value={String(c.id)}>
-                  {c.code}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div>
+            <Select value={selectedSkuId} onValueChange={(v) => { if (v) { setSelectedSkuId(v); clearObppcError("sku_id"); } }}>
+              <SelectTrigger className={`w-48 ${obppcErrors.sku_id ? "border-destructive" : ""}`}>
+                <SelectValue placeholder="SKU *" />
+              </SelectTrigger>
+              <SelectContent>
+                {skus.map((s) => (
+                  <SelectItem key={s.id} value={String(s.id)}>
+                    {s.brand} — {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FieldError error={obppcErrors.sku_id} />
+          </div>
+          <div>
+            <Select
+              value={selectedChannelId}
+              onValueChange={(v) => { if (v) { setSelectedChannelId(v); clearObppcError("channel_id"); } }}
+            >
+              <SelectTrigger className={`w-40 ${obppcErrors.channel_id ? "border-destructive" : ""}`}>
+                <SelectValue placeholder="Канал *" />
+              </SelectTrigger>
+              <SelectContent>
+                {channels.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.code}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FieldError error={obppcErrors.channel_id} />
+          </div>
           <Select
             value={priceTier}
             onValueChange={(v) => { if (v) setPriceTier(v as PriceTier); }}
@@ -199,21 +244,29 @@ export function ObppcTab({ projectId }: ObppcTabProps) {
             onChange={(e) => setPackFormat(e.target.value)}
             className="w-28"
           />
-          <Input
-            type="number"
-            placeholder="ml"
-            value={packSize}
-            onChange={(e) => setPackSize(e.target.value)}
-            className="w-20"
-          />
-          <Input
-            type="number"
-            placeholder="Цена"
-            value={pricePoint}
-            onChange={(e) => setPricePoint(e.target.value)}
-            className="w-24"
-            step="0.01"
-          />
+          <div>
+            <Input
+              type="number"
+              placeholder="ml"
+              value={packSize}
+              onChange={(e) => { setPackSize(e.target.value); clearObppcError("pack_size"); }}
+              aria-invalid={!!obppcErrors.pack_size}
+              className="w-20"
+            />
+            <FieldError error={obppcErrors.pack_size} />
+          </div>
+          <div>
+            <Input
+              type="number"
+              placeholder="Цена"
+              value={pricePoint}
+              onChange={(e) => { setPricePoint(e.target.value); clearObppcError("price_point"); }}
+              aria-invalid={!!obppcErrors.price_point}
+              className="w-24"
+              step="0.01"
+            />
+            <FieldError error={obppcErrors.price_point} />
+          </div>
           <Button size="sm" onClick={handleAdd} disabled={adding}>
             {adding ? "..." : "Добавить"}
           </Button>
@@ -234,17 +287,29 @@ export function ObppcTab({ projectId }: ObppcTabProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>SKU</TableHead>
-                <TableHead>Канал</TableHead>
-                <TableHead className="w-28">Tier</TableHead>
-                <TableHead className="w-24">Формат</TableHead>
-                <TableHead className="w-20 text-right">ml</TableHead>
-                <TableHead className="w-24 text-right">Цена</TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => toggleObSort("sku")}>
+                  SKU{sortIndicator(obSortState, "sku")}
+                </TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => toggleObSort("channel")}>
+                  Канал{sortIndicator(obSortState, "channel")}
+                </TableHead>
+                <TableHead className="w-28 cursor-pointer select-none" onClick={() => toggleObSort("tier")}>
+                  Tier{sortIndicator(obSortState, "tier")}
+                </TableHead>
+                <TableHead className="w-24 cursor-pointer select-none" onClick={() => toggleObSort("format")}>
+                  Формат{sortIndicator(obSortState, "format")}
+                </TableHead>
+                <TableHead className="w-20 cursor-pointer select-none text-right" onClick={() => toggleObSort("ml")}>
+                  ml{sortIndicator(obSortState, "ml")}
+                </TableHead>
+                <TableHead className="w-24 cursor-pointer select-none text-right" onClick={() => toggleObSort("price")}>
+                  Цена{sortIndicator(obSortState, "price")}
+                </TableHead>
                 <TableHead className="w-16" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {entries.map((e) => (
+              {sortedEntries.map((e) => (
                 <TableRow
                   key={e.id}
                   className={e.is_active ? "" : "opacity-50"}

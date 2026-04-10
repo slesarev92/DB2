@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AkbTab } from "@/components/projects/akb-tab";
 import { ChannelsTab } from "@/components/projects/channels-tab";
@@ -33,8 +33,27 @@ import { useAIPanel } from "@/components/ai-panel/ai-panel-context";
 import { ApiError } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { getProject } from "@/lib/projects";
+import { useKeyboardShortcuts } from "@/lib/use-keyboard-shortcuts";
+import { useUnsavedChanges } from "@/lib/use-unsaved-changes";
 
 import type { ProjectRead } from "@/types/api";
+
+/** Ordered tab values — used for Ctrl+[ / Ctrl+] navigation. */
+const TAB_ORDER = [
+  "overview",
+  "content",
+  "skus",
+  "ingredients",
+  "channels",
+  "akb",
+  "obppc",
+  "periods",
+  "scenarios",
+  "results",
+  "sensitivity",
+] as const;
+
+type TabValue = (typeof TAB_ORDER)[number];
 
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
@@ -42,7 +61,49 @@ export default function ProjectDetailPage() {
   const projectId = Number(params.id);
   const [project, setProject] = useState<ProjectRead | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<TabValue>("overview");
   const { setProjectId } = useAIPanel();
+  const { containerRef, confirmIfDirty } = useUnsavedChanges();
+
+  /** Switch tab — blurs active input first (triggering auto-save). */
+  const switchTab = useCallback(
+    (tab: TabValue) => {
+      confirmIfDirty(() => setActiveTab(tab));
+    },
+    [confirmIfDirty],
+  );
+
+  // Ctrl+[ previous tab, Ctrl+] next tab
+  const goToPrevTab = useCallback(() => {
+    setActiveTab((cur) => {
+      const idx = TAB_ORDER.indexOf(cur);
+      return idx > 0 ? TAB_ORDER[idx - 1] : cur;
+    });
+  }, []);
+
+  const goToNextTab = useCallback(() => {
+    setActiveTab((cur) => {
+      const idx = TAB_ORDER.indexOf(cur);
+      return idx < TAB_ORDER.length - 1 ? TAB_ORDER[idx + 1] : cur;
+    });
+  }, []);
+
+  // Ctrl+S — blur active element to trigger onBlur auto-save handlers
+  const saveShortcut = useCallback(() => {
+    const el = document.activeElement;
+    if (el instanceof HTMLElement) el.blur();
+  }, []);
+
+  const shortcuts = useMemo(
+    () => [
+      { key: "[", ctrl: true, handler: goToPrevTab },
+      { key: "]", ctrl: true, handler: goToNextTab },
+      { key: "s", ctrl: true, handler: saveShortcut },
+    ],
+    [goToPrevTab, goToNextTab, saveShortcut],
+  );
+
+  useKeyboardShortcuts(shortcuts, project !== null);
 
   // Phase 7.5: sync AI panel with current project for usage/budget fetch
   useEffect(() => {
@@ -95,7 +156,7 @@ export default function ProjectDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" ref={containerRef}>
       <div className="flex items-start justify-between gap-4">
         <div>
           <Link
@@ -111,7 +172,7 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="overview">
+      <Tabs value={activeTab} onValueChange={(v) => switchTab(v as TabValue)}>
         <TabsList>
           {/* Настройка */}
           <TabsTrigger value="overview">Параметры</TabsTrigger>

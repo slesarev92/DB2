@@ -2945,6 +2945,18 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
   Polza /v1/images/generations с моделью flux-2-pro, сохранение как
   MediaAsset, link to ProjectSKU.package_image_id)
 
+### ✅ UX Phase 4 — Keyboard, Validation, Sorting (закрыта 2026-04-10, 1 коммит)
+- [x] 4.1 Keyboard shortcuts: Ctrl+S save, Ctrl+[/] tab nav, Escape close AI.
+  `lib/use-keyboard-shortcuts.ts`, Tabs controlled mode, AI panel Escape handler.
+- [x] 4.2 Client-side validation: `lib/use-field-validation.ts` + `ui/field-error.tsx`.
+  Channel form 11 fields, BOM 4 fields, AKB 4 fields, OBPPC 4 fields.
+  `aria-invalid` red border, inline error messages, validateAll on submit.
+- [x] 4.3 Table sorting: `lib/use-sortable-table.ts` — generic tri-state sort.
+  Applied to BOM, Channels, AKB, OBPPC, Ingredients (5 tables, 25 sortable columns).
+- [x] 3.2 Unsaved changes warning: `lib/use-unsaved-changes.ts`.
+  `beforeunload` on dirty, tab switch blurs first (auto-save trigger).
+- tsc --noEmit 0 errors, 442 pytest passed, frontend HTTP 200.
+
 ### Финальный этап — CI/CD и production deploy (после Phase 7)
 - [ ] 6.2 GitHub Actions CI — `.github/workflows/ci.yml` (test job на PR,
   deploy job на merge в main), Dockerfile.prod (multi-stage, non-root,

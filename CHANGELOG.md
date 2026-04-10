@@ -9,6 +9,33 @@
 
 ## [Unreleased]
 
+### Changed (UX Phase 4 — keyboard, validation, sorting, 2026-04-10)
+
+**Keyboard shortcuts (4.1):**
+- Ctrl+S — blur active input, triggering onBlur auto-save
+- Ctrl+[ / Ctrl+] — navigate between project tabs (prev/next)
+- Escape — close AI panel drawer
+- Tabs now controlled (value/onValueChange), enabling programmatic navigation
+- Centralized `useKeyboardShortcuts` hook in `lib/use-keyboard-shortcuts.ts`
+
+**Client-side field validation (4.2):**
+- `useFieldValidation` hook with inline error messages (`FieldError` component)
+- Visual `aria-invalid` red border on invalid inputs (destructive color)
+- Validation on: Channel form (11 fields), BOM add form (4 fields), AKB (4 fields), OBPPC (4 fields)
+- Clear errors on input change, validate on blur and submit
+- Channel dialog calls `validateAll()` before submit (replaces manual `!form.channel_id` check)
+
+**Table sorting (4.3):**
+- `useSortableTable` hook with tri-state cycle: asc → desc → none
+- Clickable headers with sort direction arrows (unicode)
+- Applied to 5 tables: BOM (5 cols), Channels (5 cols), AKB (5 cols), OBPPC (6 cols), Ingredients (4 cols)
+- Null values sort last, strings use `localeCompare("ru")`
+
+**Unsaved changes warning (3.2):**
+- `useUnsavedChanges` hook — listens for `input` events in container
+- `beforeunload` browser warning when dirty (prevents accidental navigation)
+- Tab switch blurs active element first (auto-save trigger), then switches
+
 ### Changed (UX Phase 1-3 — usability improvements, 2026-04-10)
 
 **Tab navigation (Phase 1):**

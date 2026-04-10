@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { FieldError } from "@/components/ui/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -12,6 +13,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { listChannels, listRefSeasonality } from "@/lib/channels";
+import {
+  useFieldValidation,
+  type ValidationRules,
+} from "@/lib/use-field-validation";
 
 import type {
   Channel,
@@ -78,6 +83,22 @@ export function toPscPayload(
   };
 }
 
+type FormField = keyof ChannelFormState;
+
+const CHANNEL_FORM_RULES: ValidationRules<FormField> = {
+  channel_id: { required: true, message: "Выберите канал" },
+  launch_year: { required: true, numeric: true, min: 1, max: 10 },
+  launch_month: { required: true, numeric: true, min: 1, max: 12 },
+  nd_target: { required: true, numeric: true, min: 0, max: 1 },
+  nd_ramp_months: { required: true, numeric: true, min: 1, max: 36 },
+  offtake_target: { required: true, numeric: true, min: 0 },
+  shelf_price_reg: { required: true, numeric: true, min: 0 },
+  channel_margin: { required: true, numeric: true, min: 0, max: 1 },
+  promo_discount: { required: true, numeric: true, min: 0, max: 1 },
+  promo_share: { required: true, numeric: true, min: 0, max: 1 },
+  logistics_cost_per_kg: { required: true, numeric: true, min: 0 },
+};
+
 interface ChannelFormProps {
   state: ChannelFormState;
   onChange: (next: ChannelFormState) => void;
@@ -87,6 +108,8 @@ interface ChannelFormProps {
   /** При edit channel_id не меняется — Select disabled. */
   channelLocked?: boolean;
   disabled?: boolean;
+  /** Ref to validate function — parent can call before submit. */
+  onValidate?: (validateAll: () => boolean) => void;
 }
 
 export function ChannelForm({
@@ -95,9 +118,19 @@ export function ChannelForm({
   excludeChannelIds = [],
   channelLocked = false,
   disabled = false,
+  onValidate,
 }: ChannelFormProps) {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [seasonality, setSeasonality] = useState<RefSeasonality[]>([]);
+  const { errors, validateOne, validateAll, clearError } =
+    useFieldValidation<FormField>(CHANNEL_FORM_RULES);
+
+  // Expose validateAll to parent (dialogs call before submit)
+  useEffect(() => {
+    if (onValidate) {
+      onValidate(() => validateAll(state));
+    }
+  }, [onValidate, validateAll, state]);
 
   useEffect(() => {
     let cancelled = false;
@@ -125,6 +158,7 @@ export function ChannelForm({
     value: ChannelFormState[K],
   ) {
     onChange({ ...state, [key]: value });
+    clearError(key);
   }
 
   return (
@@ -163,7 +197,7 @@ export function ChannelForm({
           HM/SM/MM. По умолчанию Y1 Jan = с самого начала проекта.
         </p>
         <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label htmlFor="launch_year">Год запуска (1-10)</Label>
             <Input
               id="launch_year"
@@ -173,10 +207,13 @@ export function ChannelForm({
               step="1"
               value={state.launch_year}
               onChange={(e) => update("launch_year", e.target.value)}
+              onBlur={() => validateOne("launch_year", state.launch_year)}
+              aria-invalid={!!errors.launch_year}
               disabled={disabled}
             />
+            <FieldError error={errors.launch_year} />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label htmlFor="launch_month">Месяц запуска (1-12)</Label>
             <Input
               id="launch_month"
@@ -186,14 +223,17 @@ export function ChannelForm({
               step="1"
               value={state.launch_month}
               onChange={(e) => update("launch_month", e.target.value)}
+              onBlur={() => validateOne("launch_month", state.launch_month)}
+              aria-invalid={!!errors.launch_month}
               disabled={disabled}
             />
+            <FieldError error={errors.launch_month} />
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
+        <div className="space-y-1">
           <Label htmlFor="nd_target">ND target (доля)</Label>
           <Input
             id="nd_target"
@@ -203,10 +243,13 @@ export function ChannelForm({
             max="1"
             value={state.nd_target}
             onChange={(e) => update("nd_target", e.target.value)}
+            onBlur={() => validateOne("nd_target", state.nd_target)}
+            aria-invalid={!!errors.nd_target}
             disabled={disabled}
           />
+          <FieldError error={errors.nd_target} />
         </div>
-        <div className="space-y-2">
+        <div className="space-y-1">
           <Label htmlFor="nd_ramp_months">Ramp месяцев</Label>
           <Input
             id="nd_ramp_months"
@@ -215,13 +258,16 @@ export function ChannelForm({
             max="36"
             value={state.nd_ramp_months}
             onChange={(e) => update("nd_ramp_months", e.target.value)}
+            onBlur={() => validateOne("nd_ramp_months", state.nd_ramp_months)}
+            aria-invalid={!!errors.nd_ramp_months}
             disabled={disabled}
           />
+          <FieldError error={errors.nd_ramp_months} />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
+        <div className="space-y-1">
           <Label htmlFor="offtake_target">Off-take target (ед./точка)</Label>
           <Input
             id="offtake_target"
@@ -230,10 +276,13 @@ export function ChannelForm({
             min="0"
             value={state.offtake_target}
             onChange={(e) => update("offtake_target", e.target.value)}
+            onBlur={() => validateOne("offtake_target", state.offtake_target)}
+            aria-invalid={!!errors.offtake_target}
             disabled={disabled}
           />
+          <FieldError error={errors.offtake_target} />
         </div>
-        <div className="space-y-2">
+        <div className="space-y-1">
           <Label htmlFor="shelf_price_reg">Shelf price рег., ₽/ед.</Label>
           <Input
             id="shelf_price_reg"
@@ -242,13 +291,16 @@ export function ChannelForm({
             min="0"
             value={state.shelf_price_reg}
             onChange={(e) => update("shelf_price_reg", e.target.value)}
+            onBlur={() => validateOne("shelf_price_reg", state.shelf_price_reg)}
+            aria-invalid={!!errors.shelf_price_reg}
             disabled={disabled}
           />
+          <FieldError error={errors.shelf_price_reg} />
         </div>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
-        <div className="space-y-2">
+        <div className="space-y-1">
           <Label htmlFor="channel_margin">Channel margin</Label>
           <Input
             id="channel_margin"
@@ -258,10 +310,13 @@ export function ChannelForm({
             max="1"
             value={state.channel_margin}
             onChange={(e) => update("channel_margin", e.target.value)}
+            onBlur={() => validateOne("channel_margin", state.channel_margin)}
+            aria-invalid={!!errors.channel_margin}
             disabled={disabled}
           />
+          <FieldError error={errors.channel_margin} />
         </div>
-        <div className="space-y-2">
+        <div className="space-y-1">
           <Label htmlFor="promo_discount">Promo discount</Label>
           <Input
             id="promo_discount"
@@ -271,10 +326,13 @@ export function ChannelForm({
             max="1"
             value={state.promo_discount}
             onChange={(e) => update("promo_discount", e.target.value)}
+            onBlur={() => validateOne("promo_discount", state.promo_discount)}
+            aria-invalid={!!errors.promo_discount}
             disabled={disabled}
           />
+          <FieldError error={errors.promo_discount} />
         </div>
-        <div className="space-y-2">
+        <div className="space-y-1">
           <Label htmlFor="promo_share">Promo share</Label>
           <Input
             id="promo_share"
@@ -284,13 +342,16 @@ export function ChannelForm({
             max="1"
             value={state.promo_share}
             onChange={(e) => update("promo_share", e.target.value)}
+            onBlur={() => validateOne("promo_share", state.promo_share)}
+            aria-invalid={!!errors.promo_share}
             disabled={disabled}
           />
+          <FieldError error={errors.promo_share} />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
+        <div className="space-y-1">
           <Label htmlFor="logistics_cost_per_kg">Logistics ₽/кг</Label>
           <Input
             id="logistics_cost_per_kg"
@@ -299,8 +360,13 @@ export function ChannelForm({
             min="0"
             value={state.logistics_cost_per_kg}
             onChange={(e) => update("logistics_cost_per_kg", e.target.value)}
+            onBlur={() =>
+              validateOne("logistics_cost_per_kg", state.logistics_cost_per_kg)
+            }
+            aria-invalid={!!errors.logistics_cost_per_kg}
             disabled={disabled}
           />
+          <FieldError error={errors.logistics_cost_per_kg} />
         </div>
         <div className="space-y-2">
           <Label htmlFor="seasonality_profile_id">Сезонность</Label>

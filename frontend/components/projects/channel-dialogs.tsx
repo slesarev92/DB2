@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
 import {
   ChannelForm,
@@ -45,6 +45,7 @@ export function AddChannelDialog({
   const [form, setForm] = useState<ChannelFormState>(EMPTY_CHANNEL_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const validateRef = useRef<(() => boolean) | null>(null);
 
   // Reset при закрытии
   useEffect(() => {
@@ -54,13 +55,14 @@ export function AddChannelDialog({
     setSubmitting(false);
   }, [open]);
 
+  const handleValidateReady = useCallback((fn: () => boolean) => {
+    validateRef.current = fn;
+  }, []);
+
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    if (!form.channel_id) {
-      setError("Выберите канал");
-      return;
-    }
+    if (validateRef.current && !validateRef.current()) return;
     setSubmitting(true);
     try {
       await addChannelToPsk(pskId, toPscPayload(form));
@@ -89,6 +91,7 @@ export function AddChannelDialog({
             onChange={setForm}
             excludeChannelIds={excludeChannelIds}
             disabled={submitting}
+            onValidate={handleValidateReady}
           />
 
           {error !== null && (
@@ -156,6 +159,7 @@ export function EditChannelDialog({
   const [form, setForm] = useState<ChannelFormState>(EMPTY_CHANNEL_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const validateRef = useRef<(() => boolean) | null>(null);
 
   // Предзаполнение при открытии
   useEffect(() => {
@@ -166,10 +170,15 @@ export function EditChannelDialog({
     }
   }, [open, pskChannel]);
 
+  const handleValidateReady = useCallback((fn: () => boolean) => {
+    validateRef.current = fn;
+  }, []);
+
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (pskChannel === null) return;
     setError(null);
+    if (validateRef.current && !validateRef.current()) return;
     setSubmitting(true);
     try {
       const payload = toPscPayload(form);
@@ -208,6 +217,7 @@ export function EditChannelDialog({
             onChange={setForm}
             channelLocked
             disabled={submitting}
+            onValidate={handleValidateReady}
           />
 
           {error !== null && (

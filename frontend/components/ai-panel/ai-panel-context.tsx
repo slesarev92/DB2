@@ -163,7 +163,7 @@ export function AIPanelProvider({
     );
   }, []);
 
-  // Ctrl+K global shortcut
+  // Ctrl+K toggle + Escape close global shortcuts
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
@@ -176,6 +176,18 @@ export function AIPanelProvider({
             /* noop */
           }
           return next;
+        });
+        return;
+      }
+      if (e.key === "Escape") {
+        setIsOpen((prev) => {
+          if (!prev) return prev; // already closed — don't interfere
+          try {
+            window.localStorage.setItem(STORAGE_KEY_OPEN, "0");
+          } catch {
+            /* noop */
+          }
+          return false;
         });
       }
     }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { FieldError } from "@/components/ui/field-error";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -36,8 +37,38 @@ import {
 } from "@/lib/akb";
 import { listChannels } from "@/lib/channels";
 import { formatPercent } from "@/lib/format";
+import {
+  useFieldValidation,
+  type ValidationRules,
+} from "@/lib/use-field-validation";
+import {
+  useSortableTable,
+  sortIndicator,
+  type SortableColumn,
+} from "@/lib/use-sortable-table";
 
 import type { AKBRead, Channel } from "@/types/api";
+
+const AKB_SORT_COLUMNS: SortableColumn<AKBRead, string>[] = [
+  { key: "channel", accessor: (e) => `${e.channel.code} — ${e.channel.name}` },
+  { key: "universe", accessor: (e) => e.universe_outlets },
+  { key: "target", accessor: (e) => e.target_outlets },
+  { key: "coverage", accessor: (e) => (e.coverage_pct !== null ? Number(e.coverage_pct) : null) },
+  {
+    key: "wd",
+    accessor: (e) =>
+      e.weighted_distribution !== null ? Number(e.weighted_distribution) : null,
+  },
+];
+
+type AkbField = "channel_id" | "universe" | "target" | "coverage";
+
+const AKB_RULES: ValidationRules<AkbField> = {
+  channel_id: { required: true, message: "Выберите канал" },
+  universe: { numeric: true, min: 0 },
+  target: { numeric: true, min: 0 },
+  coverage: { numeric: true, min: 0, max: 1 },
+};
 
 interface AkbTabProps {
   projectId: number;
@@ -55,6 +86,9 @@ export function AkbTab({ projectId }: AkbTabProps) {
   const [target, setTarget] = useState("");
   const [coverage, setCoverage] = useState("");
   const [adding, setAdding] = useState(false);
+  const akbRules = useMemo(() => AKB_RULES, []);
+  const { errors: akbErrors, validateAll: validateAkb, clearError: clearAkbError } =
+    useFieldValidation<AkbField>(akbRules);
 
   async function load() {
     setLoading(true);
@@ -78,6 +112,9 @@ export function AkbTab({ projectId }: AkbTabProps) {
     void load();
   }, [projectId]);
 
+  const { sorted: sortedEntries, sortState: akbSortState, toggleSort: toggleAkbSort } =
+    useSortableTable(entries, AKB_SORT_COLUMNS);
+
   // Channels not yet used in AKB
   const usedChannelIds = new Set(entries.map((e) => e.channel_id));
   const availableChannels = channels.filter(
@@ -85,7 +122,12 @@ export function AkbTab({ projectId }: AkbTabProps) {
   );
 
   async function handleAdd() {
-    if (!selectedChannelId) return;
+    if (!validateAkb({
+      channel_id: selectedChannelId,
+      universe,
+      target,
+      coverage,
+    })) return;
     setAdding(true);
     setError(null);
     try {
@@ -142,43 +184,58 @@ export function AkbTab({ projectId }: AkbTabProps) {
 
         {/* Add form */}
         <div className="flex items-end gap-2 flex-wrap border-b pb-4 mb-4">
-          <Select
-            value={selectedChannelId}
-            onValueChange={(v) => { if (v) setSelectedChannelId(v); }}
-          >
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Канал" />
-            </SelectTrigger>
-            <SelectContent>
-              {availableChannels.map((c) => (
-                <SelectItem key={c.id} value={String(c.id)}>
-                  {c.code} — {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Input
-            type="number"
-            placeholder="Universe"
-            value={universe}
-            onChange={(e) => setUniverse(e.target.value)}
-            className="w-28"
-          />
-          <Input
-            type="number"
-            placeholder="Target"
-            value={target}
-            onChange={(e) => setTarget(e.target.value)}
-            className="w-28"
-          />
-          <Input
-            type="number"
-            placeholder="Coverage %"
-            value={coverage}
-            onChange={(e) => setCoverage(e.target.value)}
-            className="w-28"
-            step="0.01"
-          />
+          <div>
+            <Select
+              value={selectedChannelId}
+              onValueChange={(v) => { if (v) { setSelectedChannelId(v); clearAkbError("channel_id"); } }}
+            >
+              <SelectTrigger className={`w-48 ${akbErrors.channel_id ? "border-destructive" : ""}`}>
+                <SelectValue placeholder="Канал *" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableChannels.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.code} — {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FieldError error={akbErrors.channel_id} />
+          </div>
+          <div>
+            <Input
+              type="number"
+              placeholder="Universe"
+              value={universe}
+              onChange={(e) => { setUniverse(e.target.value); clearAkbError("universe"); }}
+              aria-invalid={!!akbErrors.universe}
+              className="w-28"
+            />
+            <FieldError error={akbErrors.universe} />
+          </div>
+          <div>
+            <Input
+              type="number"
+              placeholder="Target"
+              value={target}
+              onChange={(e) => { setTarget(e.target.value); clearAkbError("target"); }}
+              aria-invalid={!!akbErrors.target}
+              className="w-28"
+            />
+            <FieldError error={akbErrors.target} />
+          </div>
+          <div>
+            <Input
+              type="number"
+              placeholder="Coverage (доля)"
+              value={coverage}
+              onChange={(e) => { setCoverage(e.target.value); clearAkbError("coverage"); }}
+              aria-invalid={!!akbErrors.coverage}
+              className="w-28"
+              step="0.01"
+            />
+            <FieldError error={akbErrors.coverage} />
+          </div>
           <Button size="sm" onClick={handleAdd} disabled={adding}>
             {adding ? "..." : "Добавить"}
           </Button>
@@ -199,16 +256,26 @@ export function AkbTab({ projectId }: AkbTabProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Канал</TableHead>
-                <TableHead className="w-28 text-right">Universe</TableHead>
-                <TableHead className="w-28 text-right">Target</TableHead>
-                <TableHead className="w-28 text-right">Coverage</TableHead>
-                <TableHead className="w-28 text-right">Wt. Distr.</TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => toggleAkbSort("channel")}>
+                  Канал{sortIndicator(akbSortState, "channel")}
+                </TableHead>
+                <TableHead className="w-28 cursor-pointer select-none text-right" onClick={() => toggleAkbSort("universe")}>
+                  Universe{sortIndicator(akbSortState, "universe")}
+                </TableHead>
+                <TableHead className="w-28 cursor-pointer select-none text-right" onClick={() => toggleAkbSort("target")}>
+                  Target{sortIndicator(akbSortState, "target")}
+                </TableHead>
+                <TableHead className="w-28 cursor-pointer select-none text-right" onClick={() => toggleAkbSort("coverage")}>
+                  Coverage{sortIndicator(akbSortState, "coverage")}
+                </TableHead>
+                <TableHead className="w-28 cursor-pointer select-none text-right" onClick={() => toggleAkbSort("wd")}>
+                  Wt. Distr.{sortIndicator(akbSortState, "wd")}
+                </TableHead>
                 <TableHead className="w-16" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {entries.map((e) => (
+              {sortedEntries.map((e) => (
                 <TableRow key={e.id}>
                   <TableCell className="font-medium">
                     {e.channel.code} — {e.channel.name}
