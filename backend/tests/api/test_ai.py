@@ -1316,3 +1316,213 @@ async def test_generate_content_requires_auth(
         json={"field": "project_goal"},
     )
     assert resp.status_code == 401
+
+
+# ============================================================
+# Phase 7.7 — MARKETING RESEARCH
+# ============================================================
+
+
+@pytest.fixture
+def mock_polza_research(mock_polza: AsyncMock) -> AsyncMock:
+    """Override mock_polza for marketing research schema (opus response)."""
+    research_output = {
+        "research_text": "Рынок энергетических напитков в России растёт на 8-10% ежегодно.",
+        "sources": [],
+        "key_findings": [
+            "Объём рынка ~45 млрд ₽ (2025)",
+            "Лидеры: Red Bull 28%, Adrenaline Rush 22%, Burn 15%",
+            "Premium сегмент растёт на 15% vs mass 5%",
+        ],
+        "confidence_notes": "Основано на обучающих данных до 2025, цифры требуют верификации через Nielsen.",
+    }
+    mock_polza.return_value = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(content=json.dumps(research_output))
+            )
+        ],
+        usage=SimpleNamespace(
+            prompt_tokens=3000, completion_tokens=600, total_tokens=3600
+        ),
+        model="anthropic/claude-opus-4.6",
+    )
+    return mock_polza
+
+
+async def test_marketing_research_happy_path(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+    mock_polza_research: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """Successful marketing research → 200 + saved in JSONB."""
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/marketing-research",
+        json={"topic": "competitive_analysis"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["topic"] == "competitive_analysis"
+    assert "энергетических" in data["research_text"]
+    assert len(data["key_findings"]) == 3
+    assert data["web_sources_used"] is False
+    assert data["model"] == "anthropic/claude-opus-4.6"
+
+    mock_polza_research.assert_awaited_once()
+
+    # Verify saved in project JSONB
+    await db_session.refresh(gorji_project)
+    assert gorji_project.marketing_research is not None
+    assert "competitive_analysis" in gorji_project.marketing_research
+    saved = gorji_project.marketing_research["competitive_analysis"]
+    assert "энергетических" in saved["text"]
+
+
+async def test_marketing_research_custom_topic(
+    auth_client: AsyncClient,
+    gorji_project: Project,
+    mock_polza_research: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """Custom topic with custom_query."""
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/marketing-research",
+        json={"topic": "custom", "custom_query": "Анализ ценовой эластичности"},
+    )
+    assert resp.status_code == 200
+
+
+async def test_marketing_research_custom_without_query_422(
+    auth_client: AsyncClient,
+    gorji_project: Project,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """Custom topic without custom_query → 422."""
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/marketing-research",
+        json={"topic": "custom"},
+    )
+    assert resp.status_code == 422
+
+
+async def test_marketing_research_budget_exceeded(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+    mock_polza: AsyncMock,
+    mock_redis: MagicMock,
+) -> None:
+    """Budget exceeded → 429."""
+    db_session.add(
+        AIUsageLog(
+            project_id=gorji_project.id,
+            endpoint="marketing_research",
+            model="anthropic/claude-opus-4.6",
+            cost_rub=Decimal("500"),
+            latency_ms=5000,
+        )
+    )
+    await db_session.flush()
+
+    resp = await auth_client.post(
+        f"/api/projects/{gorji_project.id}/ai/marketing-research",
+        json={"topic": "market_size"},
+    )
+    assert resp.status_code == 429
+
+
+async def test_edit_marketing_research(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+) -> None:
+    """PATCH edit research text."""
+    # Seed research data
+    gorji_project.marketing_research = {
+        "competitive_analysis": {
+            "text": "Original text",
+            "sources": [],
+            "key_findings": [],
+            "confidence_notes": "",
+            "generated_at": "2026-04-10T00:00:00Z",
+            "cost_rub": "15.0",
+            "model": "anthropic/claude-opus-4.6",
+        }
+    }
+    await db_session.flush()
+
+    resp = await auth_client.patch(
+        f"/api/projects/{gorji_project.id}/ai/marketing-research",
+        json={
+            "topic": "competitive_analysis",
+            "edited_text": "Edited research text",
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "saved"
+
+    await db_session.refresh(gorji_project)
+    assert gorji_project.marketing_research["competitive_analysis"]["text"] == "Edited research text"
+
+
+async def test_edit_marketing_research_missing_topic(
+    auth_client: AsyncClient,
+    gorji_project: Project,
+) -> None:
+    """PATCH on non-existent topic → 404."""
+    resp = await auth_client.patch(
+        f"/api/projects/{gorji_project.id}/ai/marketing-research",
+        json={"topic": "market_size", "edited_text": "text"},
+    )
+    assert resp.status_code == 404
+
+
+async def test_delete_marketing_research(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    gorji_project: Project,
+) -> None:
+    """DELETE research topic."""
+    gorji_project.marketing_research = {
+        "competitive_analysis": {"text": "data", "sources": []},
+        "market_size": {"text": "data", "sources": []},
+    }
+    await db_session.flush()
+
+    resp = await auth_client.delete(
+        f"/api/projects/{gorji_project.id}/ai/marketing-research/competitive_analysis",
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "deleted"
+
+    await db_session.refresh(gorji_project)
+    assert "competitive_analysis" not in gorji_project.marketing_research
+    assert "market_size" in gorji_project.marketing_research
+
+
+async def test_delete_marketing_research_missing_topic(
+    auth_client: AsyncClient,
+    gorji_project: Project,
+) -> None:
+    """DELETE non-existent topic → 404."""
+    resp = await auth_client.delete(
+        f"/api/projects/{gorji_project.id}/ai/marketing-research/nonexistent",
+    )
+    assert resp.status_code == 404
+
+
+async def test_marketing_research_requires_auth(
+    client: AsyncClient, gorji_project: Project
+) -> None:
+    """401 без JWT."""
+    resp = await client.post(
+        f"/api/projects/{gorji_project.id}/ai/marketing-research",
+        json={"topic": "market_size"},
+    )
+    assert resp.status_code == 401

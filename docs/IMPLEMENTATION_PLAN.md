@@ -2938,7 +2938,7 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
 - [x] 7.5 Cost monitoring + бюджет проекта + rate limiting *(закрыта 2026-04-10)*
 - [x] 7.6 AI генерация text content fields паспорта (13 промптов для
   полей из 4.5.1, кнопка «AI» в content tab) *(закрыта 2026-04-10)*
-- [ ] 7.7 AI marketing research через web search (новое поле
+- [x] 7.7 AI marketing research через web search (новое поле
   Project.marketing_research JSONB, multi-topic storage, секция в
   content tab)
 - [ ] 7.8 AI генерация package mockups (image generation через

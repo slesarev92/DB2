@@ -10,16 +10,18 @@
  * найдены. Все эти случаи ловим через ApiError в вызывающем компоненте.
  */
 
-import { apiGet, apiPatch, apiPost } from "./api";
+import { apiDelete, apiGet, apiPatch, apiPost } from "./api";
 import { getAccessToken } from "./auth";
 
 import type {
   AIChatSSEEvent,
   AIKpiExplanationRequest,
   AIKpiExplanationResponse,
+  AIMarketingResearchResponse,
   AISensitivityExplanationRequest,
   AISensitivityExplanationResponse,
   AIUsageResponse,
+  ResearchTopic,
 } from "@/types/api";
 
 export async function requestExplainKpi(
@@ -146,4 +148,35 @@ export function updateAIBudget(
   return apiPatch<AIUsageResponse>(`/api/projects/${projectId}/ai/budget`, {
     ai_budget_rub_monthly: budgetRub,
   });
+}
+
+// Phase 7.7 — Marketing Research
+
+export function generateMarketingResearch(
+  projectId: number,
+  topic: ResearchTopic,
+  customQuery?: string | null,
+): Promise<AIMarketingResearchResponse> {
+  return apiPost<AIMarketingResearchResponse>(
+    `/api/projects/${projectId}/ai/marketing-research`,
+    { topic, custom_query: customQuery ?? null },
+  );
+}
+
+export function editMarketingResearch(
+  projectId: number,
+  topic: ResearchTopic,
+  editedText: string,
+): Promise<{ status: string; topic: string }> {
+  return apiPatch(`/api/projects/${projectId}/ai/marketing-research`, {
+    topic,
+    edited_text: editedText,
+  });
+}
+
+export function deleteMarketingResearch(
+  projectId: number,
+  topic: string,
+): Promise<{ status: string; topic: string }> {
+  return apiDelete(`/api/projects/${projectId}/ai/marketing-research/${topic}`);
 }

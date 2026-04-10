@@ -254,6 +254,18 @@ class Project(Base, TimestampMixin):
         Numeric(12, 2), nullable=True, server_default="500.00"
     )
 
+    # ============================================================
+    # AI Marketing Research (Фаза 7.7)
+    # ============================================================
+    # JSONB multi-topic storage:
+    # {"competitive_analysis": {"text": "...", "sources": [...],
+    #   "key_findings": [...], "generated_at": "...", "cost_rub": 15.4,
+    #   "model": "..."}, "market_size": {...}, ...}
+    # NULL = ни одного research не генерировалось.
+    marketing_research: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
+
     # Soft delete: устанавливается при DELETE /api/projects/{id}.
     # Все запросы фильтруют WHERE deleted_at IS NULL.
     # Финансовый продукт — данные не теряем при ошибочном удалении.

@@ -28,6 +28,7 @@ from typing import Annotated, AsyncIterator
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.api.deps import get_current_user
 from app.core.rate_limit import limiter
@@ -43,12 +44,16 @@ from app.schemas.ai import (
     AIExecutiveSummarySaveRequest,
     AIKpiExplanationRequest,
     AIKpiExplanationResponse,
+    AIMarketingResearchEditRequest,
+    AIMarketingResearchRequest,
+    AIMarketingResearchResponse,
     AISensitivityExplanationRequest,
     AISensitivityExplanationResponse,
     AIUsageResponse,
     LLMContentFieldOutput,
     LLMExecutiveSummaryOutput,
     LLMKpiOutput,
+    LLMMarketingResearchOutput,
     LLMSensitivityOutput,
 )
 from app.services import ai_cache, ai_service
@@ -63,6 +68,8 @@ from app.services.ai_prompts import (
     CONTENT_FIELD_SYSTEM,
     EXECUTIVE_SUMMARY_SYSTEM,
     KPI_EXPLAIN_SYSTEM,
+    MARKETING_RESEARCH_SYSTEM,
+    MARKETING_RESEARCH_TOPIC_PROMPTS,
     SENSITIVITY_EXPLAIN_SYSTEM,
 )
 from app.services.ai_service import (
@@ -860,6 +867,199 @@ async def generate_content_field(
     await ai_cache.release_dedupe_lock(lock_key)
 
     return AIContentFieldResponse(**response_payload, cached=False)
+
+
+# ============================================================
+# MARKETING RESEARCH (Phase 7.7)
+# ============================================================
+
+
+@router.post(
+    "/marketing-research",
+    response_model=AIMarketingResearchResponse,
+    summary="AI marketing research",
+)
+@limiter.limit("5/minute", key_func=_rate_limit_key)
+async def generate_marketing_research(
+    request: Request,
+    project_id: int,
+    body: AIMarketingResearchRequest,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(_set_rate_limit_user)],
+) -> AIMarketingResearchResponse:
+    """Generate marketing research для одного topic.
+
+    RESEARCH tier (opus, ~10-20₽). NO Redis cache — research должен
+    быть свежим. Результат сохраняется в Project.marketing_research JSONB.
+
+    TODO: web_search integration после Polza API verification.
+    """
+    from datetime import datetime as dt, timezone as tz
+
+    await check_daily_user_budget(session, user_id=current_user.id)
+    await check_project_budget(session, project_id)
+
+    if body.topic == "custom" and not body.custom_query:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="custom_query обязателен для topic=custom",
+        )
+
+    builder = AIContextBuilder(session)
+    try:
+        context = await builder.for_marketing_research(
+            project_id=project_id,
+            topic=body.topic,
+            custom_query=body.custom_query,
+        )
+    except AIContextBuilderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    topic_task = MARKETING_RESEARCH_TOPIC_PROMPTS.get(body.topic, "")
+
+    try:
+        user_prompt = (
+            f"Тема исследования: {body.topic}\n"
+            f"Задание: {topic_task}\n"
+            + (f"Конкретный запрос: {body.custom_query}\n" if body.custom_query else "")
+            + f"\nКонтекст проекта:\n"
+            + json.dumps(context, ensure_ascii=False, indent=2)
+        )
+        result = await ai_service.complete_json(
+            system_prompt=MARKETING_RESEARCH_SYSTEM,
+            user_prompt=user_prompt,
+            schema=LLMMarketingResearchOutput,
+            feature=AIFeature.MARKETING_RESEARCH,
+            endpoint="marketing_research",
+            temperature=0.4,  # slightly higher for research creativity
+        )
+    except AIServiceUnavailableError as exc:
+        await log_ai_usage(
+            session,
+            project_id=project_id,
+            user_id=current_user.id,
+            endpoint="marketing_research",
+            error=str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"AI marketing research недоступен: {exc}",
+        ) from exc
+
+    cost_rub = calculate_cost(
+        result.model, result.prompt_tokens, result.completion_tokens
+    )
+    await log_ai_usage(
+        session,
+        project_id=project_id,
+        user_id=current_user.id,
+        endpoint="marketing_research",
+        result=result,
+    )
+
+    generated_at = dt.now(tz.utc).isoformat()
+
+    # Save to Project.marketing_research JSONB
+    project = await session.get(Project, project_id)
+    if project is not None:
+        research = dict(project.marketing_research or {})
+        research[body.topic] = {
+            "text": result.parsed.research_text,
+            "sources": [s.model_dump() for s in result.parsed.sources],
+            "key_findings": result.parsed.key_findings,
+            "confidence_notes": result.parsed.confidence_notes,
+            "generated_at": generated_at,
+            "cost_rub": str(cost_rub),
+            "model": result.model,
+        }
+        project.marketing_research = research
+        flag_modified(project, "marketing_research")
+        await session.flush()
+
+    return AIMarketingResearchResponse(
+        topic=body.topic,
+        research_text=result.parsed.research_text,
+        sources=result.parsed.sources,
+        key_findings=result.parsed.key_findings,
+        confidence_notes=result.parsed.confidence_notes,
+        generated_at=generated_at,
+        cost_rub=cost_rub,
+        model=result.model,
+        web_sources_used=False,
+    )
+
+
+@router.patch(
+    "/marketing-research",
+    summary="Редактировать marketing research text",
+)
+@limiter.limit("10/minute", key_func=_rate_limit_key)
+async def edit_marketing_research(
+    request: Request,
+    project_id: int,
+    body: AIMarketingResearchEditRequest,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(_set_rate_limit_user)],
+) -> dict:
+    """Обновить research_text для конкретного topic."""
+    project = await session.get(Project, project_id)
+    if project is None or project.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project {project_id} не найден",
+        )
+
+    research = dict(project.marketing_research or {})
+    if body.topic not in research:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Research по теме '{body.topic}' не найден",
+        )
+
+    research[body.topic]["text"] = body.edited_text
+    project.marketing_research = research
+    flag_modified(project, "marketing_research")
+    await session.flush()
+
+    return {"status": "saved", "topic": body.topic}
+
+
+@router.delete(
+    "/marketing-research/{topic}",
+    summary="Удалить marketing research topic",
+)
+@limiter.limit("10/minute", key_func=_rate_limit_key)
+async def delete_marketing_research(
+    request: Request,
+    project_id: int,
+    topic: str,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(_set_rate_limit_user)],
+) -> dict:
+    """Удалить конкретный topic из marketing_research JSONB."""
+    project = await session.get(Project, project_id)
+    if project is None or project.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project {project_id} не найден",
+        )
+
+    research = dict(project.marketing_research or {})
+    if topic not in research:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Research по теме '{topic}' не найден",
+        )
+
+    del research[topic]
+    project.marketing_research = research or None
+    flag_modified(project, "marketing_research")
+    await session.flush()
+
+    return {"status": "deleted", "topic": topic}
 
 
 # ============================================================

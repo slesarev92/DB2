@@ -307,3 +307,60 @@ class LLMContentFieldOutput(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     generated_text: str
+
+
+# ============================================================
+# MARKETING RESEARCH (Phase 7.7)
+# ============================================================
+
+ResearchTopic = Literal[
+    "competitive_analysis", "market_size", "consumer_trends",
+    "category_benchmarks", "custom",
+]
+
+
+class ResearchSource(BaseModel):
+    url: str
+    title: str
+    snippet: str = ""
+
+
+class AIMarketingResearchRequest(BaseModel):
+    """POST /api/projects/{id}/ai/marketing-research."""
+    topic: ResearchTopic
+    custom_query: str | None = Field(
+        default=None,
+        max_length=1000,
+        description="Свободный запрос для topic=custom.",
+    )
+
+
+class AIMarketingResearchResponse(BaseModel):
+    """Ответ marketing research."""
+    model_config = ConfigDict(extra="forbid")
+
+    topic: str
+    research_text: str
+    sources: list[ResearchSource]
+    key_findings: list[str]
+    confidence_notes: str
+    generated_at: str  # ISO datetime
+    cost_rub: Decimal
+    model: str
+    web_sources_used: bool  # False до верификации Polza web search API
+
+
+class LLMMarketingResearchOutput(BaseModel):
+    """LLM JSON output."""
+    model_config = ConfigDict(extra="ignore")
+
+    research_text: str
+    sources: list[ResearchSource] = Field(default_factory=list)
+    key_findings: list[str] = Field(default_factory=list)
+    confidence_notes: str = ""
+
+
+class AIMarketingResearchEditRequest(BaseModel):
+    """PATCH body для редактирования research text."""
+    topic: ResearchTopic
+    edited_text: str = Field(..., min_length=1, max_length=20000)

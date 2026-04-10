@@ -515,6 +515,54 @@ class AIContextBuilder:
             "user_hint": _trim(user_hint, 500) if user_hint else None,
         }
 
+    async def for_marketing_research(
+        self,
+        *,
+        project_id: int,
+        topic: str,
+        custom_query: str | None = None,
+    ) -> dict[str, Any]:
+        """Контекст для marketing research (~1-2k токенов, Phase 7.7).
+
+        Минимальный контекст: project category, geography, target audience,
+        top-3 SKU profile. LLM генерирует research на основе training data
+        (web search — TODO после Polza API verification).
+
+        Raises:
+            AIContextBuilderError: project не найден или удалён.
+        """
+        project = await self._session.get(Project, project_id)
+        if project is None or project.deleted_at is not None:
+            raise AIContextBuilderError(
+                f"Project {project_id} не найден или удалён"
+            )
+
+        # Top-3 SKU для category context
+        skus_stmt = (
+            select(ProjectSKU)
+            .where(ProjectSKU.project_id == project_id)
+            .where(ProjectSKU.include.is_(True))
+            .options(selectinload(ProjectSKU.sku))
+            .order_by(ProjectSKU.id)
+            .limit(3)
+        )
+        project_skus = list((await self._session.scalars(skus_stmt)).all())
+
+        return {
+            "project": {
+                "id": project.id,
+                "name": project.name,
+                "innovation_type": project.innovation_type,
+                "geography": project.geography,
+                "production_type": project.production_type,
+                "target_audience": _trim(project.target_audience, 300),
+                "concept_text": _trim(project.concept_text, 300),
+            },
+            "topic": topic,
+            "custom_query": _trim(custom_query, 500) if custom_query else None,
+            "top_skus": [_serialize_project_sku(ps) for ps in project_skus],
+        }
+
 
 def _trim(text: str | None, max_len: int) -> str | None:
     """Обрезает строку до `max_len` символов с суффиксом «…»."""

@@ -9,6 +9,33 @@
 
 ## [Unreleased]
 
+### Added (Phase 7.7 — AI marketing research, 2026-04-10)
+
+**Backend:**
+- Migration `ecf52051757c`: `Project.marketing_research` JSONB (multi-topic)
+- `MARKETING_RESEARCH_SYSTEM` + 5 topic-specific prompts (competitive,
+  market_size, trends, benchmarks, custom)
+- `AIContextBuilder.for_marketing_research()` — project category context
+- `POST /api/projects/{id}/ai/marketing-research` — RESEARCH tier (opus),
+  no Redis cache (fresh data), saves to JSONB, flag_modified for mutation
+- `PATCH /api/projects/{id}/ai/marketing-research` — edit research text
+- `DELETE /api/projects/{id}/ai/marketing-research/{topic}`
+- Pydantic schemas: AIMarketingResearchRequest (5 topics + custom),
+  Response (research_text, sources, key_findings, confidence_notes,
+  web_sources_used=False), EditRequest
+- 9 new tests (392 total): generate happy path, custom topic, custom
+  without query, budget exceeded, PATCH edit, edit missing topic,
+  DELETE, delete missing, auth required
+- Web search: TODO pending Polza API verification (currently opus
+  training data only, documented in confidence_notes)
+
+**Frontend:**
+- `MarketingResearchSection` component: 5 topic cards with generate/
+  edit/delete/regenerate, >7 day staleness warning, confirmation dialog
+- API client functions: `generateMarketingResearch`, `editMarketingResearch`,
+  `deleteMarketingResearch`
+- Content tab: section 8 with MarketingResearchSection
+
 ### Added (Phase 7.6 — AI generate content fields, 2026-04-10)
 
 **Backend:**

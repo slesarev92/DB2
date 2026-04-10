@@ -120,6 +120,10 @@ export interface ProjectContentFields {
   function_readiness?: FunctionReadinessMap | null;
   roadmap_tasks?: RoadmapTask[] | null;
   approvers?: Approver[] | null;
+  // Phase 7.5: AI budget
+  ai_budget_rub_monthly?: string | null;
+  // Phase 7.7: Marketing research JSONB
+  marketing_research?: Record<string, unknown> | null;
 }
 
 export interface ProjectBase extends ProjectContentFields {
@@ -628,6 +632,26 @@ export interface AIUsageRecentCall {
   latency_ms: number;
   error: string | null;
   cached: boolean;
+}
+
+// Marketing Research (Phase 7.7)
+export type ResearchTopic =
+  | "competitive_analysis"
+  | "market_size"
+  | "consumer_trends"
+  | "category_benchmarks"
+  | "custom";
+
+export interface AIMarketingResearchResponse {
+  topic: string;
+  research_text: string;
+  sources: Array<{ url: string; title: string; snippet: string }>;
+  key_findings: string[];
+  confidence_notes: string;
+  generated_at: string;
+  cost_rub: string;
+  model: string;
+  web_sources_used: boolean;
 }
 
 export interface AIUsageResponse {

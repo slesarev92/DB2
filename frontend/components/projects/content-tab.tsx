@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ContentFieldAI } from "@/components/projects/content-field-ai";
+import { MarketingResearchSection } from "@/components/projects/marketing-research-section";
 import { ApiError } from "@/lib/api";
 import { getProject, updateProject } from "@/lib/projects";
 
@@ -896,6 +897,19 @@ export function ContentTab({ projectId }: ContentTabProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* ====================================================== */}
+      {/* 8. Marketing Research (Phase 7.7)                      */}
+      {/* ====================================================== */}
+      <MarketingResearchSection
+        projectId={projectId}
+        research={project.marketing_research as Record<string, never> | null}
+        onUpdate={() => {
+          getProject(projectId).then((data) => {
+            setProject(data);
+          });
+        }}
+      />
     </div>
   );
 }
