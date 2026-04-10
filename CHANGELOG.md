@@ -9,6 +9,16 @@
 
 ## [Unreleased]
 
+### Added (B-16 — Frontend e2e tests with Playwright, 2026-04-10)
+
+**Frontend:**
+- `@playwright/test` devDependency + Chromium browser
+- `playwright.config.ts`: baseURL localhost:3000, chromium only
+- 5 e2e smoke tests: login, create project + tabs, backend health,
+  login page form, unauthenticated redirect
+- `tsconfig.json`: excluded e2e/ from tsc (runs on host, not in Docker)
+- Run: `cd frontend && npx playwright test`
+
 ### Added (B-07 — Gantt chart visualization, 2026-04-10)
 
 **Frontend:**

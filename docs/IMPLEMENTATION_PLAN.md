@@ -70,7 +70,7 @@
 | B-13 | 🟢 P3 | OBPPC матрица (Price-Pack-Channel) | Стратегия Price-Pack-Channel — маркетинговый блок |
 | B-14 | 🟠 P1 | MFA / SSO / LDAP | Этап 2 вместе с Keycloak (B-01) |
 | B-15 | 🟠 P1 | MinIO / S3 для media storage | 2026-04-09 (Phase 4.5.2). MVP = filesystem mount в Docker named volume. S3 нужен для prod deploy с несколькими backend replicas |
-| B-16 | 🟡 P2 | Frontend unit/e2e тесты (Vitest/Playwright) | Phase 3.1. Сейчас покрытие только backend pytest + ручная визуальная проверка. Для prod стабильности нужен e2e критического flow |
+| B-16 | ✅ Done | Frontend e2e тесты (Playwright) | Реализовано 2026-04-10: 5 smoke tests (login, create project, health, redirect), Playwright + Chromium |
 | B-17 | 🟢 P3 | Batch save для period values | Phase 3.x. Сейчас каждое изменение ячейки — отдельный PATCH. Оптимизация производительности при массовом редактировании |
 | B-18 | 🟡 P2 | Corporate PPT template (PASSPORT_ELEKTRA стиль) | Phase 5.2. ppt_exporter использует python-pptx blank layouts. Подгрузка готового corporate шаблона через `Presentation("template.pptx")` — одна строка замены, когда появится брендированный .pptx от дизайнера |
 | B-19 | ✅ Done | OPEX breakdown (разбивка OPEX по статьям) | Реализовано 2026-04-10: таблица `opex_items`, auto-sum, UI breakdown, 403 pytest |
