@@ -13,6 +13,8 @@ from app.api.deps import get_current_user
 from app.db import get_db
 from app.models import User
 from app.schemas.period_value import (
+    BatchPeriodValueRequest,
+    BatchPeriodValueResponse,
     PatchPeriodValueResponse,
     PeriodValueWrite,
     ResetOverrideResponse,
@@ -144,6 +146,69 @@ async def patch_value_endpoint(
         is_overridden=pv.is_overridden,
         values=pv.values,
     )
+
+
+# ============================================================
+# PATCH /values/batch — batch fine-tune (B-17)
+# ============================================================
+
+
+batch_router = APIRouter(
+    prefix="/api/projects/{project_id}/scenarios/{scenario_id}",
+    tags=["period-values"],
+)
+
+
+@batch_router.patch(
+    "/period-values/batch",
+    response_model=BatchPeriodValueResponse,
+)
+async def batch_patch_values(
+    project_id: int,
+    scenario_id: int,
+    body: BatchPeriodValueRequest,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> BatchPeriodValueResponse:
+    """Batch fine-tune нескольких period values за один HTTP вызов.
+
+    Все изменения применяются в одной транзакции. При ошибке в любом
+    элементе — откат всех.
+    """
+    if len(body.items) == 0:
+        return BatchPeriodValueResponse(updated=0, items=[])
+    if len(body.items) > 200:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Batch лимит 200 элементов",
+        )
+
+    results: list[PatchPeriodValueResponse] = []
+    for item in body.items:
+        await _validate_or_raise(
+            session, item.psk_channel_id, scenario_id, item.period_id
+        )
+        pv = await period_value_service.patch_value(
+            session,
+            psk_channel_id=item.psk_channel_id,
+            scenario_id=scenario_id,
+            period_id=item.period_id,
+            values=item.values,
+        )
+        results.append(
+            PatchPeriodValueResponse(
+                period_id=pv.period_id,
+                scenario_id=pv.scenario_id,
+                psk_channel_id=pv.psk_channel_id,
+                source_type=pv.source_type,
+                version_id=pv.version_id,
+                is_overridden=pv.is_overridden,
+                values=pv.values,
+            )
+        )
+
+    await session.commit()
+    return BatchPeriodValueResponse(updated=len(results), items=results)
 
 
 # ============================================================

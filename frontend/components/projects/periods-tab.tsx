@@ -202,6 +202,7 @@ export function PeriodsTab({ projectId }: PeriodsTabProps) {
             {selectedPscId !== null && selectedScenarioId !== null && (
               <PeriodsGrid
                 key={`${selectedPscId}-${selectedScenarioId}`}
+                projectId={projectId}
                 pskChannelId={selectedPscId}
                 scenarioId={selectedScenarioId}
                 periodFilter={periodFilter}

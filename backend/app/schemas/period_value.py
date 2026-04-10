@@ -86,3 +86,29 @@ class ResetOverrideResponse(BaseModel):
     """Ответ на DELETE override — сколько finetuned-строк удалено."""
 
     deleted_versions: int
+
+
+# ============================================================
+# Batch save (B-17)
+# ============================================================
+
+
+class BatchPeriodValueItem(BaseModel):
+    """Один элемент batch save."""
+
+    psk_channel_id: int
+    period_id: int
+    values: dict[str, Any]
+
+
+class BatchPeriodValueRequest(BaseModel):
+    """Тело PATCH .../period-values/batch."""
+
+    items: list[BatchPeriodValueItem]
+
+
+class BatchPeriodValueResponse(BaseModel):
+    """Ответ batch save — сколько обновлено."""
+
+    updated: int
+    items: list[PatchPeriodValueResponse]

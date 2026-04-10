@@ -69,6 +69,23 @@ export function patchPeriodValue(
   );
 }
 
+export interface BatchPeriodValueItem {
+  psk_channel_id: number;
+  period_id: number;
+  values: Record<string, number | string | null>;
+}
+
+export function batchPatchPeriodValues(
+  projectId: number,
+  scenarioId: number,
+  items: BatchPeriodValueItem[],
+): Promise<{ updated: number }> {
+  return apiPatch(
+    `/api/projects/${projectId}/scenarios/${scenarioId}/period-values/batch`,
+    { items },
+  );
+}
+
 export function resetPeriodOverride(
   pskChannelId: number,
   periodId: number,

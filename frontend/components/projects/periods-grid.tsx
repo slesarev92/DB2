@@ -9,15 +9,17 @@ import {
   type ICellRendererParams,
 } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
 import {
+  batchPatchPeriodValues,
   listPeriodValuesHybrid,
   patchPeriodValue,
   resetPeriodOverride,
 } from "@/lib/period-values";
+import type { BatchPeriodValueItem } from "@/lib/period-values";
 import { listPeriods } from "@/lib/reference";
 
 import "ag-grid-community/styles/ag-grid.css";
@@ -33,6 +35,7 @@ import type {
 ModuleRegistry.registerModules([AllCommunityModule]);
 
 interface PeriodsGridProps {
+  projectId: number;
   pskChannelId: number;
   scenarioId: number;
   /** monthly | yearly | all — фильтр периодов на показ. */
@@ -75,6 +78,7 @@ interface CellMeta {
  * кнопка "Сбросить overrides" в шапке если selectedRow выбран.
  */
 export function PeriodsGrid({
+  projectId,
   pskChannelId,
   scenarioId,
   periodFilter,
@@ -217,14 +221,18 @@ export function PeriodsGrid({
     return cols;
   }, [visiblePeriods, itemByPeriodId]);
 
-  async function onCellValueChanged(e: CellValueChangedEvent<PivotRow>) {
+  // B-17: Batch save — accumulate pending changes, flush via button or debounce
+  const pendingRef = useRef<Map<string, BatchPeriodValueItem>>(new Map());
+  const [pendingCount, setPendingCount] = useState(0);
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function onCellValueChanged(e: CellValueChangedEvent<PivotRow>) {
     const colId = e.colDef.field;
     if (colId === undefined || !colId.startsWith("p_")) return;
     const periodId = Number(colId.slice(2));
     const metricKey = e.data.metric_key;
     const newValueRaw = e.newValue;
 
-    // Парсим число
     const numericValue =
       newValueRaw === "" || newValueRaw === null
         ? null
@@ -235,22 +243,40 @@ export function PeriodsGrid({
       return;
     }
 
-    // Берём существующий values dict для этого периода
-    const existingItem = itemByPeriodId.get(periodId);
-    const baseValues = existingItem?.values ?? {};
+    // Merge into pending batch
+    const key = `${pskChannelId}:${periodId}`;
+    const existing = pendingRef.current.get(key);
+    const baseValues = existing
+      ? existing.values
+      : (itemByPeriodId.get(periodId)?.values ?? {});
     const nextValues = { ...baseValues, [metricKey]: numericValue };
 
+    pendingRef.current.set(key, {
+      psk_channel_id: pskChannelId,
+      period_id: periodId,
+      values: nextValues,
+    });
+    setPendingCount(pendingRef.current.size);
+
+    // Auto-flush after 2s of inactivity
+    if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+    flushTimerRef.current = setTimeout(() => flushBatch(), 2000);
+  }
+
+  async function flushBatch() {
+    if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+    const items = Array.from(pendingRef.current.values());
+    if (items.length === 0) return;
+
+    pendingRef.current.clear();
+    setPendingCount(0);
+
     try {
-      await patchPeriodValue(
-        pskChannelId,
-        periodId,
-        scenarioId,
-        nextValues,
-      );
+      await batchPatchPeriodValues(projectId, scenarioId, items);
       reload();
     } catch (err) {
       setError(
-        err instanceof ApiError ? err.detail ?? err.message : "Ошибка PATCH",
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка batch save",
       );
       reload();
     }
@@ -317,6 +343,11 @@ export function PeriodsGrid({
         >
           Сбросить overrides ({overrideCount})
         </Button>
+        {pendingCount > 0 && (
+          <Button size="sm" onClick={flushBatch}>
+            Сохранить ({pendingCount})
+          </Button>
+        )}
       </div>
 
       {error !== null && (
