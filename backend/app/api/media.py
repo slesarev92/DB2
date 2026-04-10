@@ -145,11 +145,17 @@ async def download_media_endpoint(
             detail=str(exc),
         ) from exc
 
+    # RFC 5987: encode filename for non-ASCII (Cyrillic) support
+    from urllib.parse import quote
+
+    safe_filename = quote(asset.filename)
+    cd = f"inline; filename*=UTF-8''{safe_filename}"
+
     return StreamingResponse(
         BytesIO(data),
         media_type=asset.content_type,
         headers={
-            "Content-Disposition": f'inline; filename="{asset.filename}"',
+            "Content-Disposition": cd,
             "Content-Length": str(asset.size_bytes),
         },
     )

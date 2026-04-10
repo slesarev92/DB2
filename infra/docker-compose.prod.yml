@@ -49,7 +49,7 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/2
       ENVIRONMENT: production
     volumes:
-      - media-storage:/media
+      - media-storage:/app/media
     depends_on:
       postgres:
         condition: service_healthy
@@ -75,7 +75,7 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/2
       ENVIRONMENT: production
     volumes:
-      - media-storage:/media
+      - media-storage:/app/media
     depends_on:
       redis:
         condition: service_healthy
