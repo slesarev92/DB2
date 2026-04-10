@@ -580,10 +580,10 @@ async def generate_image(
     *,
     prompt: str,
     model: str = "black-forest-labs/flux.2-pro",
-    size: str = "1024x1024",
+    aspect_ratio: str = "1:1",
     n: int = 1,
 ) -> dict[str, Any]:
-    """Генерация изображения через Polza images API (flux-2-pro).
+    """Генерация изображения через Polza images API (flux.2-pro).
 
     Returns:
         {"b64_json": str, "model": str, "prompt_tokens": int,
@@ -603,8 +603,8 @@ async def generate_image(
             model=model,
             prompt=prompt,
             n=n,
-            size=size,
             response_format="b64_json",
+            extra_body={"aspect_ratio": aspect_ratio},
         )
     except AuthenticationError as exc:
         raise AIServiceUnavailableError(f"Polza image auth: {exc}") from exc
