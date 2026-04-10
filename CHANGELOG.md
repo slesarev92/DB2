@@ -9,6 +9,33 @@
 
 ## [Unreleased]
 
+### Changed (UX Phase 1-3 — usability improvements, 2026-04-10)
+
+**Tab navigation (Phase 1):**
+- Scrollable tab strip with gradient fade indicators (overflow-x-auto + ResizeObserver)
+- Tab reordering by business workflow: Настройка → Продукт → Дистрибуция → Моделирование → Анализ
+- Visual group separators (vertical dividers between tab groups)
+
+**Collapsible sidebar (Phase 2):**
+- Sidebar collapses to 64px (icon-only mode) via chevron button or Ctrl+B
+- Collapsed state persists in localStorage
+- Nav items show icons (lucide-react) + text in expanded, icon-only when collapsed
+
+**ContentTab layout (Phase 2):**
+- Cards 3 (Валидация) and 4 (Риски) in 2-column grid on xl+ screens
+
+**ConfirmDialog (Phase 3):**
+- New `confirm-dialog.tsx` component (styled, using existing Dialog primitive)
+- Replaced `window.confirm()` in: sku-panel, channels-panel, akb-tab, obppc-tab, ingredients-catalog
+- Added delete confirmation to bom-panel (previously had none)
+
+**EmptyState (Phase 3):**
+- New `empty-state.tsx` component (dashed border, icon, title, description, action)
+- Applied to: akb-tab, obppc-tab, ingredients-catalog
+
+**Button consistency (Phase 3):**
+- Add forms in AKB/OBPPC tabs visually separated from tables (border-b)
+
 ### Added (B-12 — AKB distribution plan, 2026-04-10)
 
 **Backend:**

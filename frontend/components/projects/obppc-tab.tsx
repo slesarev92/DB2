@@ -26,6 +26,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { EmptyState } from "@/components/ui/empty-state";
 import { ApiError } from "@/lib/api";
 import { listChannels } from "@/lib/channels";
 import { formatMoney } from "@/lib/format";
@@ -117,10 +119,14 @@ export function ObppcTab({ projectId }: ObppcTabProps) {
     }
   }
 
-  async function handleDelete(entryId: number) {
-    if (!window.confirm("Удалить запись OBPPC?")) return;
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  async function handleDeleteConfirmed() {
+    if (deletingId === null) return;
+    const id = deletingId;
+    setDeletingId(null);
     try {
-      await deleteObppcEntry(projectId, entryId);
+      await deleteObppcEntry(projectId, id);
       await load();
     } catch (err) {
       setError(
@@ -146,7 +152,7 @@ export function ObppcTab({ projectId }: ObppcTabProps) {
         )}
 
         {/* Add form */}
-        <div className="flex items-end gap-2 flex-wrap">
+        <div className="flex items-end gap-2 flex-wrap border-b pb-4 mb-4">
           <Select value={selectedSkuId} onValueChange={(v) => { if (v) setSelectedSkuId(v); }}>
             <SelectTrigger className="w-48">
               <SelectValue placeholder="SKU" />
@@ -218,9 +224,10 @@ export function ObppcTab({ projectId }: ObppcTabProps) {
         )}
 
         {!loading && entries.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            Нет записей OBPPC. Добавьте первую комбинацию.
-          </p>
+          <EmptyState
+            title="Нет записей OBPPC"
+            description="Добавьте первую комбинацию SKU × канал × формат."
+          />
         )}
 
         {entries.length > 0 && (
@@ -259,7 +266,7 @@ export function ObppcTab({ projectId }: ObppcTabProps) {
                       variant="ghost"
                       size="sm"
                       className="text-xs text-destructive"
-                      onClick={() => handleDelete(e.id)}
+                      onClick={() => setDeletingId(e.id)}
                     >
                       &times;
                     </Button>
@@ -270,6 +277,13 @@ export function ObppcTab({ projectId }: ObppcTabProps) {
           </Table>
         )}
       </CardContent>
+
+      <ConfirmDialog
+        open={deletingId !== null}
+        onConfirm={handleDeleteConfirmed}
+        onCancel={() => setDeletingId(null)}
+        title="Удалить запись OBPPC?"
+      />
     </Card>
   );
 }

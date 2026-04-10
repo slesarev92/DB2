@@ -26,6 +26,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { EmptyState } from "@/components/ui/empty-state";
 import { ApiError } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import {
@@ -107,8 +109,12 @@ export function IngredientsCatalog() {
     }
   }
 
-  async function handleDelete(id: number) {
-    if (!window.confirm("Удалить ингредиент?")) return;
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  async function handleDeleteConfirmed() {
+    if (deletingId === null) return;
+    const id = deletingId;
+    setDeletingId(null);
     try {
       await deleteIngredient(id);
       if (expandedId === id) setExpandedId(null);
@@ -205,9 +211,10 @@ export function IngredientsCatalog() {
         {loading && <p className="text-sm text-muted-foreground">Загрузка...</p>}
 
         {!loading && ingredients.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            Каталог пуст. Добавьте первый ингредиент.
-          </p>
+          <EmptyState
+            title="Каталог пуст"
+            description="Добавьте первый ингредиент для автозаполнения BOM."
+          />
         )}
 
         {ingredients.length > 0 && (
@@ -249,7 +256,7 @@ export function IngredientsCatalog() {
                           variant="ghost"
                           size="sm"
                           className="text-xs text-destructive"
-                          onClick={() => handleDelete(ing.id)}
+                          onClick={() => setDeletingId(ing.id)}
                         >
                           &times;
                         </Button>
@@ -315,6 +322,14 @@ export function IngredientsCatalog() {
           </Table>
         )}
       </CardContent>
+
+      <ConfirmDialog
+        open={deletingId !== null}
+        onConfirm={handleDeleteConfirmed}
+        onCancel={() => setDeletingId(null)}
+        title="Удалить ингредиент?"
+        description="Связи с BOM-позициями будут разорваны."
+      />
     </Card>
   );
 }

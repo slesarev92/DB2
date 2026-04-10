@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { AddSkuDialog } from "@/components/projects/add-sku-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { deleteProjectSku, listProjectSkus } from "@/lib/skus";
@@ -63,13 +64,15 @@ export function SkuPanel({
     setReloadCounter((c) => c + 1);
   }
 
-  async function handleDelete(pskId: number) {
-    if (!window.confirm("Удалить SKU из проекта? BOM будет удалён каскадно.")) {
-      return;
-    }
+  const [deletingPskId, setDeletingPskId] = useState<number | null>(null);
+
+  async function handleDeleteConfirmed() {
+    if (deletingPskId === null) return;
+    const id = deletingPskId;
+    setDeletingPskId(null);
     try {
-      await deleteProjectSku(pskId);
-      if (selectedPskId === pskId) {
+      await deleteProjectSku(id);
+      if (selectedPskId === id) {
         onSelectPsk(null);
       }
       reload();
@@ -147,13 +150,13 @@ export function SkuPanel({
                     className="shrink-0 cursor-pointer rounded px-2 py-1 text-xs text-muted-foreground hover:bg-destructive hover:text-destructive-foreground"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDelete(p.id);
+                      setDeletingPskId(p.id);
                     }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
                         e.stopPropagation();
-                        handleDelete(p.id);
+                        setDeletingPskId(p.id);
                       }
                     }}
                   >
@@ -171,6 +174,14 @@ export function SkuPanel({
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         onAdded={reload}
+      />
+
+      <ConfirmDialog
+        open={deletingPskId !== null}
+        onConfirm={handleDeleteConfirmed}
+        onCancel={() => setDeletingPskId(null)}
+        title="Удалить SKU из проекта?"
+        description="BOM будет удалён каскадно."
       />
     </div>
   );

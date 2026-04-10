@@ -22,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ApiError } from "@/lib/api";
 import {
   deletePskChannel,
@@ -72,16 +73,14 @@ export function ChannelsPanel({ pskId }: ChannelsPanelProps) {
     setReloadCounter((c) => c + 1);
   }
 
-  async function handleDelete(pskChannelId: number) {
-    if (
-      !window.confirm(
-        "Удалить канал у этого SKU? Predict PeriodValue будут удалены каскадно.",
-      )
-    ) {
-      return;
-    }
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  async function handleDeleteConfirmed() {
+    if (deletingId === null) return;
+    const id = deletingId;
+    setDeletingId(null);
     try {
-      await deletePskChannel(pskChannelId);
+      await deletePskChannel(id);
       reload();
     } catch (err) {
       setError(err instanceof ApiError ? err.detail ?? err.message : "Ошибка");
@@ -179,7 +178,7 @@ export function ChannelsPanel({ pskId }: ChannelsPanelProps) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleDelete(psc.id)}
+                        onClick={() => setDeletingId(psc.id)}
                       >
                         ×
                       </Button>
@@ -213,6 +212,14 @@ export function ChannelsPanel({ pskId }: ChannelsPanelProps) {
           if (!open) setEditTarget(null);
         }}
         onSaved={reload}
+      />
+
+      <ConfirmDialog
+        open={deletingId !== null}
+        onConfirm={handleDeleteConfirmed}
+        onCancel={() => setDeletingId(null)}
+        title="Удалить канал?"
+        description="PeriodValue данные будут удалены каскадно."
       />
     </div>
   );

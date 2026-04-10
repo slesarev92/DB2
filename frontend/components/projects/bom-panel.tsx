@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Card,
   CardContent,
@@ -141,9 +142,14 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
     }
   }
 
-  async function handleDelete(bomId: number) {
+  const [deletingBomId, setDeletingBomId] = useState<number | null>(null);
+
+  async function handleDeleteConfirmed() {
+    if (deletingBomId === null) return;
+    const id = deletingBomId;
+    setDeletingBomId(null);
     try {
-      await deleteBomItem(bomId);
+      await deleteBomItem(id);
       reload();
     } catch (err) {
       setError(err instanceof ApiError ? err.detail ?? err.message : "Ошибка");
@@ -342,7 +348,7 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDelete(b.id)}
+                          onClick={() => setDeletingBomId(b.id)}
                         >
                           ×
                         </Button>
@@ -441,6 +447,13 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
           )}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={deletingBomId !== null}
+        onConfirm={handleDeleteConfirmed}
+        onCancel={() => setDeletingBomId(null)}
+        title="Удалить ингредиент из BOM?"
+      />
     </div>
   );
 }

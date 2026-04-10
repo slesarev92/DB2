@@ -113,18 +113,29 @@ export default function ProjectDetailPage() {
 
       <Tabs defaultValue="overview">
         <TabsList>
+          {/* Настройка */}
           <TabsTrigger value="overview">Параметры</TabsTrigger>
           <TabsTrigger value="content">Содержание</TabsTrigger>
+          <div className="mx-1 h-4 w-px shrink-0 bg-border" />
+          {/* Продукт */}
           <TabsTrigger value="skus">SKU и BOM</TabsTrigger>
-          <TabsTrigger value="channels">Каналы</TabsTrigger>
-          <TabsTrigger value="periods">Периоды</TabsTrigger>
-          <TabsTrigger value="results">Результаты</TabsTrigger>
-          <TabsTrigger value="scenarios">Сценарии</TabsTrigger>
-          <TabsTrigger value="sensitivity">Чувствительность</TabsTrigger>
           <TabsTrigger value="ingredients">Ингредиенты</TabsTrigger>
+          <div className="mx-1 h-4 w-px shrink-0 bg-border" />
+          {/* Дистрибуция */}
+          <TabsTrigger value="channels">Каналы</TabsTrigger>
           <TabsTrigger value="akb">АКБ</TabsTrigger>
           <TabsTrigger value="obppc">OBPPC</TabsTrigger>
+          <div className="mx-1 h-4 w-px shrink-0 bg-border" />
+          {/* Моделирование */}
+          <TabsTrigger value="periods">Периоды</TabsTrigger>
+          <TabsTrigger value="scenarios">Сценарии</TabsTrigger>
+          <div className="mx-1 h-4 w-px shrink-0 bg-border" />
+          {/* Анализ */}
+          <TabsTrigger value="results">Результаты</TabsTrigger>
+          <TabsTrigger value="sensitivity">Чувствительность</TabsTrigger>
         </TabsList>
+
+        {/* ── Настройка ── */}
 
         <TabsContent value="overview" className="mt-4 space-y-4">
           <Card>
@@ -181,32 +192,20 @@ export default function ProjectDetailPage() {
           <ContentTab projectId={projectId} />
         </TabsContent>
 
+        {/* ── Продукт ── */}
+
         <TabsContent value="skus" className="mt-4">
           <SkusTab projectId={projectId} />
         </TabsContent>
 
-        <TabsContent value="channels" className="mt-4">
-          <ChannelsTab projectId={projectId} />
-        </TabsContent>
-
-        <TabsContent value="periods" className="mt-4">
-          <PeriodsTab projectId={projectId} />
-        </TabsContent>
-
-        <TabsContent value="results" className="mt-4">
-          <ResultsTab projectId={projectId} />
-        </TabsContent>
-
-        <TabsContent value="scenarios" className="mt-4">
-          <ScenariosTab projectId={projectId} />
-        </TabsContent>
-
-        <TabsContent value="sensitivity" className="mt-4">
-          <SensitivityTab projectId={projectId} />
-        </TabsContent>
-
         <TabsContent value="ingredients" className="mt-4">
           <IngredientsCatalog />
+        </TabsContent>
+
+        {/* ── Дистрибуция ── */}
+
+        <TabsContent value="channels" className="mt-4">
+          <ChannelsTab projectId={projectId} />
         </TabsContent>
 
         <TabsContent value="akb" className="mt-4">
@@ -215,6 +214,26 @@ export default function ProjectDetailPage() {
 
         <TabsContent value="obppc" className="mt-4">
           <ObppcTab projectId={projectId} />
+        </TabsContent>
+
+        {/* ── Моделирование ── */}
+
+        <TabsContent value="periods" className="mt-4">
+          <PeriodsTab projectId={projectId} />
+        </TabsContent>
+
+        <TabsContent value="scenarios" className="mt-4">
+          <ScenariosTab projectId={projectId} />
+        </TabsContent>
+
+        {/* ── Анализ ── */}
+
+        <TabsContent value="results" className="mt-4">
+          <ResultsTab projectId={projectId} />
+        </TabsContent>
+
+        <TabsContent value="sensitivity" className="mt-4">
+          <SensitivityTab projectId={projectId} />
         </TabsContent>
       </Tabs>
     </div>

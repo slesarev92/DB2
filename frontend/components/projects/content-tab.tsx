@@ -517,8 +517,9 @@ export function ContentTab({ projectId }: ContentTabProps) {
       </Card>
 
       {/* ====================================================== */}
-      {/* 3. Валидация (JSONB)                                   */}
+      {/* 3-4. Валидация + Риски — 2-column on xl+               */}
       {/* ====================================================== */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
       <Card>
         <CardHeader>
           <CardTitle className="text-base">3. Результаты валидации</CardTitle>
@@ -629,6 +630,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
           </div>
         </CardContent>
       </Card>
+      </div>{/* end 2-column grid */}
 
       {/* ====================================================== */}
       {/* 5. Готовность функций (JSONB map — фиксированные 8)    */}

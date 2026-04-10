@@ -26,6 +26,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { EmptyState } from "@/components/ui/empty-state";
 import { ApiError } from "@/lib/api";
 import {
   createAkbEntry,
@@ -107,10 +109,14 @@ export function AkbTab({ projectId }: AkbTabProps) {
     }
   }
 
-  async function handleDelete(entryId: number) {
-    if (!window.confirm("Удалить запись АКБ?")) return;
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  async function handleDeleteConfirmed() {
+    if (deletingId === null) return;
+    const id = deletingId;
+    setDeletingId(null);
     try {
-      await deleteAkbEntry(projectId, entryId);
+      await deleteAkbEntry(projectId, id);
       await load();
     } catch (err) {
       setError(
@@ -135,7 +141,7 @@ export function AkbTab({ projectId }: AkbTabProps) {
         )}
 
         {/* Add form */}
-        <div className="flex items-end gap-2 flex-wrap">
+        <div className="flex items-end gap-2 flex-wrap border-b pb-4 mb-4">
           <Select
             value={selectedChannelId}
             onValueChange={(v) => { if (v) setSelectedChannelId(v); }}
@@ -183,9 +189,10 @@ export function AkbTab({ projectId }: AkbTabProps) {
         )}
 
         {!loading && entries.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            Нет записей АКБ. Добавьте канал дистрибуции.
-          </p>
+          <EmptyState
+            title="Нет записей АКБ"
+            description="Добавьте канал дистрибуции, чтобы начать."
+          />
         )}
 
         {entries.length > 0 && (
@@ -223,7 +230,7 @@ export function AkbTab({ projectId }: AkbTabProps) {
                       variant="ghost"
                       size="sm"
                       className="text-xs text-destructive"
-                      onClick={() => handleDelete(e.id)}
+                      onClick={() => setDeletingId(e.id)}
                     >
                       &times;
                     </Button>
@@ -234,6 +241,13 @@ export function AkbTab({ projectId }: AkbTabProps) {
           </Table>
         )}
       </CardContent>
+
+      <ConfirmDialog
+        open={deletingId !== null}
+        onConfirm={handleDeleteConfirmed}
+        onCancel={() => setDeletingId(null)}
+        title="Удалить запись АКБ?"
+      />
     </Card>
   );
 }
