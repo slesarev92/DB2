@@ -46,9 +46,9 @@ class ProjectBase(BaseModel):
     passport_date: date | None = None
     project_owner: str | None = Field(default=None, max_length=200)
     project_goal: str | None = None
-    innovation_type: str | None = Field(default=None, max_length=100)
+    innovation_type: str | None = None
     geography: str | None = Field(default=None, max_length=200)
-    production_type: str | None = Field(default=None, max_length=100)
+    production_type: str | None = None
     growth_opportunity: str | None = None
     concept_text: str | None = None
     rationale: str | None = None
@@ -100,9 +100,9 @@ class ProjectUpdate(BaseModel):
     passport_date: date | None = None
     project_owner: str | None = Field(default=None, max_length=200)
     project_goal: str | None = None
-    innovation_type: str | None = Field(default=None, max_length=100)
+    innovation_type: str | None = None
     geography: str | None = Field(default=None, max_length=200)
-    production_type: str | None = Field(default=None, max_length=100)
+    production_type: str | None = None
     growth_opportunity: str | None = None
     concept_text: str | None = None
     rationale: str | None = None
