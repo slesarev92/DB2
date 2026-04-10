@@ -583,10 +583,10 @@ async def generate_image(
     aspect_ratio: str = "1:1",
     n: int = 1,
 ) -> dict[str, Any]:
-    """Генерация изображения через Polza images API (async polling).
+    """Генерация изображения через Polza Media API (POST /v1/media).
 
-    Polza image API is async: POST → requestId → GET poll until COMPLETED.
-    Output contains URL (not b64_json). We download the image and return b64.
+    Polza Media API: POST /v1/media → {id, status} → GET /v1/media/{id} poll.
+    Docs: https://polza.ai/docs/api-reference/media/create.md
 
     Returns:
         {"b64_json": str, "model": str, "latency_ms": int}
@@ -595,7 +595,7 @@ async def generate_image(
         AIServiceUnavailableError
     """
     import asyncio
-    import base64
+    import base64 as b64mod
     import httpx
 
     if not settings.polza_ai_api_key:
@@ -612,46 +612,52 @@ async def generate_image(
 
     start = time.monotonic()
 
-    async with httpx.AsyncClient(timeout=120) as http:
-        # 1. Submit generation request
+    async with httpx.AsyncClient(timeout=180) as http:
+        # 1. Submit via Media API (POST /v1/media)
         resp = await http.post(
-            f"{base_url}/images/generations",
+            f"{base_url}/media",
             headers=headers,
             json={
                 "model": model,
-                "prompt": prompt,
-                "n": n,
-                "size": aspect_ratio,
-                "resolution": "1K",
-                "response_format": "b64_json",
+                "input": {
+                    "prompt": prompt,
+                    "aspect_ratio": aspect_ratio,
+                    "image_resolution": "1K",
+                },
+                "async": True,
             },
         )
         if resp.status_code >= 300:
             raise AIServiceUnavailableError(
-                f"Polza image submit {resp.status_code}: {resp.text[:300]}"
+                f"Polza media submit {resp.status_code}: {resp.text[:500]}"
             )
 
         data = resp.json()
-        request_id = data.get("requestId")
+        gen_id = data.get("id")
 
-        # Sync response (unlikely for image models but handle it)
-        if "data" in data and data["data"]:
-            b64 = data["data"][0].get("b64_json")
-            if b64:
-                latency_ms = int((time.monotonic() - start) * 1000)
-                return {"b64_json": b64, "model": model, "latency_ms": latency_ms}
+        # Check if already completed (sync response)
+        if data.get("status") == "completed" and data.get("data"):
+            items = data["data"] if isinstance(data["data"], list) else [data["data"]]
+            for item in items:
+                url = item.get("url")
+                if url:
+                    img_resp = await http.get(url)
+                    img_resp.raise_for_status()
+                    b64 = b64mod.b64encode(img_resp.content).decode()
+                    latency_ms = int((time.monotonic() - start) * 1000)
+                    return {"b64_json": b64, "model": model, "latency_ms": latency_ms}
 
-        if not request_id:
+        if not gen_id:
             raise AIServiceUnavailableError(
-                f"Polza image: no requestId in response: {str(data)[:200]}"
+                f"Polza media: no id in response: {str(data)[:300]}"
             )
 
-        # 2. Poll for result (max 90s, every 3s)
+        # 2. Poll GET /v1/media/{id} (max 120s, every 4s)
         for _ in range(30):
-            await asyncio.sleep(3)
+            await asyncio.sleep(4)
             try:
                 poll_resp = await http.get(
-                    f"{base_url}/images/{request_id}",
+                    f"{base_url}/media/{gen_id}",
                     headers=headers,
                 )
                 poll_data = poll_resp.json()
@@ -659,43 +665,32 @@ async def generate_image(
                 continue
 
             status = poll_data.get("status", "")
-            if status == "FAILED":
-                err_msg = poll_data.get("error", "unknown error")
-                raise AIServiceUnavailableError(
-                    f"Polza image generation failed: {err_msg}"
-                )
-            if status == "COMPLETED":
-                output = poll_data.get("output", [])
-                latency_ms = int((time.monotonic() - start) * 1000)
 
-                # Try to get b64 or URL from output
-                for item in output:
-                    if "b64_json" in item and item["b64_json"]:
-                        return {
-                            "b64_json": item["b64_json"],
-                            "model": model,
-                            "latency_ms": latency_ms,
-                        }
-                    if "url" in item and item["url"]:
-                        # Download image from URL and convert to b64
+            if status == "failed":
+                err = poll_data.get("error", {})
+                err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+                raise AIServiceUnavailableError(f"Polza image failed: {err_msg}")
+
+            if status == "completed":
+                latency_ms = int((time.monotonic() - start) * 1000)
+                result_data = poll_data.get("data", {})
+                items = result_data if isinstance(result_data, list) else [result_data] if result_data else []
+
+                for item in items:
+                    url = item.get("url")
+                    if url:
                         try:
-                            img_resp = await http.get(item["url"])
+                            img_resp = await http.get(url)
                             img_resp.raise_for_status()
-                            b64 = base64.b64encode(img_resp.content).decode()
-                            return {
-                                "b64_json": b64,
-                                "model": model,
-                                "latency_ms": latency_ms,
-                            }
+                            b64 = b64mod.b64encode(img_resp.content).decode()
+                            return {"b64_json": b64, "model": model, "latency_ms": latency_ms}
                         except httpx.HTTPError as exc:
                             raise AIServiceUnavailableError(
-                                f"Failed to download generated image: {exc}"
+                                f"Failed to download image: {exc}"
                             ) from exc
 
                 raise AIServiceUnavailableError(
-                    "Polza image: COMPLETED but no image in output"
+                    f"Polza: completed but no URL in data: {str(poll_data)[:300]}"
                 )
 
-        raise AIServiceUnavailableError(
-            "Polza image generation timeout (90s)"
-        )
+        raise AIServiceUnavailableError("Polza image generation timeout (120s)")
