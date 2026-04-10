@@ -614,21 +614,22 @@ async def generate_image(
 
     async with httpx.AsyncClient(timeout=120) as http:
         # 1. Submit generation request
-        try:
-            resp = await http.post(
-                f"{base_url}/images/generations",
-                headers=headers,
-                json={
-                    "model": model,
-                    "prompt": prompt,
-                    "n": n,
-                    "size": aspect_ratio,
-                    "response_format": "b64_json",
-                },
+        resp = await http.post(
+            f"{base_url}/images/generations",
+            headers=headers,
+            json={
+                "model": model,
+                "prompt": prompt,
+                "n": n,
+                "size": aspect_ratio,
+                "resolution": "1K",
+                "response_format": "b64_json",
+            },
+        )
+        if resp.status_code != 200:
+            raise AIServiceUnavailableError(
+                f"Polza image submit {resp.status_code}: {resp.text[:300]}"
             )
-            resp.raise_for_status()
-        except httpx.HTTPError as exc:
-            raise AIServiceUnavailableError(f"Polza image submit: {exc}") from exc
 
         data = resp.json()
         request_id = data.get("requestId")
