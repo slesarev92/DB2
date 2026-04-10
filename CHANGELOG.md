@@ -9,6 +9,24 @@
 
 ## [Unreleased]
 
+### Added (B-04 — Ingredient catalog with price history, 2026-04-10)
+
+**Backend:**
+- Models: `Ingredient` (name, unit, category) + `IngredientPrice` (price,
+  effective_date, notes). CASCADE delete. CHECK constraint on category.
+- `BOMItem.ingredient_id` nullable FK → ingredients (SET NULL on delete)
+- Migration `dad2913e9777`: 2 new tables + BOMItem column
+- CRUD /api/ingredients + GET/POST .../prices
+- `ingredient_service`: list with latest_price, price history, auto-fill
+- `bom_service.create_bom_item`: auto-fill name + price from catalog
+- 9 new tests (428 total)
+
+**Frontend:**
+- `IngredientsCatalog` component: add/delete ingredients, price history
+  (expand row → add price entry, view history), category select
+- New tab "Ингредиенты" in project page
+- `lib/ingredients.ts` API wrappers, types in api.ts
+
 ### Added (B-10 — Version history UI, 2026-04-10)
 
 **Backend:**

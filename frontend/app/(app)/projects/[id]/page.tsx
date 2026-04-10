@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { ChannelsTab } from "@/components/projects/channels-tab";
 import { ContentTab } from "@/components/projects/content-tab";
 import { FinancialPlanEditor } from "@/components/projects/financial-plan-editor";
+import { IngredientsCatalog } from "@/components/projects/ingredients-catalog";
 import { PeriodsTab } from "@/components/projects/periods-tab";
 import { ResultsTab } from "@/components/projects/results-tab";
 import { ScenariosTab } from "@/components/projects/scenarios-tab";
@@ -118,6 +119,7 @@ export default function ProjectDetailPage() {
           <TabsTrigger value="results">Результаты</TabsTrigger>
           <TabsTrigger value="scenarios">Сценарии</TabsTrigger>
           <TabsTrigger value="sensitivity">Чувствительность</TabsTrigger>
+          <TabsTrigger value="ingredients">Ингредиенты</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4 space-y-4">
@@ -197,6 +199,10 @@ export default function ProjectDetailPage() {
 
         <TabsContent value="sensitivity" className="mt-4">
           <SensitivityTab projectId={projectId} />
+        </TabsContent>
+
+        <TabsContent value="ingredients" className="mt-4">
+          <IngredientsCatalog />
         </TabsContent>
       </Tabs>
     </div>

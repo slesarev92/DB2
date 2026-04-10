@@ -13,7 +13,13 @@ class BOMItemBase(BaseModel):
 
 
 class BOMItemCreate(BOMItemBase):
-    """Тело POST /api/project-skus/{psk_id}/bom."""
+    """Тело POST /api/project-skus/{psk_id}/bom.
+
+    Если ingredient_id указан — ingredient_name и price_per_unit
+    могут быть опущены (backend подтянет из каталога).
+    """
+
+    ingredient_id: int | None = None
 
 
 class BOMItemUpdate(BaseModel):
@@ -23,6 +29,7 @@ class BOMItemUpdate(BaseModel):
     quantity_per_unit: Decimal | None = Field(default=None, ge=0)
     loss_pct: Decimal | None = Field(default=None, ge=0, le=1)
     price_per_unit: Decimal | None = Field(default=None, ge=0)
+    ingredient_id: int | None = None
 
 
 class BOMItemRead(BOMItemBase):
@@ -30,4 +37,5 @@ class BOMItemRead(BOMItemBase):
 
     id: int
     project_sku_id: int
+    ingredient_id: int | None = None
     created_at: datetime

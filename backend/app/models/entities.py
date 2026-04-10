@@ -469,6 +469,71 @@ class ProjectSKUChannel(Base, TimestampMixin):
     )
 
 
+# ============================================================
+# Ingredients catalog (B-04)
+# ============================================================
+
+
+class Ingredient(Base, TimestampMixin):
+    """Справочник ингредиентов (сырьё, упаковка, прочее).
+
+    Глобальный каталог — не привязан к проекту. BOMItem может ссылаться
+    на ingredient через FK для auto-fill имени и цены.
+    """
+
+    __tablename__ = "ingredients"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(500), unique=True, nullable=False)
+    unit: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="kg"
+    )
+    category: Mapped[str] = mapped_column(
+        String(100), nullable=False, default="raw_material"
+    )
+
+    prices: Mapped[list["IngredientPrice"]] = relationship(
+        "IngredientPrice",
+        back_populates="ingredient",
+        cascade="all, delete-orphan",
+        lazy="raise_on_sql",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "category IN ('raw_material', 'packaging', 'other')",
+            name="ck_ingredients_category",
+        ),
+    )
+
+
+class IngredientPrice(Base, TimestampMixin):
+    """История цен ингредиента.
+
+    Каждая запись = цена за единицу, действующая с effective_date.
+    Актуальная цена = MAX(effective_date) WHERE effective_date <= today.
+    """
+
+    __tablename__ = "ingredient_prices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ingredient_id: Mapped[int] = mapped_column(
+        ForeignKey("ingredients.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    price_per_unit: Mapped[Decimal] = mapped_column(
+        Numeric(15, 4), nullable=False
+    )
+    effective_date: Mapped[date] = mapped_column(Date, nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    ingredient: Mapped["Ingredient"] = relationship(
+        "Ingredient",
+        back_populates="prices",
+        lazy="raise_on_sql",
+    )
+
+
 class BOMItem(Base, TimestampMixin):
     """Bill of Materials — компонент SKU (сырьё, упаковка)."""
 
@@ -486,6 +551,11 @@ class BOMItem(Base, TimestampMixin):
     )
     price_per_unit: Mapped[Decimal] = mapped_column(
         Numeric(15, 4), nullable=False, default=Decimal("0")
+    )
+    # B-04: optional link to ingredient catalog for auto-pricing
+    ingredient_id: Mapped[int | None] = mapped_column(
+        ForeignKey("ingredients.id", ondelete="SET NULL"),
+        nullable=True,
     )
 
 

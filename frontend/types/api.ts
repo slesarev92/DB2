@@ -495,6 +495,28 @@ export interface SensitivityResponse {
 }
 
 // ============================================================
+// Ingredient catalog (B-04)
+// ============================================================
+
+export interface IngredientRead {
+  id: number;
+  name: string;
+  unit: string;
+  category: string;
+  latest_price: string | null;
+  created_at: string;
+}
+
+export interface IngredientPriceRead {
+  id: number;
+  ingredient_id: number;
+  price_per_unit: string;
+  effective_date: string;
+  notes: string | null;
+  created_at: string;
+}
+
+// ============================================================
 // ProjectFinancialPlan (CAPEX/OPEX по годам проекта)
 // ============================================================
 
