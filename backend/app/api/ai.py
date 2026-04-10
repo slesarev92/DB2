@@ -211,7 +211,7 @@ async def explain_kpi(
         )
         # Persist to DB if not yet saved (backfill from Redis)
         await _persist_kpi_commentary(
-            session, project_id, body.scenario_id, body.period_scope, cached
+            session, project_id, body.scenario_id, body.scope, cached
         )
         return AIKpiExplanationResponse(
             **{k: v for k, v in cached.items() if k != "cached"},
@@ -288,7 +288,7 @@ async def explain_kpi(
     await ai_cache.release_dedupe_lock(lock_key)
 
     await _persist_kpi_commentary(
-        session, project_id, body.scenario_id, body.period_scope, response_payload
+        session, project_id, body.scenario_id, body.scope, response_payload
     )
 
     return AIKpiExplanationResponse(**response_payload, cached=False)
