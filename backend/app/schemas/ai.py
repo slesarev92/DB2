@@ -382,6 +382,13 @@ class AIPackageMockupRequest(BaseModel):
         default=None,
         description="MediaAsset ID reference-изображения (логотип).",
     )
+    tier_override: AIModelTier | None = Field(
+        default=None,
+        description=(
+            "Override модели для vision-шага. None = BALANCED (sonnet, ~3-5₽). "
+            "HEAVY = opus (~15-25₽, лучше art direction)."
+        ),
+    )
 
 
 class AIPackageMockupResponse(BaseModel):

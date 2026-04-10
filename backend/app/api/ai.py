@@ -1151,7 +1151,7 @@ async def generate_package_mockup(
 ) -> AIPackageMockupResponse:
     """Two-step pipeline: Claude vision анализирует reference → flux генерит mockup.
 
-    Step 1 (~5₽): Claude opus (vision) reads reference image → art direction
+    Step 1 (~3₽ sonnet / ~15₽ opus): Claude vision reads reference image → art direction
     Step 2 (~8₽): flux-2-pro generates image from art direction
     Total: ~13₽ per generation.
     """
@@ -1259,7 +1259,7 @@ async def generate_package_mockup(
                 image_media_type=ref_asset.content_type,
                 schema=LLMVisionArtDirectionOutput,
                 feature=AIFeature.PACKAGE_MOCKUP,
-                tier_override=ai_service.AIModelTier.HEAVY,
+                tier_override=body.tier_override or ai_service.AIModelTier.BALANCED,
                 endpoint="mockup_vision",
             )
             art_direction = vision_result.parsed.art_direction
