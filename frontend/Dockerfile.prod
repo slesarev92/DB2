@@ -2,14 +2,7 @@
 # Production multi-stage build for Next.js frontend.
 # Standalone output, non-root user, minimal runtime image.
 
-# ── Stage 1: dependencies ──
-FROM node:20-alpine AS deps
-
-WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci
-
-# ── Stage 2: builder ──
+# ── Stage 1: build ──
 FROM node:20-alpine AS builder
 
 WORKDIR /app
@@ -18,13 +11,20 @@ WORKDIR /app
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
-COPY --from=deps /app/node_modules ./node_modules
+# Use npm mirror if default registry is blocked (RU VPS)
+ARG NPM_REGISTRY=https://registry.npmjs.org
+RUN npm config set registry $NPM_REGISTRY
+
+# Install dependencies + build in one stage
+COPY package.json package-lock.json* ./
+RUN npm ci --registry=$NPM_REGISTRY
+
 COPY . .
 
 # Next.js standalone build (output: "standalone" in next.config.mjs)
-RUN npm run build
+RUN ./node_modules/.bin/next build
 
-# ── Stage 3: runner ──
+# ── Stage 2: runner ──
 FROM node:20-alpine AS runner
 
 WORKDIR /app
