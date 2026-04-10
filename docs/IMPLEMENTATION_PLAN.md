@@ -2986,3 +2986,134 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
   - `.github/workflows/deploy.yml`: manual trigger, SSH deploy, health check
   - `gunicorn>=22.0.0` in requirements.txt, `output: "standalone"` in next.config.mjs
   - GHCR images tagged `latest` + `sha` per commit
+
+### ✅ v0.2.0 — Prod fixes + chat persistence (закрыт 2026-04-10)
+- [x] fix: 500 на upload ai_reference (media dir permissions root→appuser)
+- [x] fix: body.period_scope → body.scope (explain-kpi 500)
+- [x] fix: frontend + celery-worker healthchecks (IPv6, inherited curl)
+- [x] feat: mockup vision default sonnet (~3₽), opus через tier_override
+- [x] feat: delete project button на /projects page
+- [x] feat: chat persistence (chat_conversations + chat_messages таблицы,
+  auto-load на mount, conversation list + switcher)
+
+---
+
+### Фаза 8 — Presentation Layer: паритет с эталонным паспортом ← **в работе**
+
+**Контекст:** Gap analysis эталона PASSPORT_ELEKTRA_ZERO (22 стр.) показал,
+что расчётное ядро покрывает 100% финмодели, но UI и экспорты не показывают
+~40% данных, которые нужны для Gate Review. Фаза 8 закрывает эти пробелы.
+
+**Приоритет:** от высокого к низкому по impact для Gate-презентации.
+
+#### 8.1 Ценовые таблицы (Pricing Summary)
+**Что:** Сводная таблица полочных цен, отгрузочных цен и промо-цен
+по матрице SKU × канал. Данные уже есть в ProjectSKUChannel
+(shelf_price, channel_margin, promo_discount, promo_share).
+**UI:** Новая секция в табе «Результаты» или отдельный таб «Цены».
+Таблица: строки = каналы, колонки = SKU. Ячейки: полка / отгрузка / себестоимость.
+**Экспорт:** Включить в PPT (слайд) и PDF (секция).
+**Критерий:** Таблица совпадает со страницей 2 эталона.
+**Зависимости:** нет (данные из существующих таблиц).
+
+#### 8.2 Стакан / Value Chain
+**Что:** Per-unit экономика по SKU × канал: Revenue → COGS → GP → Logistics
+→ OPEX → CM → EBITDA. В эталоне это таблица 4 SKU × 6 каналов с % маржами
+и цветовой индикацией (Green >50%, Yellow 45-60%, Red <45%).
+**Backend:** Новый endpoint GET /api/projects/{id}/value-chain?scope=y1y3
+собирающий per-unit метрики из pipeline results.
+**UI:** Новый таб «Стакан» или секция в «Результаты». AG Grid с условным
+форматированием маржей.
+**Экспорт:** Включить в PPT и PDF.
+**Критерий:** Совпадает со страницами 8-9 эталона.
+**Зависимости:** расчётное ядро (Фаза 2) уже считает все метрики per-unit.
+
+#### 8.3 Per-unit метрики в KPI-сводке
+**Что:** Revenue / GP / CM / EBITDA — на штуку, на литр, на кг.
+Отдельная строка или секция в KPI-таблице.
+**Backend:** Расширить endpoint results или добавить вычисление в
+существующий aggregator.
+**UI:** Дополнительные строки в ResultsTab KPI grid.
+**Экспорт:** Добавить в PPT/PDF KPI-секцию.
+**Критерий:** Совпадает со страницей 18 эталона.
+**Зависимости:** нет.
+
+#### 8.4 Sensitivity в экспортах
+**Что:** 2D матрицы чувствительности (Price × COGS, Price × Discount Rate)
+уже есть в UI (SensitivityTab). Нужно добавить в PPT и PDF.
+**Backend:** Модифицировать ppt_exporter и pdf_exporter — вызвать
+sensitivity_service, отрендерить таблицу.
+**UI:** нет изменений.
+**Критерий:** PPT/PDF содержат 2D матрицу как на странице 7 эталона.
+**Зависимости:** sensitivity_service (Фаза 4.4).
+
+#### 8.5 Квартальный P&L
+**Что:** Эталон показывает P&L по кварталам + годовые итоги.
+Сейчас — только годовые.
+**Backend:** Агрегация помесячных данных (M1-M12) в кварталы Q1-Q4.
+Новый query mode или endpoint parameter `?period_mode=quarterly`.
+**UI:** Переключатель «Месяцы / Кварталы / Годы» в табе Периоды.
+**Экспорт:** Квартальный лист в XLSX.
+**Критерий:** Переключатель работает, данные сходятся с годовыми итогами.
+**Зависимости:** нет.
+
+#### 8.6 Цветовая индикация KPI
+**Что:** Green/Yellow/Red для GP%, CM%, Go/No-Go. Визуальная легенда.
+Пороги: GP >50% = green, 45-50% = yellow, <45% = red (из эталона).
+**UI:** Условное форматирование ячеек в ResultsTab, ScenariosTab,
+Value Chain. Легенда внизу таблицы.
+**Экспорт:** Цветные ячейки в PPT и PDF (уже есть Go/No-Go badge).
+**Критерий:** Визуально совпадает с эталоном.
+**Зависимости:** нет.
+
+#### 8.7 Gate Timeline (Gantt-диаграмма)
+**Что:** Визуальная шкала G0→G5 с датами и текущей позицией.
+В эталоне — горизонтальная полоса с milestone'ами.
+**UI:** Компонент gate-timeline в overview или отдельной секции.
+Горизонтальная полоса с точками Gate и подписями дат.
+**Экспорт:** Включить в PPT title slide и PDF cover.
+**Критерий:** Визуально читаемая шкала гейтов.
+**Зависимости:** Project.gate_stage, Project.roadmap_tasks.
+
+#### 8.8 Расширенный бюджет маркетинга
+**Что:** В эталоне 14 категорий OPEX (Digital, E-com, OOH, PR, SMM,
+Design, Research, ПОСМ, Creative, Special Projects, Merch, TV).
+Сейчас — агрегированный OPEX в ProjectFinancialPlan.
+**Backend:** Расширить ProjectFinancialPlan или добавить subcategory
+field в OPEX entries.
+**UI:** Детализация в табе «Фин. план» с sub-rows.
+**Экспорт:** Развёрнутая таблица бюджета в PPT/PDF.
+**Критерий:** Бюджет разбит на категории как в эталоне.
+**Зависимости:** может потребовать миграцию (доп. поле).
+
+#### 8.9 Nielsen бенчмарки (low priority)
+**Что:** Рыночные данные — вселенная, офтейк, дистрибуция, ценовые
+уровни. Специфичные для каждого рынка, вводятся вручную или
+импортируются.
+**Backend:** Новая JSONB-модель или отдельная таблица для market data.
+**UI:** Секция в content tab или отдельный таб.
+**Экспорт:** Секция в PPT/PDF.
+**Критерий:** Данные отображаются как на страницах 19-20 эталона.
+**Зависимости:** Модель данных для бенчмарков (новая сущность).
+
+#### 8.10 КП на производство (low priority)
+**Что:** Детальные котировки копакеров. Сейчас COGS интегрирован в
+BOM, но без breakdown по поставщикам.
+**Backend:** Расширение BOM или новая сущность SupplierQuote.
+**UI:** Секция в BOM tab.
+**Экспорт:** Отдельная страница в PDF.
+**Критерий:** Структура как на странице 20 эталона.
+**Зависимости:** BOM модель, возможно миграция.
+
+#### Порядок выполнения Phase 8
+
+```
+8.1 Pricing Tables ──┐
+8.3 Per-unit metrics ─┼──→ 8.6 Color-coded KPI ──→ 8.4 Sensitivity exports
+8.2 Value Chain ──────┘
+8.5 Quarterly P&L (независимо)
+8.7 Gate Timeline (независимо)
+8.8 Marketing budget (независимо)
+8.9 Nielsen (low, по запросу)
+8.10 КП производство (low, по запросу)
+```

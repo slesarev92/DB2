@@ -9,25 +9,34 @@
 
 ## [Unreleased]
 
+_Phase 8: Presentation Layer — паритет с эталонным паспортом_
+
+---
+
+## [0.2.0] — 2026-04-10
+
+Prod fixes, AI improvements, chat persistence, delete project UI.
+
+### Added
+- **Chat persistence:** таблицы `chat_conversations` + `chat_messages`,
+  auto-load последнего разговора при обновлении страницы, список
+  conversations с переключением и удалением
+- **Delete project:** кнопка «Удалить» в карточках на странице /projects
+  с ConfirmDialog (soft delete)
+- **Mockup vision tier_override:** поле `tier_override` в
+  AIPackageMockupRequest для выбора sonnet/opus на vision-шаге
+
 ### Enhanced
-- **AI Mockup prompt enrichment:** промпт генерации mockup'а упаковки обогащён
-  контекстом проекта (target_audience, concept_text, geography, innovation_type,
-  idea_short, production_type, project_goal) — и для vision-пути, и для fallback
-- **AI Mockup iteration history:** при повторной генерации mockup'а для SKU
-  последние 3 итерации (prompt_text + art_direction) инжектируются в промпт,
-  позволяя Claude эволюционировать дизайн вместо генерации с нуля
+- **AI Mockup prompt enrichment:** контекст проекта + iteration history
+- **Mockup vision default sonnet:** ~3-5₽ вместо ~15-25₽ (opus),
+  opus доступен через tier_override=heavy
 
 ### Fixed
-- `mock_polza_mockup` test fixture: `generate_image` (httpx path) не мокался,
-  mockup-тесты падали с 503 (pre-existing bug)
-- **explain-kpi endpoint 500:** `body.period_scope` → `body.scope` (2 вхождения
-  в ai.py) — schema поле `scope`, а не `period_scope`. Ломало endpoint и 4 теста.
-- **Prod: 500 на upload ai_reference:** PermissionError — media dir owned by root,
-  backend работает как appuser. Исправлено chown + задокументировано.
-- **Prod: frontend + celery-worker unhealthy:** celery наследовал curl :8000
-  healthcheck из backend image; frontend wget использовал localhost → IPv6.
-  Добавлены compose-level healthcheck overrides.
-- 448 pytest passed (все 12 explain_kpi tests зелёные)
+- **explain-kpi 500:** `body.period_scope` → `body.scope`
+- **Prod 500 на upload ai_reference:** PermissionError (root-owned media dir)
+- **Prod unhealthy containers:** celery-worker + frontend healthcheck overrides
+- **Chat not persisting:** session.flush() без session.commit() → rollback
+- 444 pytest passed
 
 ---
 
