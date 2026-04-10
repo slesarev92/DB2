@@ -1,0 +1,143 @@
+"use client";
+
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+
+import type { RoadmapTask } from "@/types/api";
+
+interface GanttChartProps {
+  tasks: RoadmapTask[];
+  projectStartDate?: string;
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  done: "#22c55e",
+  in_progress: "#3b82f6",
+  planned: "#94a3b8",
+  blocked: "#ef4444",
+};
+
+function daysBetween(a: string, b: string): number {
+  const msPerDay = 86400000;
+  return Math.max(
+    1,
+    Math.round(
+      (new Date(b).getTime() - new Date(a).getTime()) / msPerDay,
+    ),
+  );
+}
+
+/**
+ * Gantt chart для roadmap_tasks (B-07).
+ *
+ * Горизонтальные бары: ось Y = задачи, ось X = дни от старта проекта.
+ * Цвет по статусу: done (зелёный), in_progress (синий), planned (серый),
+ * blocked (красный).
+ */
+export function GanttChart({ tasks, projectStartDate }: GanttChartProps) {
+  // Filter tasks that have both start and end dates
+  const validTasks = tasks.filter((t) => t.start_date && t.end_date);
+  if (validTasks.length === 0) return null;
+
+  // Find the earliest date as reference point
+  const refDate =
+    projectStartDate ??
+    validTasks.reduce(
+      (min, t) => (t.start_date! < min ? t.start_date! : min),
+      validTasks[0].start_date!,
+    );
+
+  const chartData = validTasks.map((task) => {
+    const offsetDays = daysBetween(refDate, task.start_date!);
+    const durationDays = daysBetween(task.start_date!, task.end_date!);
+    return {
+      name: task.name.length > 25 ? task.name.slice(0, 22) + "..." : task.name,
+      fullName: task.name,
+      offset: offsetDays,
+      duration: durationDays,
+      status: task.status ?? "planned",
+      owner: task.owner ?? "",
+      startDate: task.start_date!,
+      endDate: task.end_date!,
+    };
+  });
+
+  const maxDay = Math.max(
+    ...chartData.map((d) => d.offset + d.duration),
+  );
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Gantt chart</CardTitle>
+        <CardDescription>
+          Визуализация roadmap: зелёный = выполнено, синий = в работе,
+          серый = запланировано, красный = заблокировано.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ResponsiveContainer
+          width="100%"
+          height={validTasks.length * 40 + 50}
+        >
+          <BarChart
+            data={chartData}
+            layout="vertical"
+            margin={{ top: 5, right: 20, left: 120, bottom: 5 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+            <XAxis
+              type="number"
+              domain={[0, maxDay + 5]}
+              tickFormatter={(v: number) => `${v}d`}
+            />
+            <YAxis
+              type="category"
+              dataKey="name"
+              width={115}
+              tick={{ fontSize: 11 }}
+            />
+            <Tooltip
+              formatter={(value, name) => {
+                if (name === "offset") return [null, null];
+                return [`${value} дн.`, "Длительность"];
+              }}
+              labelFormatter={(_, payload) => {
+                const item = payload?.[0]?.payload;
+                if (!item) return "";
+                return `${item.fullName}\n${item.startDate} → ${item.endDate}${item.owner ? ` (${item.owner})` : ""}`;
+              }}
+            />
+            {/* Invisible offset bar */}
+            <Bar dataKey="offset" stackId="a" fill="transparent" />
+            {/* Visible duration bar */}
+            <Bar dataKey="duration" stackId="a" radius={[0, 4, 4, 0]}>
+              {chartData.map((entry, i) => (
+                <Cell
+                  key={i}
+                  fill={STATUS_COLORS[entry.status] ?? STATUS_COLORS.planned}
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </CardContent>
+    </Card>
+  );
+}

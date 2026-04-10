@@ -61,7 +61,7 @@
 | B-04 | ✅ Done | База ингредиентов с историей цен | Реализовано 2026-04-10: ingredients + ingredient_prices tables, CRUD API, auto-fill BOM, catalog UI, 428 pytest |
 | B-05 | 🟢 P3 | Региональная детализация канала | MVP: канал = аналитическая единица (ADR, раздел 4.6 ТЗ). Регион — в идентификаторе канала |
 | B-06 | ✅ Done | Дельты сценариев по SKU/каналу | Реализовано 2026-04-10: scenario_channel_deltas, per-channel override в pipeline, UI editor, 417 pytest |
-| B-07 | 🟢 P3 | ROAD MAP / Gantt визуализация | В 4.5.3 сделан текстовый список roadmap_tasks. Gantt-визуализация отложена |
+| B-07 | ✅ Done | ROAD MAP / Gantt визуализация | Реализовано 2026-04-10: recharts Gantt chart, color by status, integrated in content-tab |
 | B-08 | 🟡 P2 | Согласование / approval flow | Требует RBAC (связан с B-01). В 4.5 сохранили только список approvers, без workflow |
 | B-09 | 🟢 P3 | Интеграция с 1С / BI-кубами | Архитектурно предусмотрено, реализация — Этап 2+ |
 | B-10 | ✅ Done | Версионность сценариев в UI | Реализовано 2026-04-10: history endpoint, ValueHistoryDialog, per-period "..." buttons, 419 pytest |

@@ -9,6 +9,14 @@
 
 ## [Unreleased]
 
+### Added (B-07 — Gantt chart visualization, 2026-04-10)
+
+**Frontend:**
+- `GanttChart` component: recharts horizontal BarChart, tasks as bars
+  positioned by offset days from project start, colored by status
+  (done=green, in_progress=blue, planned=grey, blocked=red)
+- Integrated in content-tab below roadmap_tasks table
+
 ### Added (B-04 — Ingredient catalog with price history, 2026-04-10)
 
 **Backend:**

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { GanttChart } from "@/components/projects/gantt-chart";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -809,6 +810,14 @@ export function ContentTab({ projectId }: ContentTabProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* B-07: Gantt chart visualization */}
+      {roadmapTasks.length > 0 && (
+        <GanttChart
+          tasks={roadmapTasks}
+          projectStartDate={project?.start_date}
+        />
+      )}
 
       {/* ====================================================== */}
       {/* 7. Согласующие (JSONB list)                            */}
