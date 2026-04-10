@@ -15,12 +15,20 @@ from decimal import Decimal
 from pydantic import BaseModel, Field
 
 
+class OpexItemSchema(BaseModel):
+    """Одна статья OPEX в разбивке (B-19)."""
+
+    name: str = Field(..., min_length=1, max_length=200)
+    amount: Decimal = Field(default=Decimal("0"), ge=0)
+
+
 class FinancialPlanItem(BaseModel):
     """Одна строка плана для одного модельного года."""
 
     year: int = Field(..., ge=1, le=10, description="model_year 1..10")
     capex: Decimal = Field(default=Decimal("0"), ge=0)
     opex: Decimal = Field(default=Decimal("0"), ge=0)
+    opex_items: list[OpexItemSchema] = Field(default_factory=list)
 
 
 class FinancialPlanRequest(BaseModel):
@@ -30,6 +38,11 @@ class FinancialPlanRequest(BaseModel):
     записи `project_financial_plans` для project_id и вставляет новые
     по переданному списку. Элементы с year'ами которых нет в списке
     трактуются как 0/0.
+
+    Логика opex_items:
+    - Если opex_items не пустой → opex = sum(items.amount),
+      явное значение opex игнорируется.
+    - Если opex_items пустой → opex = явно указанное число.
     """
 
     items: list[FinancialPlanItem] = Field(default_factory=list)

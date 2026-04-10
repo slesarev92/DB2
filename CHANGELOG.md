@@ -9,6 +9,26 @@
 
 ## [Unreleased]
 
+### Added (B-19 — OPEX breakdown по статьям, 2026-04-10)
+
+**Backend:**
+- Model `OpexItem` — дочерняя таблица `opex_items` с FK → `project_financial_plans`
+  (CASCADE DELETE), UNIQUE(financial_plan_id, name), amount Numeric(20,2)
+- Relationship `ProjectFinancialPlan.opex_items` (lazy="raise_on_sql",
+  cascade="all, delete-orphan")
+- Migration `0bd00f1c9b93`: CREATE TABLE opex_items
+- `FinancialPlanItem` schema расширена полем `opex_items: list[OpexItemSchema]`
+- Service: `list_plan_by_year` загружает items через selectinload;
+  `replace_plan` при наличии opex_items автоматически считает opex = sum(amounts)
+- 5 новых тестов (403 total): auto-sum, backward compat, CASCADE replace,
+  mixed years, empty items default
+
+**Frontend:**
+- `OpexItem` interface в types/api.ts
+- Кнопка «Разбить» в financial-plan-editor → раскрывает вложенные строки
+  статей OPEX per year. Добавление/удаление/редактирование статей,
+  авто-суммирование OPEX. Без статей — ручной ввод как раньше.
+
 ### Added (Phase 7.8 — AI package mockup generation, 2026-04-10)
 
 **Backend:**

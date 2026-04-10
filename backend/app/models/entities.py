@@ -546,10 +546,54 @@ class ProjectFinancialPlan(Base, TimestampMixin):
         Numeric(20, 2), nullable=False, default=Decimal("0")
     )
 
+    # relationship для selectinload в service
+    opex_items: Mapped[list["OpexItem"]] = relationship(
+        "OpexItem",
+        back_populates="financial_plan",
+        cascade="all, delete-orphan",
+        lazy="raise_on_sql",
+    )
+
     __table_args__ = (
         UniqueConstraint(
             "project_id", "period_id",
             name="uq_project_financial_plans_project_period",
+        ),
+    )
+
+
+class OpexItem(Base, TimestampMixin):
+    """Статья OPEX в разбивке ProjectFinancialPlan.
+
+    Каждая запись — одна статья расходов (листинги, запускной маркетинг,
+    и т.п.) для конкретного (проект × период). Сумма всех items =
+    ProjectFinancialPlan.opex (backend автоматически пересчитывает
+    при наличии items). CASCADE DELETE через FK: удаление
+    ProjectFinancialPlan удаляет все его items.
+    """
+
+    __tablename__ = "opex_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    financial_plan_id: Mapped[int] = mapped_column(
+        ForeignKey("project_financial_plans.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(
+        Numeric(20, 2), nullable=False, default=Decimal("0")
+    )
+
+    financial_plan: Mapped["ProjectFinancialPlan"] = relationship(
+        "ProjectFinancialPlan",
+        back_populates="opex_items",
+        lazy="raise_on_sql",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "financial_plan_id", "name",
+            name="uq_opex_items_plan_name",
         ),
     )
 

@@ -487,10 +487,17 @@ export interface SensitivityResponse {
 // ProjectFinancialPlan (CAPEX/OPEX по годам проекта)
 // ============================================================
 
+/** Статья OPEX в разбивке (B-19). */
+export interface OpexItem {
+  name: string;
+  amount: string; // Decimal as string
+}
+
 export interface FinancialPlanItem {
   year: number; // 1..10
   capex: string; // Decimal as string
   opex: string;
+  opex_items: OpexItem[];
 }
 
 export interface FinancialPlanRequest {

@@ -73,7 +73,7 @@
 | B-16 | 🟡 P2 | Frontend unit/e2e тесты (Vitest/Playwright) | Phase 3.1. Сейчас покрытие только backend pytest + ручная визуальная проверка. Для prod стабильности нужен e2e критического flow |
 | B-17 | 🟢 P3 | Batch save для period values | Phase 3.x. Сейчас каждое изменение ячейки — отдельный PATCH. Оптимизация производительности при массовом редактировании |
 | B-18 | 🟡 P2 | Corporate PPT template (PASSPORT_ELEKTRA стиль) | Phase 5.2. ppt_exporter использует python-pptx blank layouts. Подгрузка готового corporate шаблона через `Presentation("template.pptx")` — одна строка замены, когда появится брендированный .pptx от дизайнера |
-| B-19 | 🟢 P3 | OPEX breakdown (разбивка OPEX по статьям) | Phase 4.5.1. Сейчас OPEX = одно число per year (ProjectFinancialPlan.opex). Для детализации по статьям нужна дочерняя таблица + UI |
+| B-19 | ✅ Done | OPEX breakdown (разбивка OPEX по статьям) | Реализовано 2026-04-10: таблица `opex_items`, auto-sum, UI breakdown, 403 pytest |
 
 ---
 

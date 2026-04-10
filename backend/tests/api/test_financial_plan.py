@@ -2,6 +2,7 @@
 
 CAPEX/OPEX по годам проекта для pipeline. UI работает per-year,
 backend хранит per-period — сервис делает маппинг.
+B-19: добавлены тесты для opex_items breakdown.
 """
 from decimal import Decimal
 
@@ -9,7 +10,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Period, ProjectFinancialPlan
+from app.models import OpexItem, Period, ProjectFinancialPlan
 
 
 VALID_PROJECT = {
@@ -207,3 +208,166 @@ async def test_put_plan_unauthorized(client: AsyncClient) -> None:
         "/api/projects/1/financial-plan", json={"items": []}
     )
     assert resp.status_code == 401
+
+
+# ============================================================
+# B-19: OPEX breakdown (opex_items)
+# ============================================================
+
+
+async def test_get_plan_returns_empty_opex_items_by_default(
+    auth_client: AsyncClient,
+) -> None:
+    """По умолчанию opex_items = [] для каждого года."""
+    project_id = await _create_project(auth_client)
+    resp = await auth_client.get(f"/api/projects/{project_id}/financial-plan")
+    assert resp.status_code == 200
+    for item in resp.json():
+        assert item["opex_items"] == []
+
+
+async def test_put_plan_with_opex_items_auto_sums(
+    auth_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """PUT с opex_items → opex = sum(items), items сохраняются в БД."""
+    project_id = await _create_project(auth_client)
+    body = {
+        "items": [
+            {
+                "year": 1,
+                "capex": "100000",
+                "opex": "999",  # должен быть игнорирован (items есть)
+                "opex_items": [
+                    {"name": "Листинги", "amount": "500000"},
+                    {"name": "Запускной маркетинг", "amount": "320000"},
+                ],
+            },
+        ]
+    }
+    resp = await auth_client.put(
+        f"/api/projects/{project_id}/financial-plan", json=body
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+
+    y1 = next(i for i in data if i["year"] == 1)
+    # opex = sum of items, not the explicit 999
+    assert Decimal(y1["opex"]) == Decimal("820000")
+    assert len(y1["opex_items"]) == 2
+    names = {oi["name"] for oi in y1["opex_items"]}
+    assert names == {"Листинги", "Запускной маркетинг"}
+
+    # Проверяем что в БД реально 2 OpexItem записи
+    opex_rows = (
+        await db_session.scalars(select(OpexItem))
+    ).all()
+    assert len(list(opex_rows)) == 2
+
+
+async def test_put_plan_without_opex_items_backward_compat(
+    auth_client: AsyncClient,
+) -> None:
+    """PUT без opex_items → opex = явное число (обратная совместимость)."""
+    project_id = await _create_project(auth_client)
+    body = {
+        "items": [
+            {"year": 2, "capex": "0", "opex": "750000"},
+        ]
+    }
+    resp = await auth_client.put(
+        f"/api/projects/{project_id}/financial-plan", json=body
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+
+    y2 = next(i for i in data if i["year"] == 2)
+    assert Decimal(y2["opex"]) == Decimal("750000")
+    assert y2["opex_items"] == []
+
+
+async def test_put_plan_replace_clears_old_opex_items(
+    auth_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Повторный PUT удаляет старые opex_items (CASCADE)."""
+    project_id = await _create_project(auth_client)
+
+    # Первый PUT с items
+    first = {
+        "items": [
+            {
+                "year": 1,
+                "capex": "0",
+                "opex_items": [
+                    {"name": "Листинги", "amount": "100000"},
+                    {"name": "Промо", "amount": "200000"},
+                ],
+            },
+        ]
+    }
+    await auth_client.put(
+        f"/api/projects/{project_id}/financial-plan", json=first
+    )
+
+    # Второй PUT — другие items
+    second = {
+        "items": [
+            {
+                "year": 1,
+                "capex": "0",
+                "opex_items": [
+                    {"name": "Новая статья", "amount": "50000"},
+                ],
+            },
+        ]
+    }
+    resp = await auth_client.put(
+        f"/api/projects/{project_id}/financial-plan", json=second
+    )
+    data = resp.json()
+    y1 = next(i for i in data if i["year"] == 1)
+    assert Decimal(y1["opex"]) == Decimal("50000")
+    assert len(y1["opex_items"]) == 1
+    assert y1["opex_items"][0]["name"] == "Новая статья"
+
+    # В БД должна быть ровно 1 OpexItem (старые удалены CASCADE)
+    opex_rows = (
+        await db_session.scalars(select(OpexItem))
+    ).all()
+    assert len(list(opex_rows)) == 1
+
+
+async def test_put_plan_mixed_years_with_and_without_items(
+    auth_client: AsyncClient,
+) -> None:
+    """Один год с opex_items, другой без — оба работают корректно."""
+    project_id = await _create_project(auth_client)
+    body = {
+        "items": [
+            {
+                "year": 1,
+                "capex": "0",
+                "opex": "0",
+                "opex_items": [
+                    {"name": "Листинги", "amount": "400000"},
+                ],
+            },
+            {
+                "year": 2,
+                "capex": "0",
+                "opex": "600000",
+                # no opex_items → manual opex
+            },
+        ]
+    }
+    resp = await auth_client.put(
+        f"/api/projects/{project_id}/financial-plan", json=body
+    )
+    data = resp.json()
+
+    y1 = next(i for i in data if i["year"] == 1)
+    assert Decimal(y1["opex"]) == Decimal("400000")
+    assert len(y1["opex_items"]) == 1
+
+    y2 = next(i for i in data if i["year"] == 2)
+    assert Decimal(y2["opex"]) == Decimal("600000")
+    assert y2["opex_items"] == []
