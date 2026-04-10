@@ -65,7 +65,7 @@
 | B-08 | 🟡 P2 | Согласование / approval flow | Требует RBAC (связан с B-01). В 4.5 сохранили только список approvers, без workflow |
 | B-09 | 🟢 P3 | Интеграция с 1С / BI-кубами | Архитектурно предусмотрено, реализация — Этап 2+ |
 | B-10 | 🟢 P3 | Версионность сценариев в UI | History log в интерфейсе. Данные хранятся (append-only PeriodValue), UI-просмотр — Этап 2 |
-| B-11 | 🟢 P3 | Интерактивный Tornado chart | Визуальный анализ чувствительности (E-09 MVP = таблица 5×4, не chart) |
+| B-11 | ✅ Done | Интерактивный Tornado chart | Реализовано 2026-04-10: recharts horizontal BarChart, sorted by impact, integrated in sensitivity tab |
 | B-12 | 🟢 P3 | AKB / план дистрибуции | Отдельный АКБ-экран из GORJI+ — развёрнутый план по ТТ |
 | B-13 | 🟢 P3 | OBPPC матрица (Price-Pack-Channel) | Стратегия Price-Pack-Channel — маркетинговый блок |
 | B-14 | 🟠 P1 | MFA / SSO / LDAP | Этап 2 вместе с Keycloak (B-01) |

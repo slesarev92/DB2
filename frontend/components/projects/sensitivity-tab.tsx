@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { ExplainSensitivityInline } from "@/components/ai-panel/explain-sensitivity-inline";
+import { TornadoChart } from "@/components/projects/tornado-chart";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -182,6 +183,9 @@ export function SensitivityTab({ projectId }: SensitivityTabProps) {
               scenarioId={baseScenarioId}
             />
           )}
+
+          {/* B-11: Tornado chart */}
+          <TornadoChart data={data} />
 
           {/* Sensitivity table */}
           <Card>

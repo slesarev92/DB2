@@ -9,6 +9,15 @@
 
 ## [Unreleased]
 
+### Added (B-11 — Tornado chart, 2026-04-10)
+
+**Frontend:**
+- `recharts` dependency added for data visualization
+- `TornadoChart` component: horizontal bar chart showing NPV range at ±20%
+  per sensitivity parameter. Sorted by impact range (widest on top).
+  Red = negative delta, green = positive delta. Reference line at Base NPV.
+- Integrated in sensitivity-tab above the data table
+
 ### Added (B-02 — Import actual data from Excel, 2026-04-10)
 
 **Backend:**
