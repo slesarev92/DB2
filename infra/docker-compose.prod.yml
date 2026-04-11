@@ -101,16 +101,18 @@ services:
       retries: 3
     restart: unless-stopped
 
-  # ── Reverse proxy (HTTPS via Let's Encrypt) ──
+  # ── Reverse proxy (HTTP only — SSL termination на host nginx) ──
+  # SSL обрабатывается СИСТЕМНЫМ nginx на хосте (вне docker), потому что
+  # на сервере уже есть другое приложение (frpanel) которое занимает :80.
+  # Host nginx проксирует https://db2.medoed.work → http://localhost:${HTTP_PORT}
+  # и обрабатывает Let's Encrypt cert через certbot --nginx плагин.
+  # См. docs/SSL_SETUP.md.
   nginx:
     image: nginx:1.27-alpine
     ports:
-      - "${HTTP_PORT:-80}:80"
-      - "${HTTPS_PORT:-443}:443"
+      - "${HTTP_PORT:-8080}:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - letsencrypt:/etc/letsencrypt:ro
-      - certbot-webroot:/var/www/certbot:ro
     depends_on:
       backend:
         condition: service_healthy
@@ -118,23 +120,7 @@ services:
         condition: service_started
     restart: unless-stopped
 
-  # ── Certbot (Let's Encrypt cert renewal) ──
-  # Запускается вручную для первого получения сертификата:
-  #   docker compose -f docker-compose.prod.yml run --rm certbot \
-  #       certonly --webroot -w /var/www/certbot \
-  #       -d db2.medoed.work --email YOUR_EMAIL --agree-tos --no-eff-email
-  # Для renew (раз в 60 дней): docker compose -f docker-compose.prod.yml \
-  #       run --rm certbot renew && docker compose ... exec nginx nginx -s reload
-  certbot:
-    image: certbot/certbot:latest
-    volumes:
-      - letsencrypt:/etc/letsencrypt
-      - certbot-webroot:/var/www/certbot
-    profiles: ["tools"]   # Не запускается автоматически с up
-
 volumes:
   postgres-data:
   redis-data:
   media-storage:
-  letsencrypt:
-  certbot-webroot:
