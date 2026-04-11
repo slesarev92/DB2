@@ -381,6 +381,17 @@ SSH key: `~/.ssh/db2_deploy`. `.env` в `infra/.env` на сервере.
 (GHCR недоступен с RU VPS, переменные `BACKEND_IMAGE`/`FRONTEND_IMAGE`
 в `infra/.env` указывают на локальные теги).
 
+**Версионирование:** semver через git tags. Текущие: `v0.1.0` (MVP),
+`v0.2.0` (chat persistence + delete project), `v0.3.0` (Phase 8
+presentation parity). Пользователь иногда говорит "версия 1.0/1.2" —
+это marketing milestone, в git это всегда semver `v0.x`. На каждый
+prod-релиз создавать tag через `git tag -a vX.Y.Z -m "..."` + push.
+
+**RU VPS networking:** GitHub fetch с сервера 45.144.221.215 нестабилен
+(периодически `Connection reset by peer`). При деплое использовать
+retry-цикл: `for i in 1 2 3 4 5; do git fetch origin main && break;
+sleep 3; done`. Это известное ограничение, не баг.
+
 ---
 
 ## АРХИТЕКТУРНЫЕ ПАТТЕРНЫ (установлены в Фазе 1, применять везде)

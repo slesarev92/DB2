@@ -3080,3 +3080,27 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
 8.9 Nielsen (low, по запросу)
 8.10 КП производство (low, по запросу)
 ```
+
+#### Phase 8 carry-over (открытые TODO для следующих сессий)
+
+Не критично для Gate Review, но желательно закрыть:
+
+- **Smoke-тесты для новых endpoint'ов Phase 8.** Lazy import bug в
+  pnl_endpoint (см. ERRORS_AND_ISSUES 2026-04-11) показал, что новые
+  endpoint'ы попадают в production без покрытия. Нужны 200 OK тесты для:
+  - GET /api/projects/{id}/pricing-summary
+  - GET /api/projects/{id}/value-chain
+  - GET /api/projects/{id}/pnl
+  - PATCH /api/projects/{id} с nielsen_benchmarks
+  - PATCH /api/projects/{id} с supplier_quotes
+- **8.5 XLSX квартальный лист.** PnL tab уже агрегирует на frontend,
+  но в excel_exporter добавить отдельный sheet "PnL Quarterly" будет
+  полезно для Gate Review handout. Низкий приоритет — frontend toggle
+  покрывает основной use case.
+- **8.6 Цветные ячейки в PPT/PDF числовых таблицах.** Сейчас цвета
+  только в Go/No-Go badge и в HTML PDF (через CSS). В PPT числовые
+  ячейки маржей могли бы быть green/yellow/red через python-pptx
+  cell.fill.solid() — +complexity без существенной ценности для MVP.
+- **8.10 Связка КП ↔ BOM items.** Сейчас supplier_quotes — отдельная
+  JSONB таблица. Для будущих фаз: возможность привязать котировку
+  к конкретной BOM позиции (подсказка цены при редактировании BOM).
