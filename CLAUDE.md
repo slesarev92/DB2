@@ -366,7 +366,7 @@ ssh -i ~/.ssh/db2_deploy root@45.144.221.215 "cd /opt/dbpassport && git pull ori
 # Пересборка образов
 ssh ... "cd /opt/dbpassport && docker build -f backend/Dockerfile.prod -t dbpassport-backend:latest backend/"
 ssh ... "cd /opt/dbpassport && docker build -f frontend/Dockerfile.prod \
-    --build-arg NEXT_PUBLIC_API_URL=http://45.144.221.215:8080 \
+    --build-arg NEXT_PUBLIC_API_URL=https://db2.medoed.work \
     --build-arg NPM_REGISTRY=https://registry.npmmirror.com \
     -t dbpassport-frontend:latest frontend/"
 # Перезапуск
@@ -375,11 +375,18 @@ ssh ... "cd /opt/dbpassport/infra && docker compose -f docker-compose.prod.yml u
 ssh ... "cd /opt/dbpassport/infra && docker compose -f docker-compose.prod.yml exec backend alembic upgrade head"
 ```
 
-Prod-сервер: `45.144.221.215:8080` (nginx → backend:8000 + frontend:3000).
+Prod URL: **`https://db2.medoed.work`** (nginx SSL termination →
+backend:8000 + frontend:3000). IP: `45.144.221.215`. Порты `:80` →
+HTTP→HTTPS redirect, `:443` → HTTPS. SSL: Let's Encrypt (см.
+`docs/SSL_SETUP.md` для bootstrap и renewal).
 SSH key: `~/.ssh/db2_deploy`. `.env` в `infra/.env` на сервере.
 Образы: локальные `dbpassport-backend:latest` / `dbpassport-frontend:latest`
 (GHCR недоступен с RU VPS, переменные `BACKEND_IMAGE`/`FRONTEND_IMAGE`
 в `infra/.env` указывают на локальные теги).
+
+**Frontend rebuild:** `NEXT_PUBLIC_API_URL` baked в build-time, поэтому
+при изменении API URL (например при переходе с http→https) **нужен
+docker build** frontend образа, не просто restart.
 
 **Версионирование:** semver через git tags. Текущие: `v0.1.0` (MVP),
 `v0.2.0` (chat persistence + delete project), `v0.3.0` (Phase 8
