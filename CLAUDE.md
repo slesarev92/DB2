@@ -362,7 +362,7 @@ git commit -m "..."
 git push origin main
 
 # 3. По команде пользователя — деплой на VPS
-ssh -i ~/.ssh/db2_deploy root@45.144.221.215 "cd /opt/dbpassport && git pull origin main"
+ssh -i ~/.ssh/db2_deploy root@85.239.63.206 "cd /opt/dbpassport && git pull origin main"
 # Пересборка образов
 ssh ... "cd /opt/dbpassport && docker build -f backend/Dockerfile.prod -t dbpassport-backend:latest backend/"
 ssh ... "cd /opt/dbpassport && docker build -f frontend/Dockerfile.prod \
@@ -376,13 +376,18 @@ ssh ... "cd /opt/dbpassport/infra && docker compose -f docker-compose.prod.yml e
 ```
 
 Prod URL: **`https://db2.medoed.work`** (nginx SSL termination →
-backend:8000 + frontend:3000). IP: `45.144.221.215`. Порты `:80` →
-HTTP→HTTPS redirect, `:443` → HTTPS. SSL: Let's Encrypt (см.
-`docs/SSL_SETUP.md` для bootstrap и renewal).
+backend:8000 + frontend:3000). IP: **`85.239.63.206`** (Ubuntu 24.04,
+2 CPU, 2GB RAM + 2GB swap). Старый IP `45.144.221.215` отброшен из-за
+RKN-блокировок и BGP-проблем у предыдущего провайдера. Host nginx :80/443
+→ docker nginx :8080. SSL: Let's Encrypt через certbot --nginx
+(см. `docs/SSL_SETUP.md`).
 SSH key: `~/.ssh/db2_deploy`. `.env` в `infra/.env` на сервере.
 Образы: локальные `dbpassport-backend:latest` / `dbpassport-frontend:latest`
 (GHCR недоступен с RU VPS, переменные `BACKEND_IMAGE`/`FRONTEND_IMAGE`
 в `infra/.env` указывают на локальные теги).
+**Docker Hub rate limit:** новый сервер использует mirror через
+`/etc/docker/daemon.json` → `mirror.gcr.io` (Google's free Docker Hub
+mirror без rate limits).
 
 **Frontend rebuild:** `NEXT_PUBLIC_API_URL` baked в build-time, поэтому
 при изменении API URL (например при переходе с http→https) **нужен
@@ -394,10 +399,10 @@ presentation parity). Пользователь иногда говорит "ве
 это marketing milestone, в git это всегда semver `v0.x`. На каждый
 prod-релиз создавать tag через `git tag -a vX.Y.Z -m "..."` + push.
 
-**RU VPS networking:** GitHub fetch с сервера 45.144.221.215 нестабилен
+**RU VPS networking:** GitHub fetch с RU-серверов может быть нестабилен
 (периодически `Connection reset by peer`). При деплое использовать
 retry-цикл: `for i in 1 2 3 4 5; do git fetch origin main && break;
-sleep 3; done`. Это известное ограничение, не баг.
+sleep 3; done`. Это известное ограничение RU peering, не баг.
 
 ---
 
