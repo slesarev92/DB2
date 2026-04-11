@@ -235,6 +235,19 @@
     Цифровой паспорт проекта
     {% if project.gate_stage %}· {{ gate_label(project.gate_stage) }}{% endif %}
   </div>
+
+  {# Phase 8.7: Gate timeline G0 → G5 на cover #}
+  <div style="margin: 30px 0; text-align: center; font-size: 16px; letter-spacing: 1px;">
+    {% for g in ["G0", "G1", "G2", "G3", "G4", "G5"] %}
+      {% if g == project.gate_stage %}
+        <span style="font-weight: bold; color: #1a5fb4;">●{{ g }}</span>
+      {% else %}
+        <span style="color: #999;">{{ g }}</span>
+      {% endif %}
+      {% if not loop.last %}<span style="color: #ccc;">  →  </span>{% endif %}
+    {% endfor %}
+  </div>
+
   <div class="title-meta">
     {% if project.project_owner %}
       <div><span class="label">Владелец:</span>{{ project.project_owner }}</div>
@@ -500,6 +513,33 @@
       {% endfor %}
     </tbody>
   </table>
+
+  {# Phase 8.3: per-unit метрики Base сценария #}
+  {% if per_unit_kpi %}
+  <p style="margin-top: 12px; font-size: 11px; color: #666; font-weight: bold;">
+    Per-unit экономика (Base сценарий, scope-средняя):
+  </p>
+  <table class="data kpi">
+    <thead>
+      <tr>
+        <th>Метрика</th>
+        <th class="num">Y1-Y3</th>
+        <th class="num">Y1-Y5</th>
+        <th class="num">Y1-Y10</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in per_unit_kpi %}
+        <tr>
+          <td>{{ row.metric }}</td>
+          <td class="num">{{ row.y1y3 }}</td>
+          <td class="num">{{ row.y1y5 }}</td>
+          <td class="num">{{ row.y1y10 }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
 </div>
 
 <div class="page-break"></div>
@@ -574,6 +614,122 @@
 </div>
 {% endif %}
 
+{# ================================================================== #}
+{# 8.1. Pricing Summary (Phase 8.1)                                   #}
+{# ================================================================== #}
+{% if pricing and pricing.skus %}
+<div class="section">
+  <h2>Цены: полка / ex-factory / COGS</h2>
+  <table class="kpi-table">
+    <thead>
+      <tr>
+        <th>Канал</th>
+        {% for s in pricing.skus %}
+          <th>{{ s.sku_brand }} {{ s.sku_name }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% set channel_codes = [] %}
+      {% for s in pricing.skus %}
+        {% for c in s.channels %}
+          {% if c.channel_code not in channel_codes %}
+            {% set _ = channel_codes.append(c.channel_code) %}
+          {% endif %}
+        {% endfor %}
+      {% endfor %}
+
+      <tr><td colspan="{{ pricing.skus|length + 1 }}" style="font-weight: bold;">Цена полки, ₽</td></tr>
+      {% for code in channel_codes %}
+      <tr>
+        <td>{{ code }}</td>
+        {% for s in pricing.skus %}
+          {% set cell = namespace(val=None) %}
+          {% for c in s.channels %}
+            {% if c.channel_code == code %}{% set cell.val = c.shelf_price_reg %}{% endif %}
+          {% endfor %}
+          <td style="text-align: right;">{{ "%.2f"|format(cell.val|float) if cell.val is not none else "—" }}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+
+      <tr><td colspan="{{ pricing.skus|length + 1 }}" style="font-weight: bold;">Ex-Factory, ₽</td></tr>
+      {% for code in channel_codes %}
+      <tr>
+        <td>{{ code }}</td>
+        {% for s in pricing.skus %}
+          {% set cell = namespace(val=None) %}
+          {% for c in s.channels %}
+            {% if c.channel_code == code %}{% set cell.val = c.ex_factory %}{% endif %}
+          {% endfor %}
+          <td style="text-align: right;">{{ "%.2f"|format(cell.val|float) if cell.val is not none else "—" }}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+
+      <tr style="font-weight: bold;">
+        <td>COGS / шт</td>
+        {% for s in pricing.skus %}
+          <td style="text-align: right;">{{ "%.2f"|format(s.cogs_per_unit|float) }}</td>
+        {% endfor %}
+      </tr>
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{# ================================================================== #}
+{# 8.2. Value Chain / Стакан (Phase 8.2)                              #}
+{# ================================================================== #}
+{% if value_chain and value_chain.skus %}
+{% set vc_sku = value_chain.skus[0] %}
+{% if vc_sku.channels %}
+<div class="section">
+  <h2>Стакан: per-unit экономика</h2>
+  <p style="font-size: 11px; color: #666;">
+    SKU: <strong>{{ vc_sku.sku_brand }} {{ vc_sku.sku_name }}</strong>
+    {% if vc_sku.sku_volume_l %}({{ vc_sku.sku_volume_l }}л){% endif %}
+  </p>
+  <table class="kpi-table">
+    <thead>
+      <tr>
+        <th>Показатель</th>
+        {% for c in vc_sku.channels %}<th>{{ c.channel_code }}</th>{% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for label, attr in [
+        ("Цена полки", "shelf_price_reg"),
+        ("Ex-Factory", "ex_factory"),
+        ("COGS итого", "cogs_total"),
+        ("Валовая прибыль", "gross_profit"),
+        ("Логистика", "logistics"),
+        ("Contribution", "contribution"),
+        ("CA&M", "ca_m"),
+        ("Маркетинг", "marketing"),
+        ("EBITDA", "ebitda"),
+      ] %}
+      <tr>
+        <td>{{ label }}</td>
+        {% for c in vc_sku.channels %}
+          <td style="text-align: right;">{{ "%.2f"|format(c[attr]|float) }}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+      {% for label, attr in [("GP %", "gp_margin"), ("CM %", "cm_margin"), ("EBITDA %", "ebitda_margin")] %}
+      <tr>
+        <td>{{ label }}</td>
+        {% for c in vc_sku.channels %}
+          <td style="text-align: right;">{{ "%.1f"|format(c[attr]|float * 100) }}%</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endif %}
+
 <div class="page-break"></div>
 
 {# ================================================================== #}
@@ -613,6 +769,26 @@
           {% endfor %}
         </tbody>
       </table>
+
+      {# Phase 8.8: OPEX по категориям маркетинга #}
+      {% if opex_by_category %}
+      <h4 style="margin-top: 12px; margin-bottom: 6px; font-size: 11px;">
+        OPEX по категориям маркетинга
+      </h4>
+      <table class="data">
+        <thead>
+          <tr><th>Категория</th><th class="num">Total ₽</th></tr>
+        </thead>
+        <tbody>
+          {% for cat, total in opex_by_category.items() %}
+          <tr>
+            <td>{{ opex_category_labels.get(cat, cat) }}</td>
+            <td class="num">{{ fmt_money(total) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
     </div>
   </div>
 </div>
@@ -715,6 +891,76 @@
 </div>
 
 <div class="page-break"></div>
+
+{# ================================================================== #}
+{# 11.5. Рынок и поставки (Phase 8.9 + 8.10)                          #}
+{# ================================================================== #}
+{% if project.nielsen_benchmarks or project.supplier_quotes %}
+<div class="section">
+  <h2>Рынок и поставки</h2>
+  <div class="two-col">
+    <div class="col">
+      <h3>Nielsen бенчмарки</h3>
+      {% if project.nielsen_benchmarks %}
+      <table class="data">
+        <thead>
+          <tr>
+            <th>Канал</th>
+            <th class="num">Universe</th>
+            <th class="num">Offtake</th>
+            <th class="num">ND %</th>
+            <th class="num">Цена ₽</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for n in project.nielsen_benchmarks %}
+          <tr>
+            <td>{{ n.channel or "—" }}</td>
+            <td class="num">{{ fmt_money(n.universe_outlets) if n.universe_outlets is not none else "—" }}</td>
+            <td class="num">{{ "%.2f"|format(n.offtake|float) if n.offtake is not none else "—" }}</td>
+            <td class="num">{{ fmt_pct(n.nd_pct) if n.nd_pct is not none else "—" }}</td>
+            <td class="num">{{ "%.2f"|format(n.avg_price|float) if n.avg_price is not none else "—" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="empty-hint">Бенчмарков нет.</p>
+      {% endif %}
+    </div>
+    <div class="col">
+      <h3>КП на производство</h3>
+      {% if project.supplier_quotes %}
+      <table class="data">
+        <thead>
+          <tr>
+            <th>Поставщик</th>
+            <th>Позиция</th>
+            <th class="num">Цена ₽</th>
+            <th>Ед.</th>
+            <th class="num">Срок (дн)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for q in project.supplier_quotes %}
+          <tr>
+            <td>{{ q.supplier or "—" }}</td>
+            <td>{{ q.item or "—" }}</td>
+            <td class="num">{{ "%.2f"|format(q.price_per_unit|float) if q.price_per_unit is not none else "—" }}</td>
+            <td>{{ q.unit or "—" }}</td>
+            <td class="num">{{ q.lead_time_days or "—" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="empty-hint">КП нет.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+<div class="page-break"></div>
+{% endif %}
 
 {# ================================================================== #}
 {# 12. Executive summary                                                #}

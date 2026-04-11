@@ -12,6 +12,13 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -26,7 +33,12 @@ import {
 } from "@/lib/financial-plan";
 import { formatMoney } from "@/lib/format";
 
-import type { FinancialPlanItem, OpexItem } from "@/types/api";
+import {
+  OPEX_CATEGORIES,
+  OPEX_CATEGORY_LABELS,
+  type FinancialPlanItem,
+  type OpexItem,
+} from "@/types/api";
 
 interface FinancialPlanEditorProps {
   projectId: number;
@@ -102,7 +114,7 @@ export function FinancialPlanEditor({ projectId }: FinancialPlanEditorProps) {
       if (prev === null) return prev;
       return prev.map((item) => {
         if (item.year !== year) return item;
-        const newItem: OpexItem = { name: "", amount: "0" };
+        const newItem: OpexItem = { category: "other", name: "", amount: "0" };
         const newItems = [...item.opex_items, newItem];
         return {
           ...item,
@@ -133,7 +145,7 @@ export function FinancialPlanEditor({ projectId }: FinancialPlanEditorProps) {
   function updateOpexItem(
     year: number,
     idx: number,
-    field: "name" | "amount",
+    field: "category" | "name" | "amount",
     value: string,
   ) {
     setItems((prev) => {
@@ -287,7 +299,7 @@ interface OpexYearRowProps {
   onUpdateOpexItem: (
     year: number,
     idx: number,
-    field: "name" | "amount",
+    field: "category" | "name" | "amount",
     value: string,
   ) => void;
 }
@@ -368,6 +380,24 @@ function OpexYearRow({
               <TableCell />
               <TableCell>
                 <div className="flex items-center gap-2">
+                  <Select
+                    value={oi.category || "other"}
+                    onValueChange={(v) =>
+                      onUpdateOpexItem(item.year, idx, "category", v ?? "other")
+                    }
+                    disabled={saving}
+                  >
+                    <SelectTrigger className="h-8 w-[130px] text-xs">
+                      <SelectValue placeholder="Категория" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {OPEX_CATEGORIES.map((c) => (
+                        <SelectItem key={c} value={c} className="text-xs">
+                          {OPEX_CATEGORY_LABELS[c]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Input
                     placeholder="Статья"
                     value={oi.name}
@@ -375,7 +405,7 @@ function OpexYearRow({
                       onUpdateOpexItem(item.year, idx, "name", e.target.value)
                     }
                     disabled={saving}
-                    className="max-w-[200px] text-sm"
+                    className="max-w-[180px] text-sm"
                   />
                   <Input
                     type="number"
@@ -391,7 +421,7 @@ function OpexYearRow({
                       )
                     }
                     disabled={saving}
-                    className="max-w-[140px] text-sm"
+                    className="max-w-[120px] text-sm"
                   />
                   <Button
                     variant="ghost"

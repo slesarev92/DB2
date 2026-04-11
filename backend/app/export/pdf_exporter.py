@@ -219,6 +219,38 @@ def _build_kpi_rows(
     return rows
 
 
+def _build_per_unit_kpi_rows(
+    scenarios: list[Scenario],
+    results_by_scenario: dict[int, list[ScenarioResult]],
+) -> list[dict[str, str]]:
+    """Phase 8.3: per-unit метрики Base сценария по 3 scope'ам."""
+    base = next((s for s in scenarios if s.type == ScenarioType.BASE), None)
+    if base is None:
+        return []
+    base_results = results_by_scenario.get(base.id, [])
+    if not base_results:
+        return []
+
+    scope_order = [PeriodScope.Y1Y3, PeriodScope.Y1Y5, PeriodScope.Y1Y10]
+    metrics = [
+        ("Выручка / шт, ₽", "nr_per_unit"),
+        ("GP / шт, ₽", "gp_per_unit"),
+        ("CM / шт, ₽", "cm_per_unit"),
+        ("EBITDA / шт, ₽", "ebitda_per_unit"),
+    ]
+    rows: list[dict[str, str]] = []
+    for label, attr in metrics:
+        row: dict[str, str] = {"metric": label}
+        for scope in scope_order:
+            r = next((x for x in base_results if x.period_scope == scope), None)
+            val = getattr(r, attr, None) if r else None
+            row[scope.value] = (
+                _fmt_money(float(val), 2) if val is not None else "—"
+            )
+        rows.append(row)
+    return rows
+
+
 def _build_pnl_context(base_aggregate: Any | None) -> dict[str, Any]:
     """Возвращает {pnl_years, pnl_rows} или {pnl_years: [], pnl_rows: []}."""
     if base_aggregate is None or not base_aggregate.annual_free_cash_flow:
@@ -418,6 +450,20 @@ async def generate_project_pdf(
         )
     ).all()
 
+    # Phase 8.8: OPEX по категориям маркетинга
+    from app.models import OpexItem
+    opex_by_category: dict[str, float] = {}
+    if fp_rows:
+        fp_ids = [fp.id for fp in fp_rows]
+        opex_items = (
+            await session.scalars(
+                select(OpexItem).where(OpexItem.financial_plan_id.in_(fp_ids))
+            )
+        ).all()
+        for oi in opex_items:
+            cat = oi.category or "other"
+            opex_by_category[cat] = opex_by_category.get(cat, 0.0) + float(oi.amount)
+
     sorted_periods, period_by_id = await _load_period_catalog(session)
 
     scenarios = (
@@ -456,6 +502,19 @@ async def generate_project_pdf(
         except Exception:  # noqa: BLE001
             sensitivity_data = None
 
+    # Pricing + Value Chain (Phase 8.1 / 8.2)
+    pricing_data: Any | None = None
+    value_chain_data: Any | None = None
+    try:
+        from app.services.pricing_service import (
+            build_pricing_summary,
+            build_value_chain,
+        )
+        pricing_data = await build_pricing_summary(session, project)
+        value_chain_data = await build_value_chain(session, project)
+    except Exception:  # noqa: BLE001
+        pass
+
     # Jinja2 context
     pnl_ctx = _build_pnl_context(base_aggregate)
     context: dict[str, Any] = {
@@ -469,6 +528,9 @@ async def generate_project_pdf(
             skus_with_bom, package_images
         ),
         "kpi_rows": _build_kpi_rows(list(scenarios), results_by_scenario),
+        "per_unit_kpi": _build_per_unit_kpi_rows(
+            list(scenarios), results_by_scenario
+        ),
         "pnl_years": pnl_ctx["pnl_years"],
         "pnl_rows": pnl_ctx["pnl_rows"],
         "bom_top": _build_bom_top(skus_with_bom),
@@ -481,6 +543,17 @@ async def generate_project_pdf(
         "fmt_money": _fmt_money,
         "fmt_pct": _fmt_pct,
         "sensitivity": sensitivity_data,
+        "pricing": pricing_data,
+        "value_chain": value_chain_data,
+        "opex_by_category": dict(
+            sorted(opex_by_category.items(), key=lambda x: x[1], reverse=True)
+        ),
+        "opex_category_labels": {
+            "digital": "Digital", "ecom": "E-com", "ooh": "OOH", "pr": "PR",
+            "smm": "SMM", "design": "Design", "research": "Research",
+            "posm": "ПОСМ", "creative": "Creative", "special": "Special",
+            "merch": "Merch", "tv": "TV", "listings": "Листинги", "other": "Другое",
+        },
     }
 
     # Render HTML

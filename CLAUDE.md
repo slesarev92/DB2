@@ -330,6 +330,13 @@ docker compose -f infra/docker-compose.dev.yml build --progress=plain \
 docker compose -f infra/docker-compose.dev.yml up -d --no-deps \
     --force-recreate backend celery-worker
 
+# Restart celery-worker — ОБЯЗАТЕЛЬНО после изменений в calculation_service,
+# engine/, sensitivity_service или другом коде, который вызывается из
+# Celery task. Celery НЕ имеет auto-reload (в отличие от uvicorn).
+# Признак проблемы: API endpoint работает, recalculate возвращает 200,
+# но в БД старые значения / новые поля = NULL.
+docker compose -f infra/docker-compose.dev.yml restart celery-worker
+
 # Логи конкретного сервиса
 docker compose -f infra/docker-compose.dev.yml logs -f backend
 ```
@@ -487,6 +494,28 @@ downstream метрики добавятся в Фазе 2 при необход
 после fetch через explicit dict-маппинги (`SCENARIO_ORDER`,
 `SCOPE_ORDER`). Не делать `CASE` в SQL — для CRUD это micro-overhead,
 читаемость важнее.
+
+### 11. Integration smoke-test для каждого нового endpoint (Phase 8.5 урок)
+
+**Lazy imports внутри endpoint функций (`def f(): from x import y`) не
+валидируются ни линтером, ни pytest до первого вызова endpoint'а.**
+Если endpoint никогда не покрыт тестом — `ModuleNotFoundError` или
+`NameError` доходит до runtime, и пользователь видит 500 ошибку.
+
+При создании любого нового endpoint **обязательно** написать хотя бы
+один integration smoke-test — даже простой 200 OK с пустым проектом
+ловит большинство import/typo ошибок:
+
+```python
+async def test_pnl_endpoint_returns_200(auth_client, db_session):
+    project = await _seed_minimal_project(db_session)
+    resp = await auth_client.get(f"/api/projects/{project.id}/pnl")
+    assert resp.status_code == 200
+```
+
+Использовать `from app.models import X` (через `__init__.py` re-export)
+для согласованности — все entities + enums экспортируются через
+`backend/app/models/__init__.py`.
 
 ---
 

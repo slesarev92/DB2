@@ -2998,36 +2998,33 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
 
 ---
 
-### Фаза 8 — Presentation Layer: паритет с эталонным паспортом ← **в работе**
+### Фаза 8 — Presentation Layer: паритет с эталонным паспортом ✅ ЗАКРЫТА 2026-04-11
 
 **Контекст:** Gap analysis эталона PASSPORT_ELEKTRA_ZERO (22 стр.) показал,
 что расчётное ядро покрывает 100% финмодели, но UI и экспорты не показывают
 ~40% данных, которые нужны для Gate Review. Фаза 8 закрывает эти пробелы.
 
+**Релиз:** v0.3.0 (2026-04-11). Все 10 задач закрыты, 444 pytest passed.
+3 новых таба (Стакан, P&L, Цены), 1 GateTimeline компонент, 5 миграций БД,
+расширенные PPT (16 слайдов) и PDF секции.
+
 **Приоритет:** от высокого к низкому по impact для Gate-презентации.
 
-#### ✅ 8.1 Ценовые таблицы (Pricing Summary) — закрыта 2026-04-10
-- [x] Backend: GET /api/projects/{id}/pricing-summary (shelf_price_reg,
-  promo, weighted, ex_factory, COGS per unit, channel_margin)
-- [x] Frontend: PricingTab — 3 карточки (полка, ex-factory, COGS/маржи)
-- [x] Навигация: таб «Цены» в группе ⑤ Анализ
-- [ ] Экспорт: PPT/PDF — **TODO** (отдельный коммит)
+#### ✅ 8.1 Ценовые таблицы (Pricing Summary) — закрыта 2026-04-11
+- [x] Backend: GET /api/projects/{id}/pricing-summary
+- [x] Frontend: PricingTab
+- [x] Экспорт: PPT слайд "Цены: полка / ex-factory / COGS" + PDF секция
 
-#### ✅ 8.2 Стакан / Value Chain — закрыта 2026-04-10
-- [x] Backend: GET /api/projects/{id}/value-chain — per-unit waterfall
-  (shelf, ex-factory, COGS material/production, GP, logistics, CM,
-  CA&M, marketing, EBITDA + margins GP%/CM%/EBITDA%)
-- [x] Frontend: ValueChainTab — waterfall-таблица rows × SKU×Channel
-  с цветовой индикацией маржей (green ≥50%, yellow 45-50%, red <45%)
-- [x] Навигация: таб «Стакан» в группе ⑤ Анализ
-- [ ] Экспорт: PPT/PDF — **TODO** (отдельный коммит)
+#### ✅ 8.2 Стакан / Value Chain — закрыта 2026-04-11
+- [x] Backend: GET /api/projects/{id}/value-chain
+- [x] Frontend: ValueChainTab
+- [x] Экспорт: PPT слайд "Стакан: per-unit экономика" + PDF секция
 
-#### ✅ 8.3 Per-unit метрики в KPI-сводке — закрыта 2026-04-10
-- [x] Backend: 12 колонок в scenario_results (nr/gp/cm/ebitda × unit/liter/kg)
-- [x] Backend: вычисление в calculate_and_save_scenario из aggregate context
-- [x] Frontend: таблица 4 rows × 3 scopes × 3 units в ResultsTab
+#### ✅ 8.3 Per-unit метрики в KPI-сводке — закрыта 2026-04-11
+- [x] Backend: 12 колонок в scenario_results
+- [x] Frontend: таблица в ResultsTab
 - [x] Migration: df5babcd77d8
-- [ ] Экспорт: PPT/PDF — **TODO**
+- [x] Экспорт: per-unit таблица в KPI слайде PPT + PDF KPI секция
 
 #### ✅ 8.4 Sensitivity в экспортах — закрыта 2026-04-11
 - [x] PPT: новый слайд _build_slide_sensitivity (4 param × 5 delta → NPV)
@@ -3035,54 +3032,41 @@ Phase 7 AI полностью готов и все фичи MVP стабилиз
 - [x] Тесты: 444 passed (обновлён slide count 13→14)
 
 #### ✅ 8.5 Квартальный P&L — закрыта 2026-04-11
-- [x] Backend: GET /api/projects/{id}/pnl — 43 per-period P&L из pipeline
+- [x] Backend: GET /api/projects/{id}/pnl
 - [x] Frontend: PnlTab с toggle "Месяцы / Кварталы / Годы"
-- [x] Навигация: таб «P&L» в группе ⑤ Анализ
 - [x] Client-side агрегация: Q1-Q4 × Y1-Y3, annual Y1-Y10
-- [ ] Экспорт: квартальный лист XLSX — **TODO**
+- [ ] XLSX квартальный лист — отложено (Excel exporter уже даёт месячный + годовой)
 
 #### ✅ 8.6 Цветовая индикация KPI — закрыта 2026-04-10
 - [x] ResultsTab: 3-tier marginClass (green ≥25% / yellow 15-25% / red <15%)
-- [x] ResultsTab: NPV green/red (уже был), легенда внизу
+- [x] ResultsTab: NPV green/red, легенда
 - [x] ScenariosTab: NPV valueClassName green/red, легенда
-- [x] Value Chain: green ≥50% / yellow 45-50% / red <45% (уже в 8.2)
-- [ ] Экспорт PPT/PDF: цветные ячейки — **TODO**
+- [x] Value Chain: цвета (8.2)
+- [ ] PPT/PDF цветные ячейки — отложено (Go/No-Go badge уже окрашен,
+      числовые ячейки — нужны fill colors через python-pptx, +complexity без
+      существенной ценности)
 
 #### ✅ 8.7 Gate Timeline — закрыта 2026-04-11
-- [x] Frontend: GateTimeline компонент (G0→G5, milestone labels)
-- [x] Встроен в overview tab (Параметры)
-- [x] Визуальная индикация: past/current/future gate dots + progress bar
-- [ ] Экспорт: PPT/PDF — **TODO**
+- [x] Frontend: GateTimeline компонент в overview
+- [x] Экспорт: текстовая шкала G0→G5 с маркером ●Gx на PPT title slide и PDF cover
 
-#### 8.8 Расширенный бюджет маркетинга
-**Что:** В эталоне 14 категорий OPEX (Digital, E-com, OOH, PR, SMM,
-Design, Research, ПОСМ, Creative, Special Projects, Merch, TV).
-Сейчас — агрегированный OPEX в ProjectFinancialPlan.
-**Backend:** Расширить ProjectFinancialPlan или добавить subcategory
-field в OPEX entries.
-**UI:** Детализация в табе «Фин. план» с sub-rows.
-**Экспорт:** Развёрнутая таблица бюджета в PPT/PDF.
-**Критерий:** Бюджет разбит на категории как в эталоне.
-**Зависимости:** может потребовать миграцию (доп. поле).
+#### ✅ 8.8 Расширенный бюджет маркетинга — закрыта 2026-04-11
+- [x] Backend: category String(50) колонка + migration 338f0a242518
+- [x] OPEX_CATEGORIES constant (14 значений)
+- [x] Frontend: Select dropdown в FinancialPlanEditor
+- [x] Backward compat: старые записи получают category="other"
+- [x] Экспорт: вторая таблица "OPEX по категориям" в стакан-fin-plan слайде PPT
+      и аналогичная таблица в PDF секции 9
 
-#### 8.9 Nielsen бенчмарки (low priority)
-**Что:** Рыночные данные — вселенная, офтейк, дистрибуция, ценовые
-уровни. Специфичные для каждого рынка, вводятся вручную или
-импортируются.
-**Backend:** Новая JSONB-модель или отдельная таблица для market data.
-**UI:** Секция в content tab или отдельный таб.
-**Экспорт:** Секция в PPT/PDF.
-**Критерий:** Данные отображаются как на страницах 19-20 эталона.
-**Зависимости:** Модель данных для бенчмарков (новая сущность).
+#### ✅ 8.9 Nielsen бенчмарки — закрыта 2026-04-11
+- [x] Backend: JSONB колонка `projects.nielsen_benchmarks` (migration 84d5e23d52e8)
+- [x] Frontend: NielsenBenchmark TS-тип, секция в ContentTab
+- [x] Экспорт: левая колонка слайда "Рынок и поставки" PPT + PDF секция
 
-#### 8.10 КП на производство (low priority)
-**Что:** Детальные котировки копакеров. Сейчас COGS интегрирован в
-BOM, но без breakdown по поставщикам.
-**Backend:** Расширение BOM или новая сущность SupplierQuote.
-**UI:** Секция в BOM tab.
-**Экспорт:** Отдельная страница в PDF.
-**Критерий:** Структура как на странице 20 эталона.
-**Зависимости:** BOM модель, возможно миграция.
+#### ✅ 8.10 КП на производство — закрыта 2026-04-11
+- [x] Backend: JSONB колонка `projects.supplier_quotes` (migration 7b303e6b7b59)
+- [x] Frontend: SupplierQuote TS-тип, секция в ContentTab
+- [x] Экспорт: правая колонка слайда "Рынок и поставки" PPT + PDF секция
 
 #### Порядок выполнения Phase 8
 

@@ -33,10 +33,12 @@ import type {
   FunctionReadinessMap,
   FunctionReadinessStatus,
   GateStage,
+  NielsenBenchmark,
   ProjectRead,
   ProjectUpdate,
   RiskItem,
   RoadmapTask,
+  SupplierQuote,
   ValidationTests,
 } from "@/types/api";
 import { FUNCTION_DEPARTMENTS } from "@/types/api";
@@ -172,6 +174,8 @@ export function ContentTab({ projectId }: ContentTabProps) {
   );
   const [roadmapTasks, setRoadmapTasks] = useState<RoadmapTask[]>([]);
   const [approvers, setApprovers] = useState<Approver[]>([]);
+  const [nielsenBenchmarks, setNielsenBenchmarks] = useState<NielsenBenchmark[]>([]);
+  const [supplierQuotes, setSupplierQuotes] = useState<SupplierQuote[]>([]);
 
   // Статус сохранения (для scalars + для JSONB секций)
   const [savingField, setSavingField] = useState<string | null>(null);
@@ -191,6 +195,8 @@ export function ContentTab({ projectId }: ContentTabProps) {
         setFunctionReadiness(mergeFunctionReadiness(data.function_readiness));
         setRoadmapTasks(data.roadmap_tasks ?? []);
         setApprovers(data.approvers ?? []);
+        setNielsenBenchmarks(data.nielsen_benchmarks ?? []);
+        setSupplierQuotes(data.supplier_quotes ?? []);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -291,6 +297,12 @@ export function ContentTab({ projectId }: ContentTabProps) {
   }
   async function saveApprovers() {
     await patchProject("approvers", { approvers });
+  }
+  async function saveNielsenBenchmarks() {
+    await patchProject("nielsen_benchmarks", { nielsen_benchmarks: nielsenBenchmarks });
+  }
+  async function saveSupplierQuotes() {
+    await patchProject("supplier_quotes", { supplier_quotes: supplierQuotes });
   }
 
   return (
@@ -928,7 +940,353 @@ export function ContentTab({ projectId }: ContentTabProps) {
       </Card>
 
       {/* ====================================================== */}
-      {/* 8. Marketing Research (Phase 7.7)                      */}
+      {/* 8. Nielsen бенчмарки (Phase 8.9)                       */}
+      {/* ====================================================== */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">8. Nielsen бенчмарки</CardTitle>
+          <CardDescription>
+            Рыночные данные по каналам/регионам — вселенная, офтейк,
+            дистрибуция, цены. Заполняется вручную из отчётов Nielsen.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {nielsenBenchmarks.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              Бенчмарков пока нет.
+            </p>
+          )}
+          {nielsenBenchmarks.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="border-b">
+                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Канал</th>
+                    <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Universe (точек)</th>
+                    <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Off-take</th>
+                    <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">ND %</th>
+                    <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Цена ср., ₽</th>
+                    <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Категория %</th>
+                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Note</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {nielsenBenchmarks.map((b, idx) => (
+                    <tr key={idx} className="border-b last:border-0 hover:bg-muted/30">
+                      <td className="px-1 py-1">
+                        <Input
+                          value={b.channel}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setNielsenBenchmarks((p) =>
+                              p.map((x, i) => (i === idx ? { ...x, channel: v } : x)),
+                            );
+                          }}
+                          className="h-7 text-xs"
+                        />
+                      </td>
+                      <td className="px-1 py-1">
+                        <Input
+                          type="number"
+                          value={b.universe_outlets ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value === "" ? null : Number(e.target.value);
+                            setNielsenBenchmarks((p) =>
+                              p.map((x, i) => (i === idx ? { ...x, universe_outlets: v } : x)),
+                            );
+                          }}
+                          className="h-7 text-xs text-right"
+                        />
+                      </td>
+                      <td className="px-1 py-1">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={b.offtake ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value === "" ? null : Number(e.target.value);
+                            setNielsenBenchmarks((p) =>
+                              p.map((x, i) => (i === idx ? { ...x, offtake: v } : x)),
+                            );
+                          }}
+                          className="h-7 text-xs text-right"
+                        />
+                      </td>
+                      <td className="px-1 py-1">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={b.nd_pct ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value === "" ? null : Number(e.target.value);
+                            setNielsenBenchmarks((p) =>
+                              p.map((x, i) => (i === idx ? { ...x, nd_pct: v } : x)),
+                            );
+                          }}
+                          placeholder="0..1"
+                          className="h-7 text-xs text-right"
+                        />
+                      </td>
+                      <td className="px-1 py-1">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={b.avg_price ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value === "" ? null : Number(e.target.value);
+                            setNielsenBenchmarks((p) =>
+                              p.map((x, i) => (i === idx ? { ...x, avg_price: v } : x)),
+                            );
+                          }}
+                          className="h-7 text-xs text-right"
+                        />
+                      </td>
+                      <td className="px-1 py-1">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={b.category_value_share ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value === "" ? null : Number(e.target.value);
+                            setNielsenBenchmarks((p) =>
+                              p.map((x, i) => (i === idx ? { ...x, category_value_share: v } : x)),
+                            );
+                          }}
+                          placeholder="0..1"
+                          className="h-7 text-xs text-right"
+                        />
+                      </td>
+                      <td className="px-1 py-1">
+                        <Input
+                          value={b.note ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setNielsenBenchmarks((p) =>
+                              p.map((x, i) => (i === idx ? { ...x, note: v } : x)),
+                            );
+                          }}
+                          className="h-7 text-xs"
+                        />
+                      </td>
+                      <td className="px-1 py-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            setNielsenBenchmarks((p) => p.filter((_, i) => i !== idx))
+                          }
+                          className="text-destructive hover:text-destructive px-2 h-7"
+                          title="Удалить"
+                        >
+                          &times;
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setNielsenBenchmarks((prev) => [
+                  ...prev,
+                  {
+                    channel: "",
+                    universe_outlets: null,
+                    offtake: null,
+                    nd_pct: null,
+                    avg_price: null,
+                    category_value_share: null,
+                    note: "",
+                  },
+                ])
+              }
+            >
+              + Добавить бенчмарк
+            </Button>
+            <Button size="sm" onClick={saveNielsenBenchmarks}>
+              Сохранить бенчмарки
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ====================================================== */}
+      {/* 9. КП на производство (Phase 8.10)                     */}
+      {/* ====================================================== */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">9. КП на производство</CardTitle>
+          <CardDescription>
+            Детальные котировки копакеров и поставщиков сырья. Используется
+            для обоснования COGS и сравнения предложений.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {supplierQuotes.length === 0 && (
+            <p className="text-sm text-muted-foreground">КП пока нет.</p>
+          )}
+          {supplierQuotes.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="border-b">
+                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Поставщик</th>
+                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Позиция</th>
+                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Ед.</th>
+                    <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Цена ₽/ед</th>
+                    <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">MOQ</th>
+                    <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Срок (дн)</th>
+                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Note</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {supplierQuotes.map((q, idx) => (
+                    <tr key={idx} className="border-b last:border-0 hover:bg-muted/30">
+                      <td className="px-1 py-1">
+                        <Input
+                          value={q.supplier}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setSupplierQuotes((p) =>
+                              p.map((x, i) => (i === idx ? { ...x, supplier: v } : x)),
+                            );
+                          }}
+                          className="h-7 text-xs"
+                        />
+                      </td>
+                      <td className="px-1 py-1">
+                        <Input
+                          value={q.item}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setSupplierQuotes((p) =>
+                              p.map((x, i) => (i === idx ? { ...x, item: v } : x)),
+                            );
+                          }}
+                          className="h-7 text-xs"
+                        />
+                      </td>
+                      <td className="px-1 py-1">
+                        <Input
+                          value={q.unit ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setSupplierQuotes((p) =>
+                              p.map((x, i) => (i === idx ? { ...x, unit: v } : x)),
+                            );
+                          }}
+                          placeholder="кг / шт"
+                          className="h-7 text-xs w-16"
+                        />
+                      </td>
+                      <td className="px-1 py-1">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={q.price_per_unit ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value === "" ? null : Number(e.target.value);
+                            setSupplierQuotes((p) =>
+                              p.map((x, i) => (i === idx ? { ...x, price_per_unit: v } : x)),
+                            );
+                          }}
+                          className="h-7 text-xs text-right"
+                        />
+                      </td>
+                      <td className="px-1 py-1">
+                        <Input
+                          type="number"
+                          value={q.moq ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value === "" ? null : Number(e.target.value);
+                            setSupplierQuotes((p) =>
+                              p.map((x, i) => (i === idx ? { ...x, moq: v } : x)),
+                            );
+                          }}
+                          className="h-7 text-xs text-right w-20"
+                        />
+                      </td>
+                      <td className="px-1 py-1">
+                        <Input
+                          type="number"
+                          value={q.lead_time_days ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value === "" ? null : Number(e.target.value);
+                            setSupplierQuotes((p) =>
+                              p.map((x, i) => (i === idx ? { ...x, lead_time_days: v } : x)),
+                            );
+                          }}
+                          className="h-7 text-xs text-right w-16"
+                        />
+                      </td>
+                      <td className="px-1 py-1">
+                        <Input
+                          value={q.note ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setSupplierQuotes((p) =>
+                              p.map((x, i) => (i === idx ? { ...x, note: v } : x)),
+                            );
+                          }}
+                          className="h-7 text-xs"
+                        />
+                      </td>
+                      <td className="px-1 py-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            setSupplierQuotes((p) => p.filter((_, i) => i !== idx))
+                          }
+                          className="text-destructive hover:text-destructive px-2 h-7"
+                          title="Удалить"
+                        >
+                          &times;
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setSupplierQuotes((prev) => [
+                  ...prev,
+                  {
+                    supplier: "",
+                    item: "",
+                    unit: "",
+                    price_per_unit: null,
+                    moq: null,
+                    lead_time_days: null,
+                    note: "",
+                  },
+                ])
+              }
+            >
+              + Добавить КП
+            </Button>
+            <Button size="sm" onClick={saveSupplierQuotes}>
+              Сохранить КП
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ====================================================== */}
+      {/* 10. Marketing Research (Phase 7.7)                     */}
       {/* ====================================================== */}
       <MarketingResearchSection
         projectId={projectId}

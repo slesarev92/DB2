@@ -77,7 +77,11 @@ async def list_plan_by_year(
                 capex_sum + plan.capex,
                 opex_sum + plan.opex,
                 items + [
-                    OpexItemSchema(name=item.name, amount=item.amount)
+                    OpexItemSchema(
+                        category=item.category,
+                        name=item.name,
+                        amount=item.amount,
+                    )
                     for item in plan.opex_items
                 ],
             )
@@ -144,6 +148,7 @@ async def replace_plan(
                 session.add(
                     OpexItem(
                         financial_plan_id=plan.id,
+                        category=oi.category,
                         name=oi.name,
                         amount=oi.amount,
                     )

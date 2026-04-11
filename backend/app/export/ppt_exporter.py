@@ -355,6 +355,19 @@ def _build_slide_title(prs: PresentationType, project: Project) -> None:
         align=PP_ALIGN.CENTER,
     )
 
+    # Phase 8.7: Gate timeline (текстовая визуализация G0 → G5)
+    gate_str = _build_gate_timeline_text(project.gate_stage)
+    _add_text_box(
+        slide,
+        Inches(0.5),
+        Inches(5.0),
+        Inches(12.3),
+        Inches(0.6),
+        gate_str,
+        size=Pt(16),
+        align=PP_ALIGN.CENTER,
+    )
+
     # Footer: owner + passport_date
     footer_parts: list[str] = []
     if project.project_owner:
@@ -372,6 +385,18 @@ def _build_slide_title(prs: PresentationType, project: Project) -> None:
         size=Pt(14),
         align=PP_ALIGN.CENTER,
     )
+
+
+def _build_gate_timeline_text(current_gate: str | None) -> str:
+    """Phase 8.7: Текстовая визуализация G0 → G5 с маркером текущего гейта."""
+    gates = ["G0", "G1", "G2", "G3", "G4", "G5"]
+    parts: list[str] = []
+    for g in gates:
+        if g == current_gate:
+            parts.append(f"●{g}")  # текущий
+        else:
+            parts.append(g)
+    return "  →  ".join(parts)
 
 
 def _build_slide_general_info(prs: PresentationType, project: Project) -> None:
@@ -683,20 +708,54 @@ def _build_slide_kpi(
         Inches(0.5),
         Inches(1.4),
         Inches(12.3),
-        Inches(2.5),
+        Inches(2.0),
         ["Сценарий", "NPV ₽", "IRR", "ROI", "Payback, лет", "Go/No-Go"],
         rows,
     )
 
-    _add_text_box(
-        slide,
-        Inches(0.5),
-        Inches(4.3),
-        Inches(12.3),
-        Inches(0.4),
-        "Scope: Y1-Y10. Для Y1-Y3 и Y1-Y5 см. XLSX экспорт.",
-        size=SMALL_FONT_SIZE,
+    # Phase 8.3: Per-unit метрики Base сценария (если посчитан)
+    base_scenario = next(
+        (s for s in sorted_scenarios if s.type == ScenarioType.BASE), None
     )
+    if base_scenario is not None:
+        base_results = results_by_scenario.get(base_scenario.id, [])
+        scope_order = [PeriodScope.Y1Y3, PeriodScope.Y1Y5, PeriodScope.Y1Y10]
+        scope_labels = ["Y1-Y3", "Y1-Y5", "Y1-Y10"]
+        per_unit_rows: list[list[str]] = []
+        for metric_name, attr in [
+            ("Выручка / шт, ₽", "nr_per_unit"),
+            ("GP / шт, ₽", "gp_per_unit"),
+            ("CM / шт, ₽", "cm_per_unit"),
+            ("EBITDA / шт, ₽", "ebitda_per_unit"),
+        ]:
+            row = [metric_name]
+            for scope in scope_order:
+                r = next((x for x in base_results if x.period_scope == scope), None)
+                val = getattr(r, attr, None) if r else None
+                row.append(
+                    _fmt_money(float(val), 2) if val is not None else "—"
+                )
+            per_unit_rows.append(row)
+
+        _add_text_box(
+            slide,
+            Inches(0.5),
+            Inches(3.6),
+            Inches(12.3),
+            Inches(0.4),
+            "Per-unit экономика (Base сценарий, scope-средняя):",
+            bold=True,
+            size=SMALL_FONT_SIZE,
+        )
+        _add_simple_table(
+            slide,
+            Inches(0.5),
+            Inches(4.0),
+            Inches(12.3),
+            Inches(2.5),
+            ["Метрика"] + scope_labels,
+            per_unit_rows,
+        )
 
 
 def _build_slide_pnl(
@@ -753,6 +812,7 @@ def _build_slide_cogs_and_fin_plan(
     skus_with_bom: list[tuple[ProjectSKU, list[BOMItem]]],
     financial_plan: list[ProjectFinancialPlan],
     period_by_id: dict[int, Any],
+    opex_by_category: dict[str, float] | None = None,
 ) -> None:
     """Слайд 10: стакан себестоимости + financial plan (2 колонки)."""
     slide = prs.slides.add_slide(prs.slide_layouts[LAYOUT_BLANK])
@@ -843,10 +903,58 @@ def _build_slide_cogs_and_fin_plan(
         Inches(6.8),
         Inches(1.7),
         Inches(6.0),
-        Inches(5.0),
+        Inches(2.5),
         ["Год", "CAPEX ₽", "OPEX ₽"],
         fp_rows,
     )
+
+    # Phase 8.8: OPEX по категориям маркетингового бюджета
+    if opex_by_category:
+        _add_text_box(
+            slide,
+            Inches(6.8),
+            Inches(4.4),
+            Inches(6.0),
+            Inches(0.4),
+            "OPEX по категориям маркетинга",
+            bold=True,
+            size=Pt(12),
+        )
+        cat_rows: list[list[str]] = []
+        # Сортируем по сумме убывания
+        for cat, total in sorted(
+            opex_by_category.items(), key=lambda x: x[1], reverse=True
+        ):
+            cat_rows.append([_OPEX_CATEGORY_LABELS.get(cat, cat), _fmt_money(total)])
+        _add_simple_table(
+            slide,
+            Inches(6.8),
+            Inches(4.85),
+            Inches(6.0),
+            Inches(2.0),
+            ["Категория", "Total ₽"],
+            cat_rows,
+        )
+
+
+# Phase 8.8: лейблы маркетинговых категорий OPEX (синхронизировано с
+# OPEX_CATEGORIES в backend/app/schemas/financial_plan.py).
+_OPEX_CATEGORY_LABELS: dict[str, str] = {
+    "digital": "Digital",
+    "ecom": "E-com",
+    "ooh": "OOH",
+    "pr": "PR",
+    "smm": "SMM",
+    "design": "Design",
+    "research": "Research",
+    "posm": "ПОСМ",
+    "creative": "Creative",
+    "special": "Special",
+    "merch": "Merch",
+    "tv": "TV",
+    "listings": "Листинги",
+    "other": "Другое",
+}
 
 
 def _build_slide_risks_and_functions(
@@ -996,6 +1104,165 @@ def _build_slide_roadmap_and_approvers(
     )
 
 
+def _build_slide_pricing(
+    prs: PresentationType,
+    pricing: Any | None,
+) -> None:
+    """Phase 8.1: слайд ценовой сводки SKU × канал."""
+    slide = prs.slides.add_slide(prs.slide_layouts[LAYOUT_BLANK])
+    _add_title(slide, "Цены: полка / ex-factory / COGS")
+
+    if pricing is None or not pricing.skus:
+        _add_text_box(
+            slide,
+            Inches(0.5),
+            Inches(2.5),
+            Inches(12.0),
+            Inches(0.5),
+            "Нет SKU с привязанными каналами.",
+            size=BODY_FONT_SIZE,
+        )
+        return
+
+    # Собираем уникальные каналы по всем SKU
+    channel_codes: list[str] = []
+    seen: set[str] = set()
+    for s in pricing.skus:
+        for c in s.channels:
+            if c.channel_code not in seen:
+                seen.add(c.channel_code)
+                channel_codes.append(c.channel_code)
+
+    # Header: ["Канал"] + [sku_brand sku_name за каждый SKU]
+    headers = ["Канал"] + [f"{s.sku_brand} {s.sku_name}" for s in pricing.skus]
+
+    # Rows: для каждого канала строка [code, shelf_reg, shelf_reg, ...]
+    # Покажем 3 секции: shelf, ex-factory, channel margin
+    rows: list[list[str]] = []
+
+    # Shelf prices
+    rows.append(["— Цена полки, ₽ —"] + [""] * len(pricing.skus))
+    for code in channel_codes:
+        row = [code]
+        for s in pricing.skus:
+            cell = next((c for c in s.channels if c.channel_code == code), None)
+            row.append(_fmt_money(float(cell.shelf_price_reg), 2) if cell else "—")
+        rows.append(row)
+
+    # Ex-Factory
+    rows.append(["— Ex-Factory, ₽ —"] + [""] * len(pricing.skus))
+    for code in channel_codes:
+        row = [code]
+        for s in pricing.skus:
+            cell = next((c for c in s.channels if c.channel_code == code), None)
+            row.append(_fmt_money(float(cell.ex_factory), 2) if cell else "—")
+        rows.append(row)
+
+    # COGS row
+    cogs_row = ["COGS / шт"]
+    for s in pricing.skus:
+        cogs_row.append(_fmt_money(float(s.cogs_per_unit), 2))
+    rows.append(cogs_row)
+
+    _add_simple_table(
+        slide,
+        Inches(0.3),
+        Inches(1.2),
+        Inches(12.7),
+        Inches(5.5),
+        headers,
+        rows,
+    )
+
+
+def _build_slide_value_chain(
+    prs: PresentationType,
+    value_chain: Any | None,
+) -> None:
+    """Phase 8.2: слайд per-unit waterfall (Стакан)."""
+    slide = prs.slides.add_slide(prs.slide_layouts[LAYOUT_BLANK])
+    _add_title(slide, "Стакан: per-unit экономика SKU × канал")
+
+    if value_chain is None or not value_chain.skus:
+        _add_text_box(
+            slide,
+            Inches(0.5),
+            Inches(2.5),
+            Inches(12.0),
+            Inches(0.5),
+            "Нет SKU с привязанными каналами.",
+            size=BODY_FONT_SIZE,
+        )
+        return
+
+    # Возьмём первый SKU и его каналы для компактного waterfall
+    sku = value_chain.skus[0]
+    if not sku.channels:
+        _add_text_box(
+            slide,
+            Inches(0.5),
+            Inches(2.5),
+            Inches(12.0),
+            Inches(0.5),
+            f"Для SKU «{sku.sku_brand} {sku.sku_name}» нет каналов.",
+            size=BODY_FONT_SIZE,
+        )
+        return
+
+    _add_text_box(
+        slide,
+        Inches(0.5),
+        Inches(1.0),
+        Inches(12.0),
+        Inches(0.4),
+        f"SKU: {sku.sku_brand} {sku.sku_name}"
+        + (f" ({sku.sku_volume_l}л)" if sku.sku_volume_l else ""),
+        bold=True,
+        size=Pt(13),
+    )
+
+    headers = ["Показатель"] + [c.channel_code for c in sku.channels]
+    waterfall = [
+        ("Цена полки", "shelf_price_reg"),
+        ("Ex-Factory", "ex_factory"),
+        ("COGS итого", "cogs_total"),
+        ("Валовая прибыль", "gross_profit"),
+        ("Логистика", "logistics"),
+        ("Contribution", "contribution"),
+        ("CA&M", "ca_m"),
+        ("Маркетинг", "marketing"),
+        ("EBITDA", "ebitda"),
+    ]
+    rows: list[list[str]] = []
+    for label, attr in waterfall:
+        row = [label]
+        for cell in sku.channels:
+            val = getattr(cell, attr)
+            row.append(_fmt_money(float(val), 2))
+        rows.append(row)
+
+    # Margins as percentages
+    for label, attr in [
+        ("GP %", "gp_margin"),
+        ("CM %", "cm_margin"),
+        ("EBITDA %", "ebitda_margin"),
+    ]:
+        row = [label]
+        for cell in sku.channels:
+            row.append(_fmt_pct(float(getattr(cell, attr))))
+        rows.append(row)
+
+    _add_simple_table(
+        slide,
+        Inches(0.3),
+        Inches(1.5),
+        Inches(12.7),
+        Inches(5.2),
+        headers,
+        rows,
+    )
+
+
 def _build_slide_sensitivity(
     prs: PresentationType,
     sensitivity_data: dict | None,
@@ -1068,6 +1335,112 @@ def _build_slide_sensitivity(
         headers,
         rows,
     )
+
+
+def _build_slide_market_and_supply(
+    prs: PresentationType, project: Project
+) -> None:
+    """Phase 8.9 + 8.10: Nielsen бенчмарки (слева) + КП поставщиков (справа)."""
+    nielsen = project.nielsen_benchmarks or []
+    quotes = project.supplier_quotes or []
+
+    if not nielsen and not quotes:
+        return  # Skip slide entirely if no data
+
+    slide = prs.slides.add_slide(prs.slide_layouts[LAYOUT_BLANK])
+    _add_title(slide, "Рынок и поставки")
+
+    # Левая колонка: Nielsen бенчмарки
+    _add_text_box(
+        slide,
+        Inches(0.5),
+        Inches(1.2),
+        Inches(6.0),
+        Inches(0.4),
+        "Nielsen бенчмарки рынка",
+        bold=True,
+        size=Pt(13),
+    )
+
+    if nielsen:
+        rows: list[list[str]] = []
+        for n in nielsen:
+            if not isinstance(n, dict):
+                continue
+            rows.append([
+                str(n.get("channel", "—")),
+                _fmt_money(n.get("universe_outlets")),
+                (
+                    f"{float(n['offtake']):.2f}"
+                    if n.get("offtake") is not None
+                    else "—"
+                ),
+                _fmt_pct(n.get("nd_pct")),
+                _fmt_money(n.get("avg_price"), 2),
+            ])
+        _add_simple_table(
+            slide,
+            Inches(0.5),
+            Inches(1.7),
+            Inches(6.0),
+            Inches(5.0),
+            ["Канал", "Universe", "Offtake", "ND %", "Цена ₽"],
+            rows,
+        )
+    else:
+        _add_text_box(
+            slide,
+            Inches(0.5),
+            Inches(1.7),
+            Inches(6.0),
+            Inches(0.5),
+            "Нет данных.",
+            size=BODY_FONT_SIZE,
+        )
+
+    # Правая колонка: КП поставщиков
+    _add_text_box(
+        slide,
+        Inches(6.8),
+        Inches(1.2),
+        Inches(6.0),
+        Inches(0.4),
+        "КП на производство",
+        bold=True,
+        size=Pt(13),
+    )
+
+    if quotes:
+        rows = []
+        for q in quotes:
+            if not isinstance(q, dict):
+                continue
+            rows.append([
+                str(q.get("supplier", "—")),
+                str(q.get("item", "—")),
+                _fmt_money(q.get("price_per_unit"), 2),
+                str(q.get("unit") or "—"),
+                str(q.get("lead_time_days") or "—"),
+            ])
+        _add_simple_table(
+            slide,
+            Inches(6.8),
+            Inches(1.7),
+            Inches(6.0),
+            Inches(5.0),
+            ["Поставщик", "Позиция", "Цена ₽", "Ед.", "Срок"],
+            rows,
+        )
+    else:
+        _add_text_box(
+            slide,
+            Inches(6.8),
+            Inches(1.7),
+            Inches(6.0),
+            Inches(0.5),
+            "Нет КП.",
+            size=BODY_FONT_SIZE,
+        )
 
 
 def _build_slide_executive_summary(
@@ -1171,6 +1544,20 @@ async def generate_project_pptx(
         )
     ).all()
 
+    # Phase 8.8: OPEX по категориям (aggregated по проекту)
+    from app.models import OpexItem
+    opex_by_category: dict[str, float] = {}
+    if fp_rows:
+        fp_ids = [fp.id for fp in fp_rows]
+        opex_items = (
+            await session.scalars(
+                select(OpexItem).where(OpexItem.financial_plan_id.in_(fp_ids))
+            )
+        ).all()
+        for oi in opex_items:
+            cat = oi.category or "other"
+            opex_by_category[cat] = opex_by_category.get(cat, 0.0) + float(oi.amount)
+
     sorted_periods, period_by_id = await _load_period_catalog(session)
 
     scenarios = (
@@ -1214,6 +1601,21 @@ async def generate_project_pptx(
     _build_slide_kpi(prs, list(scenarios), results_by_scenario)
     _build_slide_pnl(prs, base_aggregate)
 
+    # Pricing + Value Chain (Phase 8.1 / 8.2)
+    pricing_data: Any | None = None
+    value_chain_data: Any | None = None
+    try:
+        from app.services.pricing_service import (
+            build_pricing_summary,
+            build_value_chain,
+        )
+        pricing_data = await build_pricing_summary(session, project)
+        value_chain_data = await build_value_chain(session, project)
+    except Exception:  # noqa: BLE001
+        pass
+    _build_slide_pricing(prs, pricing_data)
+    _build_slide_value_chain(prs, value_chain_data)
+
     # Sensitivity matrix (Phase 8.4)
     sensitivity_data: dict | None = None
     if base_scenario is not None:
@@ -1227,10 +1629,12 @@ async def generate_project_pptx(
     _build_slide_sensitivity(prs, sensitivity_data)
 
     _build_slide_cogs_and_fin_plan(
-        prs, skus_with_bom, list(fp_rows), period_by_id
+        prs, skus_with_bom, list(fp_rows), period_by_id,
+        opex_by_category=opex_by_category,
     )
     _build_slide_risks_and_functions(prs, project)
     _build_slide_roadmap_and_approvers(prs, project)
+    _build_slide_market_and_supply(prs, project)  # Phase 8.9 + 8.10
     _build_slide_executive_summary(prs, project)
 
     buffer = BytesIO()

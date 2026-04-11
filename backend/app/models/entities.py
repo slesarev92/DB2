@@ -223,6 +223,14 @@ class Project(Base, TimestampMixin):
     )
     roadmap_tasks: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     approvers: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
+    # Phase 8.9: Nielsen бенчмарки рынка (per канал/регион).
+    # Структура: list[dict] — channel, universe_outlets, offtake, nd_pct,
+    # avg_price, category_value_share. Не валидируется, гибкая схема.
+    nielsen_benchmarks: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
+    # Phase 8.10: КП на производство (детальные котировки копакеров).
+    # Структура: list[dict] — supplier, item, unit, price_per_unit, moq,
+    # lead_time_days, note. Гибкая схема, не валидируется.
+    supplier_quotes: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
 
     # ============================================================
     # AI-генерированный контент (Фаза 7.4, ADR-16 решение #5)
@@ -696,6 +704,11 @@ class OpexItem(Base, TimestampMixin):
         ForeignKey("project_financial_plans.id", ondelete="CASCADE"),
         nullable=False,
     )
+    # Phase 8.8: категория OPEX (Digital, TV, OOH, PR, SMM, ...).
+    # Non-null с server_default="other" для backward compat старых записей.
+    category: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default="other", default="other"
+    )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     amount: Mapped[Decimal] = mapped_column(
         Numeric(20, 2), nullable=False, default=Decimal("0")
@@ -708,9 +721,11 @@ class OpexItem(Base, TimestampMixin):
     )
 
     __table_args__ = (
+        # 8.8: UNIQUE расширен до (plan, category, name) — одно имя может
+        # встречаться в разных категориях (напр. "Тесты" в Research и Product).
         UniqueConstraint(
-            "financial_plan_id", "name",
-            name="uq_opex_items_plan_name",
+            "financial_plan_id", "category", "name",
+            name="uq_opex_items_plan_category_name",
         ),
     )
 

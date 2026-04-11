@@ -89,6 +89,28 @@ export interface Approver {
   source?: string;
 }
 
+/** Элемент nielsen_benchmarks[] (Phase 8.9). */
+export interface NielsenBenchmark {
+  channel: string;
+  universe_outlets?: number | null;
+  offtake?: number | null;
+  nd_pct?: number | null;
+  avg_price?: number | null;
+  category_value_share?: number | null;
+  note?: string | null;
+}
+
+/** Элемент supplier_quotes[] (Phase 8.10). */
+export interface SupplierQuote {
+  supplier: string;
+  item: string;
+  unit?: string | null;
+  price_per_unit?: number | null;
+  moq?: number | null;
+  lead_time_days?: number | null;
+  note?: string | null;
+}
+
 /**
  * Content-поля паспорта (Фаза 4.5). Все optional на уровне input'ов
  * (POST/PATCH), в ProjectRead переопределены как required-nullable
@@ -120,6 +142,10 @@ export interface ProjectContentFields {
   function_readiness?: FunctionReadinessMap | null;
   roadmap_tasks?: RoadmapTask[] | null;
   approvers?: Approver[] | null;
+  // Phase 8.9: Nielsen benchmarks
+  nielsen_benchmarks?: NielsenBenchmark[] | null;
+  // Phase 8.10: КП на производство (детальные котировки копакеров)
+  supplier_quotes?: SupplierQuote[] | null;
   // Phase 7.5: AI budget
   ai_budget_rub_monthly?: string | null;
   // Phase 7.x: AI cached commentaries (persisted in DB)
@@ -540,11 +566,48 @@ export interface IngredientPriceRead {
 // ProjectFinancialPlan (CAPEX/OPEX по годам проекта)
 // ============================================================
 
-/** Статья OPEX в разбивке (B-19). */
+/** Статья OPEX в разбивке (B-19 + 8.8 category). */
 export interface OpexItem {
+  category: string; // Phase 8.8: OPEX_CATEGORIES, default "other"
   name: string;
   amount: string; // Decimal as string
 }
+
+/** Phase 8.8: маркетинговые категории OPEX. */
+export const OPEX_CATEGORIES = [
+  "digital",
+  "ecom",
+  "ooh",
+  "pr",
+  "smm",
+  "design",
+  "research",
+  "posm",
+  "creative",
+  "special",
+  "merch",
+  "tv",
+  "listings",
+  "other",
+] as const;
+export type OpexCategory = (typeof OPEX_CATEGORIES)[number];
+
+export const OPEX_CATEGORY_LABELS: Record<OpexCategory, string> = {
+  digital: "Digital",
+  ecom: "E-com",
+  ooh: "OOH",
+  pr: "PR",
+  smm: "SMM",
+  design: "Design",
+  research: "Research",
+  posm: "ПОСМ",
+  creative: "Creative",
+  special: "Special",
+  merch: "Merch",
+  tv: "TV",
+  listings: "Листинги",
+  other: "Другое",
+};
 
 export interface FinancialPlanItem {
   year: number; // 1..10

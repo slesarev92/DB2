@@ -14,10 +14,31 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
+# Phase 8.8: стандартные категории маркетингового бюджета.
+# Values — нижний регистр для БД, UI отображает labels из OPEX_CATEGORY_LABELS
+# в frontend. "other" — default для backward compat старых записей.
+OPEX_CATEGORIES: tuple[str, ...] = (
+    "digital",
+    "ecom",
+    "ooh",
+    "pr",
+    "smm",
+    "design",
+    "research",
+    "posm",
+    "creative",
+    "special",
+    "merch",
+    "tv",
+    "listings",
+    "other",
+)
+
 
 class OpexItemSchema(BaseModel):
-    """Одна статья OPEX в разбивке (B-19)."""
+    """Одна статья OPEX в разбивке (B-19 + 8.8 category)."""
 
+    category: str = Field(default="other", max_length=50)
     name: str = Field(..., min_length=1, max_length=200)
     amount: Decimal = Field(default=Decimal("0"), ge=0)
 

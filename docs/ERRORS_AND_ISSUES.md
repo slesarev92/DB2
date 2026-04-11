@@ -588,3 +588,57 @@ schema но забыли обновить 2 вызова `_persist_kpi_commentar
   использовать `127.0.0.1` в healthcheck.
 
 ---
+
+## [2026-04-11] Lazy import внутри endpoint минует pytest
+
+**Проблема:** PnL endpoint падал с `ModuleNotFoundError: No module named
+'app.models.enums'` в runtime, но 444 pytest passed. UI показывал
+"Ошибка" на табе P&L.
+
+**Контекст:** Phase 8.5. Импорт `from app.models.enums import ScenarioType`
+был сделан **внутри функции** `pnl_endpoint` (lazy для избежания
+циклических зависимостей). Pytest для этого endpoint'а ещё не написан.
+ScenarioType на самом деле экспортируется из `app.models` напрямую,
+а модуля `app.models.enums` не существует.
+
+**Решение:**
+- Вынести импорт ScenarioType в общий блок lazy imports внутри функции
+  (`from app.models import Scenario, ScenarioType`).
+- На уровне коммита добавить базовый тест для нового endpoint'а
+  (даже smoke-test 200 OK).
+
+**Урок:**
+- **Lazy imports внутри endpoint функций не валидируются ни линтером,
+  ни pytest до первого вызова.** При создании нового endpoint **обязательно**
+  написать хотя бы один integration test на 200 OK с пустым проектом —
+  это поймает ModuleNotFoundError, NameError, неправильные импорты.
+- Использовать `from app.models import X` (не `from app.models.X import Y`)
+  для согласованности — все entities + enums экспортируются через
+  `__init__.py` модуля.
+
+---
+
+## [2026-04-11] Celery worker не подхватывает изменения кода без restart
+
+**Проблема:** После добавления per-unit метрик в `calculation_service`
+(Phase 8.3) пересчёт через UI продолжал давать `nr_per_unit=None` —
+несмотря на uvicorn --reload + bind mount.
+
+**Контекст:** Backend uvicorn auto-reloads при изменении кода через
+bind mount. Celery worker — отдельный контейнер, тоже использует bind
+mount, но **не перезагружается** автоматически. Recalculate
+выполняется через Celery task, поэтому использовался старый код.
+
+**Решение:**
+- `docker compose -f infra/docker-compose.dev.yml restart celery-worker`
+  после изменений в `calculation_service.py`, `engine/`, или любом
+  модуле, который вызывается из Celery task.
+
+**Урок:**
+- При изменении кода, который выполняется в Celery (calculation_service,
+  engine steps, sensitivity_service) — **обязательно** restart
+  `celery-worker`. Backend reload не покрывает Celery.
+- Признак проблемы: API endpoint работает, recalculate возвращает 200,
+  но в БД старые значения / новые поля = NULL.
+
+---

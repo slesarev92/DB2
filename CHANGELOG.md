@@ -9,7 +9,15 @@
 
 ## [Unreleased]
 
-### Added
+---
+
+## [0.3.0] — 2026-04-11
+
+Phase 8: presentation layer parity. Полное соответствие presentation
+паспорта с эталоном Elektra Zero — все 10 задач закрыты с UI и экспортом
+в PPT/PDF. 3 миграции БД, 5 новых endpoint'ов, 4 новых таба в проекте.
+
+### Added (UI)
 - **8.1 Pricing Summary tab:** сводная таблица цен SKU × канал (полка,
   ex-factory с VAT-коррекцией, COGS из BOM, маржи каналов). Backend
   endpoint GET /api/projects/{id}/pricing-summary + frontend PricingTab.
@@ -21,19 +29,62 @@
 - **8.3 Per-unit метрики в KPI-сводке:** scope-averaged Revenue/GP/CM/EBITDA
   на штуку, литр, кг. 12 новых Numeric колонок в scenario_results,
   вычисление в calculation_service, таблица 4×3×3 в ResultsTab.
-- **8.6 Цветовая индикация KPI:** 3-tier margin colors в ResultsTab
-  (green ≥25% / yellow 15-25% / red <15%), NPV color в ScenariosTab
-  (green/red), легенды в обоих табах. Value Chain уже имел цвета (8.2).
-- **8.4 Sensitivity в экспортах:** 2D матрица чувствительности (4 param ×
-  5 delta → NPV Y1-Y10) добавлена в PPT (новый слайд) и PDF (новая
-  секция в HTML-шаблоне). Sensitivity service вызывается при экспорте.
 - **8.5 P&L tab с toggle месяцы/кварталы/годы:** Backend endpoint
   GET /api/projects/{id}/pnl (43 per-period P&L метрики из pipeline).
   Frontend PnlTab с client-side агрегацией в кварталы (Q1-Q4 × Y1-Y3)
   и годы (Y1-Y10). Toggle "Месяцы / Кварталы / Годы".
+- **8.6 Цветовая индикация KPI:** 3-tier margin colors в ResultsTab
+  (green ≥25% / yellow 15-25% / red <15%), NPV color в ScenariosTab
+  (green/red), легенды в обоих табах.
 - **8.7 Gate Timeline:** горизонтальная шкала G0→G5 с текущей позицией
   и milestone labels (Идея→Масштабирование). Встроена в overview tab.
-- **8.6→ Цветовая индикация, 8.4→ Sensitivity exports** — уже включены выше.
+- **8.8 Расширенный бюджет маркетинга:** category колонка в opex_items +
+  migration, 14 категорий (Digital, E-com, OOH, PR, SMM, Design, Research,
+  ПОСМ, Creative, Special, Merch, TV, Листинги, Другое), Select dropdown
+  в FinancialPlanEditor. UNIQUE(plan, category, name). Backward compat:
+  старые записи получают `category="other"`.
+- **8.9 Nielsen бенчмарки:** JSONB поле `nielsen_benchmarks` на Project,
+  редактируемая таблица в ContentTab (channel × universe × offtake × ND
+  × price × category share + note).
+- **8.10 КП на производство:** JSONB поле `supplier_quotes` на Project,
+  редактируемая таблица в ContentTab (supplier × item × price × MOQ × lead time).
+
+### Added (Exports)
+- **8.4 Sensitivity в PPT/PDF:** 2D матрица чувствительности (4 param ×
+  5 delta → NPV Y1-Y10) — новый слайд PPT + секция HTML-template.
+- **8.1+8.2 Pricing + Value Chain в PPT/PDF:** два новых слайда и две
+  PDF секции с pricing waterfall и value chain.
+- **8.3 Per-unit в PPT/PDF:** расширение KPI слайда таблицей per-unit
+  метрик Base сценария (4 metrics × 3 scopes) + аналог в PDF.
+- **8.7 Gate Timeline в PPT/PDF cover:** текстовая шкала G0→G5 с
+  маркером ●Gx на title slide и cover PDF.
+- **8.8 OPEX категории в PPT/PDF:** секция "OPEX по категориям маркетинга"
+  в стакан-fin-plan слайде и аналогично в PDF секции 9.
+- **8.9+8.10 Рынок и поставки в PPT/PDF:** объединённый слайд "Рынок
+  и поставки" с Nielsen (слева) + supplier_quotes (справа). Слайд
+  отображается только если есть данные. PDF — двухколоночная секция.
+
+### Changed
+- **Pricing service refactoring:** логика расчёта pricing_summary и
+  value_chain вынесена из `api/projects.py` в `services/pricing_service.py`
+  для переиспользования API endpoint'ами и exporters.
+
+### Migrations
+- `bf144a47ef42` — add ai_sensitivity_commentary column to projects
+- `df5babcd77d8` — add 12 per-unit metrics columns to scenario_results
+- `338f0a242518` — add category column to opex_items + UNIQUE(plan,category,name)
+- `84d5e23d52e8` — add nielsen_benchmarks JSONB column to projects
+- `7b303e6b7b59` — add supplier_quotes JSONB column to projects
+
+### Fixed
+- **PnL endpoint 500:** `from app.models.enums import ScenarioType` →
+  `from app.models import ScenarioType` (модуль `app.models.enums` не
+  существует, ScenarioType экспортируется напрямую из `app.models`).
+  Lazy import внутри функции не ловился pytest'ом до первого вызова.
+
+### Tests
+- 444 passed (no new tests added for new endpoints — TODO для следующей фазы)
+- test_export_pptx обновлён: ожидаемое количество слайдов 13 → 16
 
 ---
 

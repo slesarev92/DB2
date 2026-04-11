@@ -68,6 +68,8 @@ class ProjectBase(BaseModel):
     function_readiness: dict[str, Any] | None = None
     roadmap_tasks: list[Any] | None = None
     approvers: list[Any] | None = None
+    nielsen_benchmarks: list[Any] | None = None  # Phase 8.9
+    supplier_quotes: list[Any] | None = None  # Phase 8.10
 
     # 7.x: AI cached commentaries (persisted for page reload survival)
     ai_executive_summary: str | None = None
@@ -122,6 +124,8 @@ class ProjectUpdate(BaseModel):
     function_readiness: dict[str, Any] | None = None
     roadmap_tasks: list[Any] | None = None
     approvers: list[Any] | None = None
+    nielsen_benchmarks: list[Any] | None = None  # Phase 8.9
+    supplier_quotes: list[Any] | None = None  # Phase 8.10
     ai_budget_rub_monthly: Decimal | None = None
 
 
