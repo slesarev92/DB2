@@ -317,7 +317,7 @@ export function IngredientsCatalog() {
                             </Button>
                           </div>
                           {prices.length > 0 && (
-                            <div className="text-xs space-y-0.5">
+                            <div className="text-xs space-y-0.5 max-h-32 overflow-y-auto">
                               {prices.map((p) => (
                                 <div
                                   key={p.id}

@@ -92,6 +92,9 @@ class PipelineInput:
 
     product_density: float = 1.0    # кг/л. Для напитков ≈ 1.0 (D-09).
 
+    # Go/No-Go порог Contribution Margin (настраиваемый per-project, default 0.25).
+    cm_threshold: float = 0.25
+
     # --- Project OPEX ---
     # Дискретные периодические затраты проекта (листинги, запускной маркетинг).
     # В Excel — DATA row 26 "PROJECT_OPEX". В MVP источник данных ещё не

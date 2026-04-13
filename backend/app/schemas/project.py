@@ -37,6 +37,9 @@ class ProjectBase(BaseModel):
     wc_rate: Decimal = Field(default=Decimal("0.12"), ge=0, le=1)
     vat_rate: Decimal = Field(default=Decimal("0.20"), ge=0, le=1)
 
+    # Go/No-Go порог Contribution Margin (настраиваемый per-project).
+    cm_threshold: Decimal = Field(default=Decimal("0.25"), ge=0, le=1)
+
     currency: str = Field(default="RUB", min_length=3, max_length=3)
     inflation_profile_id: int | None = None
 
@@ -98,6 +101,7 @@ class ProjectUpdate(BaseModel):
     tax_rate: Decimal | None = Field(default=None, ge=0, le=1)
     wc_rate: Decimal | None = Field(default=None, ge=0, le=1)
     vat_rate: Decimal | None = Field(default=None, ge=0, le=1)
+    cm_threshold: Decimal | None = Field(default=None, ge=0, le=1)
     currency: str | None = Field(default=None, min_length=3, max_length=3)
     inflation_profile_id: int | None = None
 

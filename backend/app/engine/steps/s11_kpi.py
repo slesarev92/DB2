@@ -47,7 +47,7 @@ from app.engine.irr import irr as irr_solver
 # threshold_years — для payback: если число "негативных" лет > threshold → None.
 SCOPE_BOUNDS: dict[str, tuple[int, int]] = {
     "y1y3":  (3,  3),
-    "y1y5":  (6,  5),    # Excel quirk: 6 элементов в slice, threshold 5 лет
+    "y1y5":  (5,  5),    # D-12 fix: исправлено с 6 на 5 (было Excel-тайпо, одобрено заказчиком 2026-04-13)
     "y1y10": (10, 10),
 }
 

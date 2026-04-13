@@ -33,10 +33,10 @@ interface SensitivityTabProps {
 }
 
 const PARAM_LABELS: Record<SensitivityCell["parameter"], string> = {
-  nd: "ND",
-  offtake: "Off-take",
-  shelf_price: "Shelf price",
-  cogs: "COGS (BOM)",
+  nd: "Числ. дистр.",
+  offtake: "Офтейк",
+  shelf_price: "Цена полки",
+  cogs: "Себестоимость",
 };
 
 const PARAM_ORDER: SensitivityCell["parameter"][] = [
@@ -48,7 +48,7 @@ const PARAM_ORDER: SensitivityCell["parameter"][] = [
 
 /** Форматирует delta -0.20 → "−20%", 0 → "Base", +0.20 → "+20%". */
 function formatDeltaLabel(delta: number): string {
-  if (delta === 0) return "Base";
+  if (delta === 0) return "Базовый";
   const sign = delta > 0 ? "+" : "−";
   return `${sign}${Math.abs(delta * 100).toFixed(0)}%`;
 }
@@ -151,9 +151,9 @@ export function SensitivityTab({ projectId }: SensitivityTabProps) {
           {/* Base reference card */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Base reference</CardTitle>
+              <CardTitle className="text-base">Базовые значения</CardTitle>
               <CardDescription>
-                Значения Base сценария — точка отсчёта для всех ячеек ниже.
+                Точка отсчёта для всех ячеек ниже (базовый сценарий).
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -268,6 +268,14 @@ export function SensitivityTab({ projectId }: SensitivityTabProps) {
                   ))}
                 </TableBody>
               </Table>
+              <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
+                <span>Раскраска:</span>
+                <span className="text-green-600 font-semibold">NPV выше базового</span>
+                <span>—</span>
+                <span className="text-red-600 font-semibold">NPV ниже базового</span>
+                <span>—</span>
+                <span>Базовый без подсветки</span>
+              </div>
             </CardContent>
           </Card>
         </>

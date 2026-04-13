@@ -136,8 +136,8 @@ export function ObppcTab({ projectId }: ObppcTabProps) {
         channel_id: Number(selectedChannelId),
         price_tier: priceTier,
         pack_format: packFormat || "bottle",
-        pack_size_ml: packSize ? Number(packSize) : null,
-        price_point: pricePoint || null,
+        pack_size_ml: packSize && Number(packSize) > 0 ? Number(packSize) : null,
+        price_point: pricePoint && pricePoint.trim() !== "" ? pricePoint : null,
       });
       setSelectedSkuId("");
       setSelectedChannelId("");

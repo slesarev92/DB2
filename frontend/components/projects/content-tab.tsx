@@ -45,6 +45,7 @@ import { FUNCTION_DEPARTMENTS } from "@/types/api";
 
 interface ContentTabProps {
   projectId: number;
+  onProjectUpdate?: (updated: Record<string, unknown>) => void;
 }
 
 const GATE_OPTIONS: GateStage[] = ["G0", "G1", "G2", "G3", "G4", "G5"];
@@ -159,7 +160,7 @@ function FieldLabel({
   );
 }
 
-export function ContentTab({ projectId }: ContentTabProps) {
+export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
   const [project, setProject] = useState<ProjectRead | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -220,6 +221,7 @@ export function ContentTab({ projectId }: ContentTabProps) {
         const updated = await updateProject(projectId, body);
         setProject(updated);
         setSavedAt(new Date());
+        onProjectUpdate?.(body as unknown as Record<string, unknown>);
         return true;
       } catch (err) {
         setSaveError(
@@ -425,7 +427,11 @@ export function ContentTab({ projectId }: ContentTabProps) {
                 value={scalars.production_type}
                 onChange={(e) => setScalarField("production_type", e.target.value)}
                 onBlur={() => flushScalar("production_type")}
+                placeholder="Копакинг / Собственное"
               />
+              <p className="text-[11px] text-muted-foreground">
+                Копакинг — контрактное производство (тариф за ед.), Собственное — своя площадка (% от цены отгрузки). Влияет на структуру COGS.
+              </p>
             </div>
           </div>
         </CardContent>
@@ -1133,17 +1139,17 @@ export function ContentTab({ projectId }: ContentTabProps) {
           )}
           {supplierQuotes.length > 0 && (
             <div className="overflow-x-auto">
-              <table className="w-full text-xs border-collapse">
+              <table className="w-full text-xs border-collapse table-fixed">
                 <thead>
                   <tr className="border-b">
-                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Поставщик</th>
-                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Позиция</th>
-                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Ед.</th>
-                    <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Цена ₽/ед</th>
-                    <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">MOQ</th>
-                    <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Срок (дн)</th>
-                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Note</th>
-                    <th />
+                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground w-[18%]">Поставщик</th>
+                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground w-[18%]">Позиция</th>
+                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground w-[8%]">Ед.</th>
+                    <th className="px-2 py-1.5 text-right font-medium text-muted-foreground w-[12%]">Цена ₽/ед</th>
+                    <th className="px-2 py-1.5 text-right font-medium text-muted-foreground w-[10%]">МОЗ</th>
+                    <th className="px-2 py-1.5 text-right font-medium text-muted-foreground w-[10%]">Срок (дн)</th>
+                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground w-[18%]">Примечание</th>
+                    <th className="w-[6%]" />
                   </tr>
                 </thead>
                 <tbody>

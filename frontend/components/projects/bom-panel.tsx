@@ -244,7 +244,7 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="production_cost_rate">
-                Production cost (% от ex-factory)
+                Произв. затраты, % от цены отгрузки
               </Label>
               <Input
                 id="production_cost_rate"
@@ -259,7 +259,7 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="ca_m_rate">CA&M (% от выручки)</Label>
+              <Label htmlFor="ca_m_rate">КАиУР, % от выручки</Label>
               <Input
                 id="ca_m_rate"
                 type="number"
@@ -273,7 +273,7 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="marketing_rate">Marketing (% от выручки)</Label>
+              <Label htmlFor="marketing_rate">Маркетинг, % от выручки</Label>
               <Input
                 id="marketing_rate"
                 type="number"
@@ -474,7 +474,7 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
             </div>
             <div className="col-span-2 space-y-1">
               <Label htmlFor="bom-price" className="text-xs">
-                Цена/ед, ₽
+                Цена/ед, ₽ (без НДС)
               </Label>
               <Input
                 id="bom-price"

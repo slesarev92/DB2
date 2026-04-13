@@ -159,7 +159,7 @@ export function ValueChainTab({ projectId }: { projectId: number }) {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">
-            Value Chain / Стакан (&#8381;/шт)
+            Unit-экономика (&#8381;/шт)
             <span className="ml-2 text-xs font-normal text-muted-foreground">
               НДС {pct(data.vat_rate)} &middot; per-unit экономика на базовый период
             </span>

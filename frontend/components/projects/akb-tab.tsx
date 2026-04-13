@@ -174,7 +174,9 @@ export function AkbTab({ projectId }: AkbTabProps) {
           АКБ — План дистрибуции
         </CardTitle>
         <CardDescription>
-          Активная клиентская база по каналам: universe, target, покрытие.
+          Ассортиментная карта бренда — план дистрибуции по каналам.
+          Справочный элемент паспорта, не влияет на расчёт KPI.
+          Universe — общее кол-во ТТ в канале, Target — целевое покрытие, Coverage — % покрытия.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

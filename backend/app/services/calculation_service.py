@@ -366,6 +366,7 @@ async def _build_line_input(
         wc_rate=float(project.wc_rate),
         tax_rate=float(project.tax_rate),
         wacc=float(project.wacc),
+        cm_threshold=float(project.cm_threshold) if project.cm_threshold is not None else 0.25,
         product_density=1.0,
         project_opex=(),
         capex=(),

@@ -58,7 +58,7 @@ COPY --from=builder /app /app
 
 # Non-root user
 RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser \
-    && mkdir -p /media && chown -R appuser:appuser /app /media
+    && mkdir -p /media /app/media && chown -R appuser:appuser /app /media
 
 USER appuser
 

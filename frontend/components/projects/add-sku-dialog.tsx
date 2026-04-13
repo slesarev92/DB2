@@ -208,7 +208,7 @@ export function AddSkuDialog({
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="format">Формат</Label>
+                  <Label htmlFor="format">Тип упаковки</Label>
                   <Input
                     id="format"
                     value={format}
@@ -232,13 +232,13 @@ export function AddSkuDialog({
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="package_type">Тип упаковки</Label>
+                <Label htmlFor="package_type">Вложение в кейс</Label>
                 <Input
                   id="package_type"
                   value={packageType}
                   onChange={(e) => setPackageType(e.target.value)}
                   disabled={submitting}
-                  placeholder="ПЭТ / Банка / Стекло"
+                  placeholder="6 / 12 / 24 шт"
                 />
               </div>
             </div>

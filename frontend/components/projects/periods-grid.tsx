@@ -329,26 +329,28 @@ export function PeriodsGrid({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-xs text-muted-foreground">
           Подсветка: <span className="rounded bg-blue-100 px-1">синий</span>{" "}
           finetuned override,{" "}
           <span className="rounded bg-green-100 px-1">зелёный</span> actual,
           без подсветки — predict
         </p>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={overrideCount === 0}
-          onClick={handleResetAll}
-        >
-          Сбросить overrides ({overrideCount})
-        </Button>
-        {pendingCount > 0 && (
-          <Button size="sm" onClick={flushBatch}>
-            Сохранить ({pendingCount})
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={overrideCount === 0}
+            onClick={handleResetAll}
+          >
+            Сбросить overrides ({overrideCount})
           </Button>
-        )}
+          {pendingCount > 0 && (
+            <Button size="sm" onClick={flushBatch}>
+              Сохранить ({pendingCount})
+            </Button>
+          )}
+        </div>
       </div>
 
       {error !== null && (
@@ -357,7 +359,7 @@ export function PeriodsGrid({
         </p>
       )}
 
-      <div className="ag-theme-quartz" style={{ height: 320, width: "100%" }}>
+      <div className="ag-theme-quartz" style={{ width: "100%" }}>
         <AgGridReact<PivotRow>
           rowData={rowData}
           columnDefs={columnDefs}
@@ -365,6 +367,7 @@ export function PeriodsGrid({
           singleClickEdit
           stopEditingWhenCellsLoseFocus
           suppressMovableColumns
+          domLayout="autoHeight"
         />
       </div>
 

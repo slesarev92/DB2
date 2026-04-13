@@ -163,11 +163,9 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
           const res = await listScenarioResults(s.id);
           resultsMap[s.id] = res;
         } catch (err) {
-          if (err instanceof ApiError && err.status === 404) {
-            anyMissing = true;
-          } else {
-            throw err;
-          }
+          // 404 = не рассчитан; другие ошибки — тоже пропускаем
+          // чтобы не блокировать UI из-за одного сбойного сценария
+          anyMissing = true;
         }
       }
       setResultsByScenario(resultsMap);
@@ -359,8 +357,10 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
         <CardHeader>
           <CardTitle className="text-base">Дельты сценариев (% к Base)</CardTitle>
           <CardDescription>
-            Базовый сценарий — всегда 0. Conservative обычно отрицательные
-            (более консервативный план), Aggressive — положительные.
+            Дельты применяются к показателям базового (Base) сценария.
+            Например, +10% ND означает что все значения числовой дистрибуции
+            увеличиваются на 10%. Conservative обычно отрицательные дельты,
+            Aggressive — положительные.
           </CardDescription>
         </CardHeader>
         <CardContent>

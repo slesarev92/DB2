@@ -29,11 +29,11 @@ export function SkusTab({ projectId }: SkusTabProps) {
           onSelectPsk={setSelectedPskId}
         />
       </div>
-      <div className="md:col-span-2">
+      <div className="md:col-span-2 min-h-[200px]">
         {selectedPskId !== null ? (
           <BomPanel projectId={projectId} pskId={selectedPskId} />
         ) : (
-          <Card>
+          <Card className="h-full">
             <CardContent className="pt-6 text-sm text-muted-foreground">
               Выберите SKU слева, чтобы редактировать BOM и параметры
               себестоимости.

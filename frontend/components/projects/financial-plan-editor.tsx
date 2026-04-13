@@ -169,7 +169,17 @@ export function FinancialPlanEditor({ projectId }: FinancialPlanEditorProps) {
     setSaving(true);
     setError(null);
     try {
-      const saved = await putFinancialPlan(projectId, { items });
+      // Sanitize: пустые строки → "0" чтобы backend Pydantic не падал на Decimal("")
+      const sanitized = items.map((item) => ({
+        ...item,
+        capex: item.capex === "" ? "0" : item.capex,
+        opex: item.opex === "" ? "0" : item.opex,
+        opex_items: item.opex_items.map((oi) => ({
+          ...oi,
+          amount: oi.amount === "" ? "0" : oi.amount,
+        })),
+      }));
+      const saved = await putFinancialPlan(projectId, { items: sanitized });
       setItems(saved);
       setSavedAt(new Date());
     } catch (err) {

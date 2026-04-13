@@ -266,7 +266,12 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {activeTab === "content" && <ContentTab projectId={projectId} />}
+      {activeTab === "content" && (
+        <ContentTab
+          projectId={projectId}
+          onProjectUpdate={(updated) => setProject((prev) => prev ? { ...prev, ...updated } : prev)}
+        />
+      )}
 
       {activeTab === "financial-plan" && (
         <FinancialPlanEditor projectId={projectId} />

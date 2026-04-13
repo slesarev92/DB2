@@ -173,6 +173,12 @@ class Project(Base, TimestampMixin):
         Numeric(8, 6), nullable=False, default=Decimal("0.20")
     )
 
+    # Go/No-Go порог Contribution Margin (настраиваемый, одобрено заказчиком 2026-04-13).
+    cm_threshold: Mapped[Decimal] = mapped_column(
+        Numeric(8, 6), nullable=False, default=Decimal("0.25"),
+        server_default="0.250000",
+    )
+
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="RUB")
 
     inflation_profile_id: Mapped[int | None] = mapped_column(

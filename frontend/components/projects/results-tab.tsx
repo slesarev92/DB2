@@ -48,9 +48,9 @@ interface ResultsTabProps {
 }
 
 const SCENARIO_LABELS: Record<string, string> = {
-  base: "Base",
-  conservative: "Conservative",
-  aggressive: "Aggressive",
+  base: "Базовый",
+  conservative: "Консервативный",
+  aggressive: "Агрессивный",
 };
 
 const SCOPE_LABELS: Record<PeriodScope, string> = {
@@ -310,6 +310,11 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-2">
           <Label htmlFor="result-scenario">Сценарий</Label>
+          {selectedScenarioId !== null && (
+            <p className="text-lg font-semibold">
+              {SCENARIO_LABELS[scenarios.find((s) => s.id === selectedScenarioId)?.type ?? ""] ?? ""}
+            </p>
+          )}
           <Select
             value={
               selectedScenarioId === null ? "" : String(selectedScenarioId)
@@ -560,7 +565,7 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
                       Показатель
                     </th>
                     {SCOPE_ORDER.map((scope) => (
-                      <th key={scope} className="px-2 py-1.5 text-right font-medium" colSpan={3}>
+                      <th key={scope} className="px-2 py-1.5 text-right font-medium" colSpan={2}>
                         {SCOPE_LABELS[scope]}
                       </th>
                     ))}
@@ -573,10 +578,7 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
                           ₽/шт
                         </th>
                         <th className="px-2 py-1 text-right text-[10px] font-medium text-muted-foreground">
-                          ₽/л
-                        </th>
-                        <th className="px-2 py-1 text-right text-[10px] font-medium text-muted-foreground">
-                          ₽/кг
+                          ₽/(л/кг)
                         </th>
                       </Fragment>
                     ))}
@@ -592,7 +594,6 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
                         const r = resultsByScope[scope];
                         const u = (r?.[row.unitField] as string | null) ?? null;
                         const l = (r?.[row.literField] as string | null) ?? null;
-                        const k = (r?.[row.kgField] as string | null) ?? null;
                         return (
                           <Fragment key={scope}>
                             <td className="px-2 py-1.5 text-right tabular-nums">
@@ -600,9 +601,6 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
                             </td>
                             <td className="px-2 py-1.5 text-right tabular-nums">
                               {formatMoneyPerUnit(l)}
-                            </td>
-                            <td className="px-2 py-1.5 text-right tabular-nums">
-                              {formatMoneyPerUnit(k)}
                             </td>
                           </Fragment>
                         );

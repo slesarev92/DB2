@@ -25,7 +25,7 @@ export function formatMoney(value: string | null | undefined): string {
 
 const moneyPerUnitFmt = new Intl.NumberFormat("ru-RU", {
   minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
+  maximumFractionDigits: 4,
 });
 
 /** Денежная сумма per-unit с 2 знаками. "—" если null. */

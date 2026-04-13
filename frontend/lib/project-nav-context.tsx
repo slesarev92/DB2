@@ -49,12 +49,12 @@ export const SECTION_LABELS: Record<TabValue, string> = {
   channels: "Каналы",
   akb: "АКБ",
   obppc: "OBPPC",
-  periods: "Периоды",
+  periods: "Fine tuning",
   scenarios: "Сценарии",
   results: "Результаты",
   sensitivity: "Чувствительность",
   pricing: "Цены",
-  "value-chain": "Стакан",
+  "value-chain": "Unit-экономика",
   pnl: "P&L",
 };
 

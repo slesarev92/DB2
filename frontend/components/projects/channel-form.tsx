@@ -234,7 +234,7 @@ export function ChannelForm({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
-          <Label htmlFor="nd_target">ND target (доля)</Label>
+          <Label htmlFor="nd_target">Числ. дистрибуция (доля)</Label>
           <Input
             id="nd_target"
             type="number"
@@ -250,7 +250,7 @@ export function ChannelForm({
           <FieldError error={errors.nd_target} />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="nd_ramp_months">Ramp месяцев</Label>
+          <Label htmlFor="nd_ramp_months">Рамп-ап, мес.</Label>
           <Input
             id="nd_ramp_months"
             type="number"
@@ -268,7 +268,7 @@ export function ChannelForm({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
-          <Label htmlFor="offtake_target">Off-take target (ед./точка)</Label>
+          <Label htmlFor="offtake_target">Офтейк (ед./точка/мес.)</Label>
           <Input
             id="offtake_target"
             type="number"
@@ -283,7 +283,7 @@ export function ChannelForm({
           <FieldError error={errors.offtake_target} />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="shelf_price_reg">Shelf price рег., ₽/ед.</Label>
+          <Label htmlFor="shelf_price_reg">Цена полки (с НДС), ₽/ед.</Label>
           <Input
             id="shelf_price_reg"
             type="number"
@@ -301,7 +301,7 @@ export function ChannelForm({
 
       <div className="grid grid-cols-3 gap-3">
         <div className="space-y-1">
-          <Label htmlFor="channel_margin">Channel margin</Label>
+          <Label htmlFor="channel_margin">Маржа канала (доля)</Label>
           <Input
             id="channel_margin"
             type="number"
@@ -317,7 +317,7 @@ export function ChannelForm({
           <FieldError error={errors.channel_margin} />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="promo_discount">Promo discount</Label>
+          <Label htmlFor="promo_discount">Промо-скидка (доля)</Label>
           <Input
             id="promo_discount"
             type="number"
@@ -333,7 +333,7 @@ export function ChannelForm({
           <FieldError error={errors.promo_discount} />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="promo_share">Promo share</Label>
+          <Label htmlFor="promo_share">Доля промо (доля)</Label>
           <Input
             id="promo_share"
             type="number"
@@ -352,7 +352,7 @@ export function ChannelForm({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
-          <Label htmlFor="logistics_cost_per_kg">Logistics ₽/кг</Label>
+          <Label htmlFor="logistics_cost_per_kg">Логистика, ₽/кг</Label>
           <Input
             id="logistics_cost_per_kg"
             type="number"

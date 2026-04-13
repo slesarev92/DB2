@@ -167,9 +167,9 @@ export function ChannelsPanel({ pskId }: ChannelsPanelProps) {
               <TableBody>
                 {sortedItems.map((psc) => (
                   <TableRow key={psc.id}>
-                    <TableCell>
-                      <div className="font-medium">{psc.channel.code}</div>
-                      <div className="text-xs text-muted-foreground">
+                    <TableCell className="max-w-[180px]">
+                      <div className="font-medium truncate">{psc.channel.code}</div>
+                      <div className="text-xs text-muted-foreground truncate">
                         {psc.channel.name}
                       </div>
                     </TableCell>
