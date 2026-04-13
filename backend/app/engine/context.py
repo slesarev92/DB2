@@ -72,7 +72,6 @@ class PipelineInput:
     # Per-period: D-19 — Excel переключает production rate по периодам
     # (M17-M24 для SKU 1 HM = 0, copacking window). Длины period_count.
     production_cost_rate: tuple[float, ...]
-    copacking_per_unit: float       # ₽/unit. В MVP всегда 0.0 (нет поля в схеме).
 
     # --- Логистика ---
     # Per-period: длины period_count, чтобы поддерживать инфляцию на
@@ -91,6 +90,10 @@ class PipelineInput:
     wacc: float                     # Discount rate / WACC (default 0.19). Excel DASH C3.
 
     product_density: float = 1.0    # кг/л. Для напитков ≈ 1.0 (D-09).
+
+    # --- Copacking (LOGIC-01) ---
+    copacking_per_unit: float = 0.0  # ₽/unit. Используется если production_mode="copacking".
+    production_mode: str = "own"    # "own" или "copacking". Определяет COGS в s03.
 
     # Go/No-Go порог Contribution Margin (настраиваемый per-project, default 0.25).
     cm_threshold: float = 0.25

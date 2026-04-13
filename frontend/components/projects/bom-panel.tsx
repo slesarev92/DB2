@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -123,6 +123,8 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
     useSortableTable(bom ?? [], BOM_SORT_COLUMNS);
 
   // Локальные значения rates для редактирования (PATCH on blur)
+  const [productionMode, setProductionMode] = useState("own");
+  const [copackingRate, setCopackingRate] = useState("");
   const [productionCostRate, setProductionCostRate] = useState("");
   const [caMRate, setCaMRate] = useState("");
   const [marketingRate, setMarketingRate] = useState("");
@@ -139,6 +141,8 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
         if (cancelled) return;
         setPsk(pskData);
         setBom(bomData);
+        setProductionMode(pskData.production_mode ?? "own");
+        setCopackingRate(pskData.copacking_rate ?? "0");
         setProductionCostRate(pskData.production_cost_rate);
         setCaMRate(pskData.ca_m_rate);
         setMarketingRate(pskData.marketing_rate);
@@ -193,12 +197,24 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
     }
   }
 
+  // Auto-save при смене production_mode (radio не имеет blur)
+  const initialModeRef = useRef(productionMode);
+  useEffect(() => {
+    if (psk === null) return;
+    // Пропустить первый рендер (когда state инициализируется из fetch)
+    if (initialModeRef.current === productionMode) return;
+    initialModeRef.current = productionMode;
+    void saveRates();
+  }, [productionMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function saveRates() {
     if (psk === null) return;
     setSavingRates(true);
     setError(null);
     try {
       await updateProjectSku(pskId, {
+        production_mode: productionMode,
+        copacking_rate: copackingRate,
         production_cost_rate: productionCostRate,
         ca_m_rate: caMRate,
         marketing_rate: marketingRate,
@@ -260,23 +276,68 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="space-y-2">
-              <Label htmlFor="production_cost_rate">
-                Произв. затраты, % от цены отгрузки
-              </Label>
-              <Input
-                id="production_cost_rate"
-                type="number"
-                step="0.001"
-                min="0"
-                max="1"
-                value={productionCostRate}
-                onChange={(e) => setProductionCostRate(e.target.value)}
-                onBlur={saveRates}
+          {/* Тип производства: own / copacking */}
+          <div className="mb-3 flex items-center gap-4">
+            <span className="text-sm font-medium">Тип производства:</span>
+            <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+              <input
+                type="radio"
+                name={`prod-mode-${pskId}`}
+                value="own"
+                checked={productionMode === "own"}
+                onChange={() => { setProductionMode("own"); }}
                 disabled={savingRates}
               />
-            </div>
+              Собственное
+            </label>
+            <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+              <input
+                type="radio"
+                name={`prod-mode-${pskId}`}
+                value="copacking"
+                checked={productionMode === "copacking"}
+                onChange={() => { setProductionMode("copacking"); }}
+                disabled={savingRates}
+              />
+              Копакинг
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {productionMode === "own" ? (
+              <div className="space-y-2">
+                <Label htmlFor="production_cost_rate">
+                  Произв. затраты, % от цены отгрузки
+                </Label>
+                <Input
+                  id="production_cost_rate"
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  max="1"
+                  value={productionCostRate}
+                  onChange={(e) => setProductionCostRate(e.target.value)}
+                  onBlur={saveRates}
+                  disabled={savingRates}
+                />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="copacking_rate">
+                  Тариф копакера, ₽/ед.
+                </Label>
+                <Input
+                  id="copacking_rate"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={copackingRate}
+                  onChange={(e) => setCopackingRate(e.target.value)}
+                  onBlur={saveRates}
+                  disabled={savingRates}
+                />
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="ca_m_rate">КАиУР, % от выручки</Label>
               <Input

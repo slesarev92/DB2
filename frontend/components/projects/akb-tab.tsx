@@ -207,7 +207,7 @@ export function AkbTab({ projectId }: AkbTabProps) {
           <div>
             <Input
               type="number"
-              placeholder="Universe"
+              placeholder="Universe, шт (ТТ)"
               value={universe}
               onChange={(e) => { setUniverse(e.target.value); clearAkbError("universe"); }}
               aria-invalid={!!akbErrors.universe}
@@ -218,7 +218,7 @@ export function AkbTab({ projectId }: AkbTabProps) {
           <div>
             <Input
               type="number"
-              placeholder="Target"
+              placeholder="Target, шт (ТТ)"
               value={target}
               onChange={(e) => { setTarget(e.target.value); clearAkbError("target"); }}
               aria-invalid={!!akbErrors.target}
@@ -229,7 +229,7 @@ export function AkbTab({ projectId }: AkbTabProps) {
           <div>
             <Input
               type="number"
-              placeholder="Coverage (доля)"
+              placeholder="Coverage, % (доля)"
               value={coverage}
               onChange={(e) => { setCoverage(e.target.value); clearAkbError("coverage"); }}
               aria-invalid={!!akbErrors.coverage}

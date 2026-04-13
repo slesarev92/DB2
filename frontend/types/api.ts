@@ -230,6 +230,8 @@ export interface SKURead extends SKUBase {
 export interface ProjectSKUCreate {
   sku_id: number;
   include?: boolean;
+  production_mode?: string;
+  copacking_rate?: string;
   production_cost_rate?: string;
   ca_m_rate?: string;
   marketing_rate?: string;
@@ -238,6 +240,8 @@ export interface ProjectSKUCreate {
 
 export interface ProjectSKUUpdate {
   include?: boolean;
+  production_mode?: string;
+  copacking_rate?: string;
   production_cost_rate?: string;
   ca_m_rate?: string;
   marketing_rate?: string;
@@ -250,6 +254,8 @@ export interface ProjectSKURead {
   sku_id: number;
   sku: SKURead;
   include: boolean;
+  production_mode: string;
+  copacking_rate: string;
   production_cost_rate: string;
   ca_m_rate: string;
   marketing_rate: string;

@@ -358,7 +358,8 @@ async def _build_line_input(
         vat_rate=float(project.vat_rate),
         bom_unit_cost=tuple(bom_arr),
         production_cost_rate=tuple(prod_rate_arr),
-        copacking_per_unit=0.0,  # MVP: нет поля в схеме
+        copacking_per_unit=float(psk.copacking_rate) if psk.copacking_rate else 0.0,
+        production_mode=psk.production_mode or "own",
         logistics_cost_per_kg=tuple(log_arr),
         sku_volume_l=float(psk.sku.volume_l) if psk.sku.volume_l else 0.0,
         ca_m_rate=float(psk.ca_m_rate),

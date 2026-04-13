@@ -10,11 +10,11 @@ from app.schemas.sku import SKURead
 class ProjectSKUBase(BaseModel):
     sku_id: int
     include: bool = True
+    production_mode: str = Field(default="own", pattern="^(own|copacking)$")
+    copacking_rate: Decimal = Field(default=Decimal("0"), ge=0)
     production_cost_rate: Decimal = Field(default=Decimal("0"), ge=0, le=1)
     ca_m_rate: Decimal = Field(default=Decimal("0"), ge=0, le=1)
     marketing_rate: Decimal = Field(default=Decimal("0"), ge=0, le=1)
-    # 4.5.1: image упаковки SKU. Загружается через POST /api/projects/{id}/media
-    # затем линкуется PATCH'ем PSK с этим id. AI может генерировать в Phase 7.8.
     package_image_id: int | None = None
 
 
@@ -26,6 +26,8 @@ class ProjectSKUUpdate(BaseModel):
     """Тело PATCH /api/project-skus/{id}. sku_id менять нельзя."""
 
     include: bool | None = None
+    production_mode: str | None = Field(default=None, pattern="^(own|copacking)$")
+    copacking_rate: Decimal | None = Field(default=None, ge=0)
     production_cost_rate: Decimal | None = Field(default=None, ge=0, le=1)
     ca_m_rate: Decimal | None = Field(default=None, ge=0, le=1)
     marketing_rate: Decimal | None = Field(default=None, ge=0, le=1)
@@ -42,6 +44,8 @@ class ProjectSKURead(BaseModel):
     sku_id: int
     sku: SKURead
     include: bool
+    production_mode: str
+    copacking_rate: Decimal
     production_cost_rate: Decimal
     ca_m_rate: Decimal
     marketing_rate: Decimal

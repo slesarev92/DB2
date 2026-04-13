@@ -259,11 +259,13 @@ class TestCogs:
         assert ctx.cogs_production[0] == pytest.approx(expected)
         assert ctx.cogs_material[0] == 0.0
 
-    def test_all_three_components_sum(self):
+    def test_own_mode_production_no_copacking(self):
+        """production_mode='own': production cost active, copacking=0."""
         inp = make_input(
             bom_unit_cost=5.0,
             production_cost_rate=0.10,
-            copacking_per_unit=2.0,
+            copacking_per_unit=2.0,  # ignored when mode=own
+            production_mode="own",
         )
         ctx = ctx_for(inp)
         s01_volume.step(ctx)
@@ -272,11 +274,30 @@ class TestCogs:
 
         mat = 5.0 * 5000.0
         prod = (100.0 / 1.20 * 0.70) * 0.10 * 5000.0
-        cop = 2.0 * 5000.0
         assert ctx.cogs_material[0] == pytest.approx(mat)
         assert ctx.cogs_production[0] == pytest.approx(prod)
+        assert ctx.cogs_copacking[0] == 0.0
+        assert ctx.cogs_total[0] == pytest.approx(mat + prod)
+
+    def test_copacking_mode_no_production(self):
+        """production_mode='copacking': copacking active, production=0."""
+        inp = make_input(
+            bom_unit_cost=5.0,
+            production_cost_rate=0.10,  # ignored when mode=copacking
+            copacking_per_unit=2.0,
+            production_mode="copacking",
+        )
+        ctx = ctx_for(inp)
+        s01_volume.step(ctx)
+        s02_price.step(ctx)
+        s03_cogs.step(ctx)
+
+        mat = 5.0 * 5000.0
+        cop = 2.0 * 5000.0
+        assert ctx.cogs_material[0] == pytest.approx(mat)
+        assert ctx.cogs_production[0] == 0.0
         assert ctx.cogs_copacking[0] == pytest.approx(cop)
-        assert ctx.cogs_total[0] == pytest.approx(mat + prod + cop)
+        assert ctx.cogs_total[0] == pytest.approx(mat + cop)
 
     def test_zero_volume_gives_zero_cogs(self):
         inp = make_input(

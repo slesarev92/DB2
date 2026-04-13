@@ -247,7 +247,7 @@ export function ObppcTab({ projectId }: ObppcTabProps) {
           <div>
             <Input
               type="number"
-              placeholder="ml"
+              placeholder="Объём, мл"
               value={packSize}
               onChange={(e) => { setPackSize(e.target.value); clearObppcError("pack_size"); }}
               aria-invalid={!!obppcErrors.pack_size}
@@ -258,7 +258,7 @@ export function ObppcTab({ projectId }: ObppcTabProps) {
           <div>
             <Input
               type="number"
-              placeholder="Цена"
+              placeholder="Цена, ₽"
               value={pricePoint}
               onChange={(e) => { setPricePoint(e.target.value); clearObppcError("price_point"); }}
               aria-invalid={!!obppcErrors.price_point}

@@ -394,6 +394,17 @@ class ProjectSKU(Base, TimestampMixin):
     )
     include: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+    # Режим производства: own (собственное) или copacking (контрактное).
+    # Определяет структуру COGS в pipeline (s03_cogs):
+    # - own: production_cost = ex_factory × production_cost_rate × volume; copacking = 0
+    # - copacking: copacking = copacking_rate × volume; production_cost = 0
+    production_mode: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="own"
+    )
+    copacking_rate: Mapped[Decimal] = mapped_column(
+        Numeric(15, 4), nullable=False, default=Decimal("0")
+    )
+
     # Rate-параметры SKU как % от выручки (D-04 в TZ_VS_EXCEL_DISCREPANCIES).
     production_cost_rate: Mapped[Decimal] = mapped_column(
         Numeric(8, 6), nullable=False, default=Decimal("0")
