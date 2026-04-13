@@ -23,6 +23,9 @@ export function ChannelsTab({ projectId }: ChannelsTabProps) {
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
       <div className="md:col-span-1">
+        <p className="mb-2 text-xs text-muted-foreground">
+          Выберите SKU для настройки каналов. Создание SKU — в разделе «SKU и BOM».
+        </p>
         <SkuPanel
           projectId={projectId}
           selectedPskId={selectedPskId}

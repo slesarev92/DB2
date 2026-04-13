@@ -138,8 +138,9 @@ export function MarketingResearchSection({
       <CardHeader>
         <CardTitle className="text-base">8. Marketing Research (AI)</CardTitle>
         <CardDescription>
-          Маркетинговые исследования через AI. ~15-25R за тему (opus).
-          Web search — в разработке, пока на основе training data.
+          Маркетинговые исследования через AI. ~15-25₽ за тему.
+          AI использует данные проекта (SKU, категория, ЦА, концепция)
+          для генерации контекстных исследований.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

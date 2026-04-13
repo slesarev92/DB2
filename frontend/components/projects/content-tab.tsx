@@ -183,6 +183,16 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
 
+  // UX-13: collapsible sections (collapsed by default: none)
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+  function toggleSection(n: number) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(n)) next.delete(n); else next.add(n);
+      return next;
+    });
+  }
+
   // Initial load
   useEffect(() => {
     let cancelled = false;
@@ -324,13 +334,16 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
       {/* 1. Общая информация                                    */}
       {/* ====================================================== */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">1. Общая информация</CardTitle>
+        <CardHeader className="cursor-pointer" onClick={() => toggleSection(1)}>
+          <CardTitle className="text-base flex items-center justify-between">
+            1. Общая информация
+            <span className="text-muted-foreground text-sm font-normal">{collapsed.has(1) ? "▸" : "▾"}</span>
+          </CardTitle>
           <CardDescription>
             Стадия паспорта, владелец, базовые атрибуты проекта.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        {!collapsed.has(1) && <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-1">
               <Label htmlFor="gate_stage">Gate-стадия</Label>
@@ -434,20 +447,23 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
               </p>
             </div>
           </div>
-        </CardContent>
+        </CardContent>}
       </Card>
 
       {/* ====================================================== */}
       {/* 2. Концепция продукта                                  */}
       {/* ====================================================== */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">2. Концепция продукта</CardTitle>
+        <CardHeader className="cursor-pointer" onClick={() => toggleSection(2)}>
+          <CardTitle className="text-base flex items-center justify-between">
+            2. Концепция продукта
+            <span className="text-muted-foreground text-sm font-normal">{collapsed.has(2) ? "▸" : "▾"}</span>
+          </CardTitle>
           <CardDescription>
             Рост, идея, целевая аудитория, технология.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        {!collapsed.has(2) && <CardContent className="space-y-4">
           <div className="space-y-1">
             <FieldLabel field="growth_opportunity" projectId={projectId} onApply={handleAIApply}>Growth opportunity</FieldLabel>
             <Textarea
@@ -549,7 +565,7 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
               onBlur={() => flushScalar("executive_summary")}
             />
           </div>
-        </CardContent>
+        </CardContent>}
       </Card>
 
       {/* ====================================================== */}
@@ -557,14 +573,17 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
       {/* ====================================================== */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">3. Результаты валидации</CardTitle>
+        <CardHeader className="cursor-pointer" onClick={() => toggleSection(3)}>
+          <CardTitle className="text-base flex items-center justify-between">
+            3. Результаты валидации
+            <span className="text-muted-foreground text-sm font-normal">{collapsed.has(3) ? "▸" : "▾"}</span>
+          </CardTitle>
           <CardDescription>
             5 подтестов: concept test, naming, design, product, price. Score
             0–100, notes — выводы и рекомендации.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        {!collapsed.has(3) && <CardContent className="space-y-4">
           {VALIDATION_SUBTESTS.map(({ key, label }) => {
             const entry = validationTests[key] ?? { score: null, notes: "" };
             return (
@@ -610,21 +629,24 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
               Сохранить валидацию
             </Button>
           </div>
-        </CardContent>
+        </CardContent>}
       </Card>
 
       {/* ====================================================== */}
       {/* 4. Риски (JSONB list)                                  */}
       {/* ====================================================== */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">4. Риски</CardTitle>
+        <CardHeader className="cursor-pointer" onClick={() => toggleSection(4)}>
+          <CardTitle className="text-base flex items-center justify-between">
+            4. Риски
+            <span className="text-muted-foreground text-sm font-normal">{collapsed.has(4) ? "▸" : "▾"}</span>
+          </CardTitle>
           <CardDescription>
             Свободный список ключевых рисков. Порядок имеет значение —
             сверху важнее.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        {!collapsed.has(4) && <CardContent className="space-y-3">
           {risks.length === 0 && (
             <p className="text-sm text-muted-foreground">
               Рисков пока не добавлено.
@@ -664,7 +686,7 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
               Сохранить риски
             </Button>
           </div>
-        </CardContent>
+        </CardContent>}
       </Card>
       </div>{/* end 2-column grid */}
 
@@ -672,14 +694,17 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
       {/* 5. Готовность функций (JSONB map — фиксированные 8)    */}
       {/* ====================================================== */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">5. Готовность функций</CardTitle>
+        <CardHeader className="cursor-pointer" onClick={() => toggleSection(5)}>
+          <CardTitle className="text-base flex items-center justify-between">
+            5. Готовность функций
+            <span className="text-muted-foreground text-sm font-normal">{collapsed.has(5) ? "▸" : "▾"}</span>
+          </CardTitle>
           <CardDescription>
             8 фиксированных департаментов × светофор (green/yellow/red) +
             заметки.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        {!collapsed.has(5) && <CardContent className="space-y-3">
           {FUNCTION_DEPARTMENTS.map((dept) => {
             const entry: FunctionReadinessEntry =
               functionReadiness[dept] ?? { status: "yellow", notes: "" };
@@ -730,20 +755,23 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
               Сохранить готовность
             </Button>
           </div>
-        </CardContent>
+        </CardContent>}
       </Card>
 
       {/* ====================================================== */}
       {/* 6. Дорожная карта (JSONB list)                         */}
       {/* ====================================================== */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">6. Дорожная карта</CardTitle>
+        <CardHeader className="cursor-pointer" onClick={() => toggleSection(6)}>
+          <CardTitle className="text-base flex items-center justify-between">
+            6. Дорожная карта
+            <span className="text-muted-foreground text-sm font-normal">{collapsed.has(6) ? "▸" : "▾"}</span>
+          </CardTitle>
           <CardDescription>
             Ключевые задачи проекта с датами, ответственными и статусом.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        {!collapsed.has(6) && <CardContent className="space-y-3">
           {roadmapTasks.length === 0 && (
             <p className="text-sm text-muted-foreground">Задач пока нет.</p>
           )}
@@ -846,7 +874,7 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
               Сохранить дорожную карту
             </Button>
           </div>
-        </CardContent>
+        </CardContent>}
       </Card>
 
       {/* B-07: Gantt chart visualization */}
@@ -861,13 +889,16 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
       {/* 7. Согласующие (JSONB list)                            */}
       {/* ====================================================== */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">7. Согласующие</CardTitle>
+        <CardHeader className="cursor-pointer" onClick={() => toggleSection(7)}>
+          <CardTitle className="text-base flex items-center justify-between">
+            7. Согласующие
+            <span className="text-muted-foreground text-sm font-normal">{collapsed.has(7) ? "▸" : "▾"}</span>
+          </CardTitle>
           <CardDescription>
             Метрики проекта и те, кто их подписывает (с источниками данных).
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        {!collapsed.has(7) && <CardContent className="space-y-3">
           {approvers.length === 0 && (
             <p className="text-sm text-muted-foreground">
               Согласующих пока нет.
@@ -903,9 +934,10 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
                 />
               </div>
               <div>
-                <Label>Источник</Label>
+                <Label title="Откуда взят согласующий (подразделение, должность)">Источник</Label>
                 <Input
                   value={a.source ?? ""}
+                  placeholder="Подразделение / должность"
                   onChange={(e) => {
                     const source = e.target.value;
                     setApprovers((prev) =>
@@ -942,21 +974,24 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
               Сохранить согласующих
             </Button>
           </div>
-        </CardContent>
+        </CardContent>}
       </Card>
 
       {/* ====================================================== */}
       {/* 8. Nielsen бенчмарки (Phase 8.9)                       */}
       {/* ====================================================== */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">8. Nielsen бенчмарки</CardTitle>
+        <CardHeader className="cursor-pointer" onClick={() => toggleSection(8)}>
+          <CardTitle className="text-base flex items-center justify-between">
+            8. Nielsen бенчмарки
+            <span className="text-muted-foreground text-sm font-normal">{collapsed.has(8) ? "▸" : "▾"}</span>
+          </CardTitle>
           <CardDescription>
             Рыночные данные по каналам/регионам — вселенная, офтейк,
             дистрибуция, цены. Заполняется вручную из отчётов Nielsen.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        {!collapsed.has(8) && <CardContent className="space-y-3">
           {nielsenBenchmarks.length === 0 && (
             <p className="text-sm text-muted-foreground">
               Бенчмарков пока нет.
@@ -1119,21 +1154,24 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
               Сохранить бенчмарки
             </Button>
           </div>
-        </CardContent>
+        </CardContent>}
       </Card>
 
       {/* ====================================================== */}
       {/* 9. КП на производство (Phase 8.10)                     */}
       {/* ====================================================== */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">9. КП на производство</CardTitle>
+        <CardHeader className="cursor-pointer" onClick={() => toggleSection(9)}>
+          <CardTitle className="text-base flex items-center justify-between">
+            9. КП на производство
+            <span className="text-muted-foreground text-sm font-normal">{collapsed.has(9) ? "▸" : "▾"}</span>
+          </CardTitle>
           <CardDescription>
             Детальные котировки копакеров и поставщиков сырья. Используется
             для обоснования COGS и сравнения предложений.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        {!collapsed.has(9) && <CardContent className="space-y-3">
           {supplierQuotes.length === 0 && (
             <p className="text-sm text-muted-foreground">КП пока нет.</p>
           )}
@@ -1288,7 +1326,7 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
               Сохранить КП
             </Button>
           </div>
-        </CardContent>
+        </CardContent>}
       </Card>
 
       {/* ====================================================== */}

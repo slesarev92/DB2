@@ -141,6 +141,9 @@ export function SkuImageUpload({
   return (
     <div className="space-y-2">
       <Label>Изображение упаковки</Label>
+      <p className="text-[11px] text-muted-foreground">
+        Загрузите фото/рендер упаковки (PNG/JPG до 10 МБ) или сгенерируйте AI-мокап ниже.
+      </p>
 
       {previewUrl ? (
         <div className="flex items-start gap-3">

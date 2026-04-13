@@ -248,7 +248,7 @@ export function IngredientsCatalog() {
                   Категория{sortIndicator(ingSortState, "category")}
                 </TableHead>
                 <TableHead className="w-28 cursor-pointer select-none" onClick={() => toggleIngSort("price")}>
-                  Цена{sortIndicator(ingSortState, "price")}
+                  Цена (без НДС){sortIndicator(ingSortState, "price")}
                 </TableHead>
                 <TableHead className="w-24" />
               </TableRow>
