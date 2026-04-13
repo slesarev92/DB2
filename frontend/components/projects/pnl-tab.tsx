@@ -28,6 +28,9 @@ interface PnlPeriod {
   volume_units: number;
   volume_liters: number;
   net_revenue: number;
+  cogs_material: number;
+  cogs_production: number;
+  cogs_copacking: number;
   cogs_total: number;
   gross_profit: number;
   logistics_cost: number;
@@ -35,6 +38,11 @@ interface PnlPeriod {
   ca_m_cost: number;
   marketing_cost: number;
   ebitda: number;
+  working_capital: number;
+  delta_working_capital: number;
+  tax: number;
+  operating_cash_flow: number;
+  investing_cash_flow: number;
   free_cash_flow: number;
 }
 
@@ -54,16 +62,25 @@ function fmt(val: number, decimals = 0): string {
   });
 }
 
-const METRIC_ROWS: { key: keyof PnlPeriod; label: string; bold?: boolean }[] = [
+const METRIC_ROWS: { key: keyof PnlPeriod; label: string; bold?: boolean; indent?: boolean }[] = [
   { key: "volume_units", label: "Объём (шт)" },
+  { key: "volume_liters", label: "Объём (л)" },
   { key: "net_revenue", label: "Выручка (NR)", bold: true },
-  { key: "cogs_total", label: "COGS" },
+  { key: "cogs_material", label: "Сырьё и материалы", indent: true },
+  { key: "cogs_production", label: "Производство", indent: true },
+  { key: "cogs_copacking", label: "Копакинг", indent: true },
+  { key: "cogs_total", label: "COGS итого", bold: true },
   { key: "gross_profit", label: "Валовая прибыль (GP)", bold: true },
   { key: "logistics_cost", label: "Логистика" },
   { key: "contribution", label: "Contribution (CM)", bold: true },
   { key: "ca_m_cost", label: "КАиУР (CA&M)" },
   { key: "marketing_cost", label: "Маркетинг" },
   { key: "ebitda", label: "EBITDA", bold: true },
+  { key: "working_capital", label: "Рабочий капитал (WC)" },
+  { key: "delta_working_capital", label: "Изменение WC (ΔWC)" },
+  { key: "tax", label: "Налог на прибыль" },
+  { key: "operating_cash_flow", label: "OCF", bold: true },
+  { key: "investing_cash_flow", label: "ICF (CAPEX)" },
   { key: "free_cash_flow", label: "FCF", bold: true },
 ];
 
@@ -203,7 +220,7 @@ export function PnlTab({ projectId }: { projectId: number }) {
                   <td
                     className={`px-2 py-1.5 whitespace-nowrap sticky left-0 bg-background z-10 ${
                       row.bold ? "font-medium" : "text-muted-foreground"
-                    }`}
+                    } ${row.indent ? "pl-6" : ""}`}
                   >
                     {row.label}
                   </td>

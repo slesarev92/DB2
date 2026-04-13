@@ -40,7 +40,23 @@ async def list_bom_endpoint(
     if psk is None:
         raise _psk_not_found
     items = await bom_service.list_bom_items(session, psk_id)
-    return [BOMItemRead.model_validate(b) for b in items]
+    # Enrich with ingredient category from catalog (UX-10)
+    result = []
+    ing_ids = [b.ingredient_id for b in items if b.ingredient_id is not None]
+    cat_map: dict[int, str] = {}
+    if ing_ids:
+        from sqlalchemy import select
+        from app.models import Ingredient
+        rows = (await session.execute(
+            select(Ingredient.id, Ingredient.category).where(Ingredient.id.in_(ing_ids))
+        )).all()
+        cat_map = {r[0]: r[1] for r in rows}
+    for b in items:
+        data = BOMItemRead.model_validate(b)
+        if b.ingredient_id and b.ingredient_id in cat_map:
+            data.ingredient_category = cat_map[b.ingredient_id]
+        result.append(data)
+    return result
 
 
 @router.post(

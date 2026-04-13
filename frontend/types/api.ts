@@ -286,6 +286,8 @@ export interface BOMItemRead {
   quantity_per_unit: string;
   loss_pct: string;
   price_per_unit: string;
+  ingredient_id?: number | null;
+  ingredient_category?: string | null;
   created_at: string;
 }
 
@@ -533,6 +535,7 @@ export interface SensitivityCell {
 }
 
 export interface SensitivityResponse {
+  scope: string;
   base_npv_y1y10: number | null;
   base_cm_ratio: number | null;
   deltas: number[];

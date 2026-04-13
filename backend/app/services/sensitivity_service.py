@@ -83,16 +83,24 @@ def _modify_input(
     raise ValueError(f"Unknown sensitivity parameter: {parameter!r}")
 
 
+VALID_SCOPES = ("y1y3", "y1y5", "y1y10")
+
+
 async def compute_sensitivity(
     session: AsyncSession,
     project_id: int,
     scenario_id: int,
+    scope: str = "y1y10",
 ) -> dict:
     """Запускает sensitivity analysis для проекта × сценария.
+
+    Args:
+        scope: Горизонт NPV — "y1y3", "y1y5" или "y1y10" (default).
 
     Returns:
         dict с структурой:
         {
+            "scope": "y1y10",
             "base_npv_y1y10": float,
             "base_cm_ratio": float | None,
             "deltas": [-0.20, -0.10, 0.0, 0.10, 0.20],
@@ -108,6 +116,9 @@ async def compute_sensitivity(
             ]
         }
     """
+    if scope not in VALID_SCOPES:
+        scope = "y1y10"
+
     line_inputs = await build_line_inputs(session, project_id, scenario_id)
     sorted_periods, _ = await _load_period_catalog(session)
     capex, opex = await _load_project_financial_plan(
@@ -118,7 +129,7 @@ async def compute_sensitivity(
     base_agg = run_project_pipeline(
         line_inputs, project_capex=capex, project_opex=opex
     )
-    base_npv_y1y10 = base_agg.npv.get("y1y10")
+    base_npv = base_agg.npv.get(scope)
     base_cm_ratio = base_agg.contribution_margin_ratio
 
     cells: list[dict] = []
@@ -126,7 +137,7 @@ async def compute_sensitivity(
         for delta in SENSITIVITY_DELTAS:
             if delta == 0.0:
                 # Base уровень — повторяет base_agg, не нужен отдельный run
-                npv = base_npv_y1y10
+                npv = base_npv
                 cm_ratio = base_cm_ratio
             else:
                 # Модифицируем все line_inputs одинаково
@@ -139,7 +150,7 @@ async def compute_sensitivity(
                     project_capex=capex,
                     project_opex=opex,
                 )
-                npv = agg.npv.get("y1y10")
+                npv = agg.npv.get(scope)
                 cm_ratio = agg.contribution_margin_ratio
 
             cells.append(
@@ -152,7 +163,8 @@ async def compute_sensitivity(
             )
 
     return {
-        "base_npv_y1y10": base_npv_y1y10,
+        "scope": scope,
+        "base_npv_y1y10": base_npv,
         "base_cm_ratio": base_cm_ratio,
         "deltas": list(SENSITIVITY_DELTAS),
         "params": list(SENSITIVITY_PARAMS),

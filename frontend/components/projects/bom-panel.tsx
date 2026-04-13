@@ -227,6 +227,25 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
 
   const cogsPreview = computeCogsPreview(bom);
 
+  // UX-10: BOM summary by ingredient category
+  const CATEGORY_LABELS_BOM: Record<string, string> = {
+    raw_material: "Сырьё",
+    packaging: "Упаковка",
+    other: "Прочее",
+  };
+  const categorySums = useMemo(() => {
+    const sums: Record<string, number> = {};
+    for (const b of bom) {
+      const cat = b.ingredient_category ?? "other";
+      const cost =
+        Number(b.quantity_per_unit) *
+        Number(b.price_per_unit) *
+        (1 + Number(b.loss_pct));
+      sums[cat] = (sums[cat] ?? 0) + cost;
+    }
+    return sums;
+  }, [bom]);
+
   return (
     <div className="space-y-4">
       {/* === ProjectSKU rates editor === */}
@@ -329,13 +348,25 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
                 Σ (количество × цена × (1 + потери)) на единицу продукции.
               </CardDescription>
             </div>
-            <div className="text-right">
+            <div className="text-right space-y-1">
               <p className="text-xs text-muted-foreground">
                 COGS на единицу (preview)
               </p>
               <p className="text-lg font-semibold">
                 {formatMoney(String(cogsPreview))}
               </p>
+              {Object.keys(categorySums).length > 0 && (
+                <div className="text-xs text-muted-foreground space-y-0.5">
+                  {Object.entries(categorySums).map(([cat, sum]) => (
+                    <div key={cat} className="flex justify-end gap-2">
+                      <span>{CATEGORY_LABELS_BOM[cat] ?? cat}:</span>
+                      <span className="font-medium text-foreground">
+                        {formatMoney(String(sum))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </CardHeader>

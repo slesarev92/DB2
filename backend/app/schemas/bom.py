@@ -38,4 +38,5 @@ class BOMItemRead(BOMItemBase):
     id: int
     project_sku_id: int
     ingredient_id: int | None = None
+    ingredient_category: str | None = None
     created_at: datetime

@@ -15,12 +15,14 @@ class SensitivityResponse(BaseModel):
     """Полный результат sensitivity analysis для одного сценария.
 
     Структура:
+    - `scope`: горизонт NPV (y1y3 / y1y5 / y1y10)
     - `base_*`: значения без модификаций (для reference в UI header)
     - `deltas`, `params`: список уровней и параметров (для построения
       table grid в UI без хардкода порядка)
     - `cells`: 4 параметра × 5 уровней = 20 ячеек
     """
 
+    scope: str = "y1y10"
     base_npv_y1y10: float | None
     base_cm_ratio: float | None
     deltas: list[float]

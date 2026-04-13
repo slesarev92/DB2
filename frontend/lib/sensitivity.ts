@@ -11,8 +11,9 @@ import type { SensitivityResponse } from "@/types/api";
 
 export function computeSensitivity(
   projectId: number,
+  scope: string = "y1y10",
 ): Promise<SensitivityResponse> {
   return apiPost<SensitivityResponse>(
-    `/api/projects/${projectId}/sensitivity`,
+    `/api/projects/${projectId}/sensitivity?scope=${scope}`,
   );
 }

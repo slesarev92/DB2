@@ -184,6 +184,7 @@ async def sensitivity_analysis_endpoint(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
     scenario_id: int | None = None,
+    scope: str = "y1y10",
 ) -> SensitivityResponse:
     """Sensitivity analysis для проекта (задача 4.4 / E-09).
 
@@ -228,7 +229,7 @@ async def sensitivity_analysis_endpoint(
         scenario_id = base.id
 
     try:
-        result = await compute_sensitivity(session, project_id, scenario_id)
+        result = await compute_sensitivity(session, project_id, scenario_id, scope=scope)
     except NoLinesError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -368,6 +369,9 @@ async def pnl_endpoint(
                 volume_units=agg.volume_units[t],
                 volume_liters=agg.volume_liters[t],
                 net_revenue=agg.net_revenue[t],
+                cogs_material=agg.cogs_material[t] if agg.cogs_material else 0.0,
+                cogs_production=agg.cogs_production[t] if agg.cogs_production else 0.0,
+                cogs_copacking=agg.cogs_copacking[t] if agg.cogs_copacking else 0.0,
                 cogs_total=agg.cogs_total[t],
                 gross_profit=agg.gross_profit[t],
                 logistics_cost=agg.logistics_cost[t],
@@ -375,6 +379,11 @@ async def pnl_endpoint(
                 ca_m_cost=agg.ca_m_cost[t],
                 marketing_cost=agg.marketing_cost[t],
                 ebitda=agg.ebitda[t],
+                working_capital=agg.working_capital[t] if agg.working_capital else 0.0,
+                delta_working_capital=agg.delta_working_capital[t] if agg.delta_working_capital else 0.0,
+                tax=agg.tax[t] if agg.tax else 0.0,
+                operating_cash_flow=agg.operating_cash_flow[t] if agg.operating_cash_flow else 0.0,
+                investing_cash_flow=agg.investing_cash_flow[t] if agg.investing_cash_flow else 0.0,
                 free_cash_flow=agg.free_cash_flow[t],
             )
         )

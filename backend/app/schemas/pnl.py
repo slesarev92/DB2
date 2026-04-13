@@ -16,9 +16,13 @@ class PnlPeriod(BaseModel):
     quarter: int | None        # 1..4 для monthly, None для annual
 
     # P&L метрики (₽, агрегат по всем SKU × Channel)
+    # Порядок соответствует DATA листу Excel-модели
     volume_units: float
     volume_liters: float
     net_revenue: float
+    cogs_material: float = 0.0
+    cogs_production: float = 0.0
+    cogs_copacking: float = 0.0
     cogs_total: float
     gross_profit: float
     logistics_cost: float
@@ -26,6 +30,11 @@ class PnlPeriod(BaseModel):
     ca_m_cost: float
     marketing_cost: float
     ebitda: float
+    working_capital: float = 0.0
+    delta_working_capital: float = 0.0
+    tax: float = 0.0
+    operating_cash_flow: float = 0.0
+    investing_cash_flow: float = 0.0
     free_cash_flow: float
 
 

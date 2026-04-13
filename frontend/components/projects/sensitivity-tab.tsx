@@ -13,6 +13,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -74,6 +81,12 @@ function npvClass(value: number | null, baseValue: number | null): string {
  * Кнопка "Рассчитать" триггерит запрос. До первого запуска показывается
  * placeholder с описанием.
  */
+const SCOPE_OPTIONS = [
+  { value: "y1y3", label: "Y1-Y3" },
+  { value: "y1y5", label: "Y1-Y5" },
+  { value: "y1y10", label: "Y1-Y10" },
+];
+
 export function SensitivityTab({ projectId }: SensitivityTabProps) {
   const [data, setData] = useState<SensitivityResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -81,6 +94,7 @@ export function SensitivityTab({ projectId }: SensitivityTabProps) {
   const [hasFetched, setHasFetched] = useState(false);
   const [baseScenarioId, setBaseScenarioId] = useState<number | null>(null);
   const [project, setProject] = useState<ProjectRead | null>(null);
+  const [scope, setScope] = useState<string>("y1y10");
 
   // Load project for saved AI commentary
   useEffect(() => {
@@ -97,11 +111,12 @@ export function SensitivityTab({ projectId }: SensitivityTabProps) {
       .catch(() => {});
   }, [projectId]);
 
-  const handleCompute = useCallback(async () => {
+  const handleCompute = useCallback(async (selectedScope?: string) => {
+    const s = selectedScope ?? scope;
     setLoading(true);
     setError(null);
     try {
-      const response = await computeSensitivity(projectId);
+      const response = await computeSensitivity(projectId, s);
       setData(response);
       setHasFetched(true);
     } catch (err) {
@@ -111,7 +126,7 @@ export function SensitivityTab({ projectId }: SensitivityTabProps) {
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, scope]);
 
   // Авто-запуск при монтировании (для UX — пользователь сразу видит данные)
   useEffect(() => {
@@ -120,18 +135,39 @@ export function SensitivityTab({ projectId }: SensitivityTabProps) {
 
   return (
     <div className="space-y-6">
-      {/* Header + кнопка перерасчёта */}
-      <div className="flex items-center justify-between gap-4">
+      {/* Header + scope selector + кнопка перерасчёта */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h2 className="text-lg font-semibold">Анализ чувствительности</h2>
           <p className="text-sm text-muted-foreground">
-            NPV Y1-Y10 и Contribution Margin при изменении ключевых
+            NPV и Contribution Margin при изменении ключевых
             параметров на ±10% и ±20% от Base сценария.
           </p>
         </div>
-        <Button onClick={handleCompute} disabled={loading}>
-          {loading ? "Считаем..." : "Пересчитать"}
-        </Button>
+        <div className="flex items-center gap-3">
+          <Select
+            value={scope}
+            onValueChange={(v) => {
+              const val = v ?? "y1y10";
+              setScope(val);
+              void handleCompute(val);
+            }}
+          >
+            <SelectTrigger className="w-28">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SCOPE_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button onClick={() => handleCompute()} disabled={loading}>
+            {loading ? "Считаем..." : "Пересчитать"}
+          </Button>
+        </div>
       </div>
 
       {error !== null && (
@@ -160,7 +196,7 @@ export function SensitivityTab({ projectId }: SensitivityTabProps) {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    NPV Y1-Y10
+                    NPV {SCOPE_OPTIONS.find((o) => o.value === scope)?.label ?? scope}
                   </p>
                   <p className="mt-1 text-xl font-semibold">
                     {data.base_npv_y1y10 === null
