@@ -27,6 +27,7 @@ import { MockupGallery } from "@/components/projects/mockup-gallery";
 import { SkuImageUpload } from "@/components/projects/sku-image-upload";
 import { ApiError } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
+import { listIngredients } from "@/lib/ingredients";
 import {
   createBomItem,
   deleteBomItem,
@@ -44,7 +45,7 @@ import {
   type SortableColumn,
 } from "@/lib/use-sortable-table";
 
-import type { BOMItemRead, ProjectSKUDetail } from "@/types/api";
+import type { BOMItemRead, IngredientRead, ProjectSKUDetail } from "@/types/api";
 
 const BOM_SORT_COLUMNS: SortableColumn<BOMItemRead, string>[] = [
   { key: "name", accessor: (b) => b.ingredient_name },
@@ -64,6 +65,7 @@ interface BomPanelProps {
 }
 
 interface NewBomDraft {
+  ingredient_id: number | null;
   ingredient_name: string;
   quantity_per_unit: string;
   loss_pct: string;
@@ -72,6 +74,7 @@ interface NewBomDraft {
 }
 
 const EMPTY_DRAFT: NewBomDraft = {
+  ingredient_id: null,
   ingredient_name: "",
   quantity_per_unit: "",
   loss_pct: "0",
@@ -79,7 +82,14 @@ const EMPTY_DRAFT: NewBomDraft = {
   vat_rate: "0.20",
 };
 
-type BomField = keyof NewBomDraft;
+/** String-only поля формы, подходящие под field-validation. ingredient_id
+ * не валидируется (число | null, привязка к каталогу). */
+type BomField =
+  | "ingredient_name"
+  | "quantity_per_unit"
+  | "loss_pct"
+  | "price_per_unit"
+  | "vat_rate";
 
 const BOM_RULES: ValidationRules<BomField> = {
   ingredient_name: { required: true, message: "Введите название" },
@@ -120,6 +130,24 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
   const [draft, setDraft] = useState<NewBomDraft>(EMPTY_DRAFT);
   const [adding, setAdding] = useState(false);
   const [savingRates, setSavingRates] = useState(false);
+
+  // B-04: каталог ингредиентов для авто-заполнения BOM.
+  // Загружается при первом монтировании компонента; если каталог пуст —
+  // пользователь вводит имя в поле вручную.
+  const [catalog, setCatalog] = useState<IngredientRead[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    listIngredients()
+      .then((data) => {
+        if (!cancelled) setCatalog(data);
+      })
+      .catch(() => {
+        // Тихая ошибка: каталог — опциональный фичер автозаполнения.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const bomRules = useMemo(() => BOM_RULES, []);
   const { errors: bomErrors, validateAll: validateBom, clearError: clearBomError } =
     useFieldValidation<BomField>(bomRules);
@@ -183,11 +211,20 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
 
   async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!validateBom(draft)) return;
+    // ingredient_id is a number|null, not part of string-based validation rules
+    const validateDraft: Record<BomField, string> = {
+      ingredient_name: draft.ingredient_name,
+      quantity_per_unit: draft.quantity_per_unit,
+      loss_pct: draft.loss_pct,
+      price_per_unit: draft.price_per_unit,
+      vat_rate: draft.vat_rate,
+    };
+    if (!validateBom(validateDraft)) return;
     setError(null);
     setAdding(true);
     try {
       await createBomItem(pskId, {
+        ingredient_id: draft.ingredient_id,
         ingredient_name: draft.ingredient_name,
         quantity_per_unit: draft.quantity_per_unit,
         loss_pct: draft.loss_pct || "0",
@@ -201,6 +238,33 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
     } finally {
       setAdding(false);
     }
+  }
+
+  /**
+   * Обработка ввода названия ингредиента. Ищет точное совпадение в
+   * каталоге (по имени) — если найдено, автоматически подставляет
+   * ingredient_id и latest_price. Пользователь может также ввести
+   * новое имя, не из каталога — ingredient_id остаётся null.
+   */
+  function handleIngredientNameChange(value: string) {
+    const match = catalog.find((i) => i.name === value);
+    setDraft((prev) => {
+      const next = { ...prev, ingredient_name: value };
+      if (match !== undefined) {
+        next.ingredient_id = match.id;
+        // Автозаполняем цену только если поле пустое или совпадало с default 0.
+        if (!prev.price_per_unit || prev.price_per_unit === "0") {
+          if (match.latest_price !== null && match.latest_price !== undefined) {
+            next.price_per_unit = String(match.latest_price);
+          }
+        }
+      } else {
+        // Имя не из каталога — сбрасываем привязку.
+        next.ingredient_id = null;
+      }
+      return next;
+    });
+    clearBomError("ingredient_name");
   }
 
   const [deletingBomId, setDeletingBomId] = useState<number | null>(null);
@@ -530,19 +594,43 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
             <div className="col-span-3 space-y-1">
               <Label htmlFor="bom-name" className="text-xs">
                 Ингредиент *
+                {draft.ingredient_id !== null && (
+                  <span className="ml-1 text-[10px] font-normal text-green-700">
+                    ✓ из каталога
+                  </span>
+                )}
               </Label>
               <Input
                 id="bom-name"
+                list="bom-ingredient-catalog"
                 required
                 value={draft.ingredient_name}
-                onChange={(e) => {
-                  setDraft({ ...draft, ingredient_name: e.target.value });
-                  clearBomError("ingredient_name");
-                }}
+                onChange={(e) => handleIngredientNameChange(e.target.value)}
                 aria-invalid={!!bomErrors.ingredient_name}
                 disabled={adding}
-                placeholder="Сахар"
+                placeholder={
+                  catalog.length > 0
+                    ? "Начните печатать или выберите из каталога"
+                    : "Сахар"
+                }
               />
+              {catalog.length > 0 && (
+                <datalist id="bom-ingredient-catalog">
+                  {catalog.map((ing) => (
+                    <option key={ing.id} value={ing.name}>
+                      {ing.category === "raw_material"
+                        ? "Сырьё"
+                        : ing.category === "packaging"
+                          ? "Упаковка"
+                          : "Прочее"}
+                      {ing.latest_price !== null &&
+                      ing.latest_price !== undefined
+                        ? ` · ${ing.latest_price} ₽/${ing.unit}`
+                        : ""}
+                    </option>
+                  ))}
+                </datalist>
+              )}
               <FieldError error={bomErrors.ingredient_name} />
             </div>
             <div className="col-span-2 space-y-1">

@@ -27,12 +27,8 @@ interface TornadoChartProps {
   data: SensitivityResponse;
 }
 
-const PARAM_LABELS: Record<string, string> = {
-  nd: "ND",
-  offtake: "Off-take",
-  shelf_price: "Shelf price",
-  cogs: "COGS",
-};
+// PARAM_LABELS — единый в types/api.ts (L-05).
+import { SENSITIVITY_PARAM_LABELS as PARAM_LABELS } from "@/types/api";
 
 interface TornadoBar {
   parameter: string;

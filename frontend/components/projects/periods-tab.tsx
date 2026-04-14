@@ -24,6 +24,7 @@ import { getAccessToken } from "@/lib/auth";
 import { listProjectSkuChannels } from "@/lib/channels";
 import { listProjectScenarios } from "@/lib/scenarios";
 
+import { SCENARIO_LABELS } from "@/types/api";
 import type {
   ProjectSKUChannelRead,
   ScenarioRead,
@@ -35,11 +36,7 @@ interface PeriodsTabProps {
 
 type PeriodFilter = "monthly" | "yearly" | "all";
 
-const SCENARIO_LABELS: Record<string, string> = {
-  base: "Base",
-  conservative: "Conservative",
-  aggressive: "Aggressive",
-};
+// SCENARIO_LABELS импортируется из types/api.ts — единый русский map (L-01).
 
 /**
  * Таб "Периоды" в карточке проекта.

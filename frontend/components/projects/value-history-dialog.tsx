@@ -31,11 +31,10 @@ interface ValueHistoryDialogProps {
   periodLabel: string;
 }
 
-const SOURCE_LABELS: Record<string, string> = {
-  predict: "Predict",
-  finetuned: "Fine-tuned",
-  actual: "Actual",
-};
+// SOURCE_LABELS — единый map в types/api.ts (L-02). Оставляем локальную
+// переменную как re-export для минимальной инвазии, значения изменены на русский.
+import { SOURCE_LABELS as _SOURCE_LABELS } from "@/types/api";
+const SOURCE_LABELS = _SOURCE_LABELS;
 
 const SOURCE_COLORS: Record<string, string> = {
   predict: "text-blue-600",

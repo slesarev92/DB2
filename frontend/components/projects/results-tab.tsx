@@ -36,6 +36,7 @@ import {
   listScenarioResults,
 } from "@/lib/scenarios";
 
+import { SCENARIO_LABELS } from "@/types/api";
 import type {
   PeriodScope,
   ProjectRead,
@@ -46,12 +47,6 @@ import type {
 interface ResultsTabProps {
   projectId: number;
 }
-
-const SCENARIO_LABELS: Record<string, string> = {
-  base: "Базовый",
-  conservative: "Консервативный",
-  aggressive: "Агрессивный",
-};
 
 const SCOPE_LABELS: Record<PeriodScope, string> = {
   y1y3: "Y1-Y3",

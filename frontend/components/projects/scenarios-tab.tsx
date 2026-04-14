@@ -32,6 +32,7 @@ import {
   updateScenario,
 } from "@/lib/scenarios";
 
+import { SCENARIO_LABELS } from "@/types/api";
 import type {
   PeriodScope,
   ScenarioRead,
@@ -43,11 +44,7 @@ interface ScenariosTabProps {
   projectId: number;
 }
 
-const SCENARIO_LABELS: Record<ScenarioType, string> = {
-  base: "Base",
-  conservative: "Conservative",
-  aggressive: "Aggressive",
-};
+// SCENARIO_LABELS теперь единый в types/api.ts — импортируется ниже.
 
 const SCENARIO_ORDER: ScenarioType[] = ["base", "conservative", "aggressive"];
 

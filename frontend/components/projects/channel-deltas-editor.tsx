@@ -28,6 +28,7 @@ import {
 } from "@/lib/scenarios";
 import { listProjectSkus } from "@/lib/skus";
 
+import { SCENARIO_LABELS } from "@/types/api";
 import type {
   ChannelDeltaItem,
   ProjectSKUChannelRead,
@@ -184,11 +185,6 @@ export function ChannelDeltasEditor({
   }
 
   if (channels.length === 0) return null;
-
-  const SCENARIO_LABELS: Record<string, string> = {
-    conservative: "Conservative",
-    aggressive: "Aggressive",
-  };
 
   return (
     <Card>

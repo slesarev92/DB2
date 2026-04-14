@@ -277,6 +277,11 @@ export interface BOMItemCreate {
   loss_pct?: string;
   price_per_unit?: string;
   vat_rate?: string;
+  /**
+   * Привязка к Ingredient из каталога. Если указан — backend автозаполнит
+   * ingredient_name и latest price из каталога (B-04 в bom_service).
+   */
+  ingredient_id?: number | null;
 }
 
 export interface BOMItemUpdate {
@@ -605,20 +610,94 @@ export const OPEX_CATEGORIES = [
 export type OpexCategory = (typeof OPEX_CATEGORIES)[number];
 
 export const OPEX_CATEGORY_LABELS: Record<OpexCategory, string> = {
-  digital: "Digital",
-  ecom: "E-com",
-  ooh: "OOH",
+  digital: "Диджитал",
+  ecom: "Электронная коммерция",
+  ooh: "Наружная реклама",
   pr: "PR",
   smm: "SMM",
-  design: "Design",
-  research: "Research",
-  posm: "ПОСМ",
-  creative: "Creative",
-  special: "Special",
-  merch: "Merch",
-  tv: "TV",
+  design: "Дизайн",
+  research: "Исследования",
+  posm: "POSM",
+  creative: "Креатив",
+  special: "Спецпроекты",
+  merch: "Мерч",
+  tv: "ТВ",
   listings: "Листинги",
   other: "Другое",
+};
+
+// ============================================================
+// Единые русские переводы enum-значений (L-01..L-06 из аудита 2026-04-14).
+// Импортировать отсюда во всех компонентах — не объявлять локальные дубли.
+// ============================================================
+
+/** Сценарии проекта. Backend enum: base / conservative / aggressive. */
+export const SCENARIO_LABELS: Record<string, string> = {
+  base: "Базовый",
+  conservative: "Консервативный",
+  aggressive: "Агрессивный",
+};
+
+/** Горизонт расчёта KPI. Оставлены как есть — индустриальная аббревиатура. */
+export const SCOPE_LABELS: Record<string, string> = {
+  y1y3: "Y1-Y3",
+  y1y5: "Y1-Y5",
+  y1y10: "Y1-Y10",
+};
+
+/** Тип периода. */
+export const PERIOD_TYPE_LABELS: Record<string, string> = {
+  monthly: "Месяцы",
+  annual: "Годы",
+};
+
+/** Ценовой сегмент SKU. */
+export const PRICE_TIER_LABELS: Record<string, string> = {
+  premium: "Премиум",
+  mainstream: "Мейнстрим",
+  value: "Эконом",
+};
+
+/** Формат упаковки. */
+export const PACK_FORMAT_LABELS: Record<string, string> = {
+  bottle: "Бутылка",
+  can: "Банка",
+  pack: "Пакет",
+  box: "Коробка",
+  other: "Другое",
+};
+
+/** Слой значения периода (Predict / Fine-tuned / Actual). */
+export const SOURCE_LABELS: Record<string, string> = {
+  predict: "Прогноз",
+  finetuned: "Ручная правка",
+  actual: "Факт",
+};
+
+/** Параметры sensitivity (Tornado chart). */
+export const SENSITIVITY_PARAM_LABELS: Record<string, string> = {
+  nd: "Числ. дистрибуция",
+  offtake: "Отгрузка (offtake)",
+  shelf_price: "Цена полки",
+  cogs: "Себестоимость",
+};
+
+/** Режим P&L таблицы. */
+export const PNL_VIEW_MODE_LABELS: Record<string, string> = {
+  monthly: "Месяцы",
+  quarterly: "Кварталы",
+  annual: "Годы",
+};
+
+/** AI endpoint labels в history panel. */
+export const AI_ENDPOINT_LABELS: Record<string, string> = {
+  explain_kpi: "Объяснение KPI",
+  sensitivity: "Анализ чувствительности",
+  executive_summary: "Резюме для руководства",
+  generate_content: "Генерация контента",
+  marketing_research: "Маркет-исследование",
+  mockup: "Генерация макета",
+  chat: "Чат с AI",
 };
 
 export interface FinancialPlanItem {

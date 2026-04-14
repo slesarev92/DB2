@@ -12,17 +12,17 @@ import { formatCostRub } from "@/lib/ai";
 import { useAIPanel } from "./ai-panel-context";
 
 const ENDPOINT_LABELS: Record<string, string> = {
-  explain_kpi: "Explain KPI",
-  explain_kpi_cache: "Explain KPI (cache)",
-  explain_kpi_dedupe: "Explain KPI (dedupe)",
-  explain_sensitivity: "Sensitivity",
-  explain_sensitivity_cache: "Sensitivity (cache)",
-  freeform_chat: "Chat",
-  executive_summary: "Executive Summary",
-  executive_summary_cache: "Exec Summary (cache)",
-  content_field: "Content field",
-  marketing_research: "Market research",
-  package_mockup: "Package mockup",
+  explain_kpi: "Объяснение KPI",
+  explain_kpi_cache: "Объяснение KPI (кэш)",
+  explain_kpi_dedupe: "Объяснение KPI (dedupe)",
+  explain_sensitivity: "Чувствительность",
+  explain_sensitivity_cache: "Чувствительность (кэш)",
+  freeform_chat: "Чат",
+  executive_summary: "Резюме для руководства",
+  executive_summary_cache: "Резюме (кэш)",
+  content_field: "Текст раздела",
+  marketing_research: "Маркет-исследование",
+  package_mockup: "Макет упаковки",
 };
 
 export function AIPanelHistory() {

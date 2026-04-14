@@ -48,6 +48,7 @@ import {
   type SortableColumn,
 } from "@/lib/use-sortable-table";
 
+import { PACK_FORMAT_LABELS, PRICE_TIER_LABELS } from "@/types/api";
 import type { Channel, OBPPCRead, PriceTier, SKURead } from "@/types/api";
 
 const OBPPC_SORT_COLUMNS: SortableColumn<OBPPCRead, string>[] = [
@@ -68,11 +69,8 @@ const OBPPC_RULES: ValidationRules<ObppcField> = {
   price_point: { numeric: true, min: 0 },
 };
 
-const TIER_LABELS: Record<PriceTier, string> = {
-  premium: "Premium",
-  mainstream: "Mainstream",
-  value: "Value",
-};
+// Используем единые PRICE_TIER_LABELS / PACK_FORMAT_LABELS из types/api.ts (L-02).
+const TIER_LABELS: Record<PriceTier, string> = PRICE_TIER_LABELS as Record<PriceTier, string>;
 
 interface ObppcTabProps {
   projectId: number;
@@ -233,9 +231,9 @@ export function ObppcTab({ projectId }: ObppcTabProps) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="premium">Premium</SelectItem>
-              <SelectItem value="mainstream">Mainstream</SelectItem>
-              <SelectItem value="value">Value</SelectItem>
+              <SelectItem value="premium">{PRICE_TIER_LABELS.premium}</SelectItem>
+              <SelectItem value="mainstream">{PRICE_TIER_LABELS.mainstream}</SelectItem>
+              <SelectItem value="value">{PRICE_TIER_LABELS.value}</SelectItem>
             </SelectContent>
           </Select>
           <Input
@@ -319,7 +317,9 @@ export function ObppcTab({ projectId }: ObppcTabProps) {
                   </TableCell>
                   <TableCell>{e.channel.code}</TableCell>
                   <TableCell>{TIER_LABELS[e.price_tier]}</TableCell>
-                  <TableCell>{e.pack_format}</TableCell>
+                  <TableCell>
+                    {PACK_FORMAT_LABELS[e.pack_format] ?? e.pack_format}
+                  </TableCell>
                   <TableCell className="text-right">
                     {e.pack_size_ml ?? "—"}
                   </TableCell>
