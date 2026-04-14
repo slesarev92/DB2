@@ -22,7 +22,7 @@ _(раздел наполняется по мере закрытия фаз)_
 | 1 | Математика + security | ✅ закрыта | 🔴 IDOR, 🔴 admin/admin123 |
 | 2 | Invalidation после PATCH | ✅ закрыта | 🟡 нет staleness UI (F-01/F-02), AI cache OK через context hash |
 | 3 | Dropdowns/labels | ✅ закрыта | 🟡 L-01..L-06 неконсистентная русификация (fix ~1.5ч) |
-| 4 | Usability + export quality | ⏳ | — |
+| 4 | Usability + export quality | ✅ закрыта | 🔴 U-02 BUG-01 prod export, U-03 empty-SKU layout; 🟡 U-01 toasts, U-04 progress |
 | 5 | HelpButton (реализация) | ⏳ | — |
 
 ---
@@ -351,7 +351,200 @@ ENDPOINT_LABELS = {
 
 ## Фаза 4 — Usability + export quality
 
-_(ещё не проходили)_
+**Scope:** critical paths, empty states, error messages, keyboard navigation,
+loading states, visual hierarchy, mobile/tablet responsiveness, export quality
+(XLSX/PPTX/PDF на GORJI), demo-readiness для enterprise-клиента.
+
+### Что работает хорошо (acceptance)
+
+- **Empty states информативны:** `skus-tab.tsx:107-114` ("В проекте пока нет
+  SKU..."), `channels-panel.tsx:140-143`, `results-tab.tsx:393-406` ("Расчёт
+  ещё не выполнен. Нажмите «Пересчитать»..."). Пользователь не видит пустых
+  голых списков.
+- **Inline form validation:** `FieldError` компонент + `aria-invalid` работают
+  (`channel-form.tsx:237-250`). `useFieldValidation` hook переиспользуется.
+- **Loading states:** recalculate показывает phased статус ("В очереди →
+  Считаем → Обновляем"), buttons disabled при save/export (защита от
+  дублирования запросов).
+- **KPI color coding:** зелёный/жёлтый/красный маржи в results-tab (пороги
+  25% / 15% / <15%) — индустриально-стандартная визуализация.
+- **Form layout responsive:** grid-based (`md:grid-cols-3`), корректно
+  стакируется на мобильных.
+- **Russian labels** практически везде (за вычетом L-01..L-06 из Phase 3).
+- **Exports физически работают** на dev (проверено через openpyxl):
+  - XLSX: 17.8KB, 3 листа "Вводные / PnL по периодам / KPI", русские заголовки, `₽`.
+  - PPTX: 50.4KB, 16 слайдов (+3 с Phase 8).
+  - PDF: 43.8KB (<5MB лимит плана).
+
+### Findings
+
+**🔴 U-01 (HIGH) — нет toast/snackbar уведомлений, все ошибки в Card**
+
+Ошибки API (`422`, `500`, `4xx`) показываются в Card внизу экрана
+(`sku-panel.tsx:95-100`, `channels-panel.tsx:106-114`, `results-tab.tsx:372-377`).
+
+- **Проблема 1:** при длинной форме (Channel form на 300+ строк,
+  `channel-form.tsx`) пользователь нажимает "Сохранить", скроллит вниз
+  чтобы увидеть результат → не видит reaction на кнопке.
+- **Проблема 2:** при save нескольких форм подряд Card показывает только
+  последнюю ошибку, предыдущие теряются.
+- **Проблема 3:** success не показывается вообще ("всё сохранено" —
+  silent). Пользователь может сохранить дважды.
+
+**Fix:** добавить `<Sonner />` (sonner уже в shadcn ecosystem) с
+`toast.success("Сохранено")` / `toast.error("...")`. ~1 час.
+
+**🔴 U-02 (HIGH) — BUG-01 экспорт не работает на prod**
+
+В Phase 1 аудите заказчик (CLIENT_FEEDBACK_v1.md BUG-01) указал что
+«Кнопки экспорта (XLSX/PPTX/PDF) не работают на проде». Проверка на dev
+(через прямой вызов `generate_project_xlsx/pptx/pdf`) показывает что
+генерация **работает** — файлы валидные, русские символы корректны,
+KPI заполнены.
+
+**Значит проблема не в backend, а в доставке:**
+- CORS (unlikely, но проверить `CORS_ORIGINS` на prod)
+- SSL mixed content (если nginx отдаёт https, а backend http)
+- `Content-Disposition` header на response endpoint'е
+- Browser block на `window.location = blob` (deprecated pattern)
+- Новый сервер 85.239.63.206 не имеет правильной proxy-конфигурации для
+  передачи binary response от backend
+
+**Action:** открыть Network tab в Chrome на prod, нажать «Скачать XLSX»,
+проверить:
+- 200 OK от backend?
+- Есть ли `Content-Disposition: attachment`?
+- Есть ли CORS-related ошибки в console?
+
+**Оценка:** 1-2 часа дебага + fix (вероятнее всего nginx или
+frontend blob-handling).
+
+**🟡 U-03 (MEDIUM) — BUG-07 layout ломается при пустом списке SKU**
+
+`skus-tab.tsx:32` — `min-h-[200px]` на BOM panel, но grid `grid-cols-1
+gap-6 md:grid-cols-3` не гарантирует стабильную высоту левой (SKU)
+колонки при `items.length === 0`. Верстка может съехать — ранний
+feedback в Client Feedback v1.
+
+**Fix:** добавить `min-h-[300px]` на SkuPanel контейнер, или использовать
+`h-full` и явный parent height. 10 минут.
+
+**🟡 U-04 (MEDIUM) — export loading без progress/ETA**
+
+`results-tab.tsx:350, 357, 364` — кнопка показывает только "Экспорт..."
+во время генерации. Нет:
+- Spinner / progress bar
+- Текста "Генерирую XLSX..."
+- ETA (обычно 2-5 сек)
+
+При медленном интернете на демо (hotel wifi) пользователь может решить
+что приложение зависло и кликнуть повторно.
+
+**Fix:** заменить на `<Loader2 className="animate-spin" />` +
+`"Генерирую XLSX..."` + disable button. 15 минут.
+
+**🟡 U-05 (MEDIUM) — AI Panel без skeleton loading**
+
+`ai-panel-chat.tsx` — во время запроса к Polza AI (5-15 сек латентность)
+chat показывает пустой экран. На медленном интернете можно подумать
+что AI down.
+
+**Fix:** добавить typing indicator или skeleton bubble ("…"). 15 мин.
+
+**🟡 U-06 (MEDIUM) — BUG-10 truncate без tooltip**
+
+`channels-panel.tsx:171` — `max-w-[180px] truncate` обрезает длинное
+название канала. Нет `<Tooltip>` чтобы показать полное имя на hover.
+
+**Fix:** обернуть в `Tooltip` из shadcn. 10 минут.
+
+**🟢 U-07 (LOW) — keyboard navigation частично**
+
+- Sortable headers (`channels-panel.tsx:148-162`) — `cursor-pointer`,
+  но нет `:focus-visible` стиля → при Tab не видно куда фокус уехал.
+- AG Grid (`periods-grid.tsx`) — нет подсказки "Enter для редактирования
+  ячейки" при первом открытии.
+- Dialog Escape — работает (shadcn default).
+- Enter submit — работает в основных формах.
+
+**Fix:** добавить `focus-visible:ring-2` к sortable headers, onboarding
+hint для AG Grid. 30 минут.
+
+**🟢 U-08 (LOW) — responsiveness таблиц**
+
+- `periods-grid.tsx` AG Grid на экранах <768px горизонтально скроллится
+  (expected для таблицы с 43 периодами).
+- `financial-plan-editor.tsx:169+` — нет явного `overflow-x-auto` на
+  wrapper.
+- `value-chain-tab.tsx:200+` — есть `overflow-x-auto` ✅.
+
+**Fix:** везде на табличных wrapper'ах `overflow-x-auto`. 15 минут.
+
+### Performance
+
+Измерено через acceptance test `test_e2e_gorji.py` на Docker dev:
+- **Full pipeline (8 SKU × 6 каналов × 3 сценария × 3 scope = 72 KPI):**
+  ~5 секунд через Celery task (pipeline pure Python, ~50ms на сценарий
+  из ENGINE_AUDIT_REPORT).
+- **Export XLSX:** ~1 секунда.
+- **Export PPTX:** ~1 секунда.
+- **Export PDF (WeasyPrint):** ~2 секунды.
+
+Итого: пересчёт + 3 экспорта на GORJI = **~10 секунд**. Для MVP
+приемлемо. На 20 SKU × 10 каналов = больше (lineside scaling O(N×M)),
+но вряд ли >30 сек.
+
+### Client Feedback v1 BUG-01..BUG-12 статусы (верификация)
+
+Попросил агент проверить в коде по каждому. Сводка:
+
+| BUG | Статус в коде | Коммит-предполагаемый | Комментарий |
+|---|---|---|---|
+| BUG-01 Export не работает | 🔴 OPEN (prod) | — | Dev работает, prod не работает — nginx/CORS/blob. См. U-02. |
+| BUG-02 CAPEX=0 | 🟡 FRONTEND OK | 530c976 | `min="0"` в HTML. Backend validation проверить. |
+| BUG-03 Image upload | ⚠️ NEED TEST | — | `sku-image-upload.tsx` есть, надо воспроизвести на prod. |
+| BUG-04 OBPPC ошибка | ⚠️ NEED TEST | — | Воспроизвести. |
+| BUG-05 Сценарии periodic | ⚠️ NEED TEST | — | Подозрение: race в polling (`results-tab.tsx:191-214`, 1s interval). |
+| BUG-06 GateTimeline refresh | 🟡 PARTIAL | 66c9378 | Компонент использует `currentGate` prop. Нужен refetch после PATCH. |
+| BUG-07 Layout пустой SKU | 🔴 OPEN | — | См. U-03. |
+| BUG-08 Красное в BOM | ⚠️ NEED INFO | 02c2528 | `bom-panel.tsx` — validation styling? |
+| BUG-09 Ingredients layout | ⚠️ NEED INFO | 66c9378 | Нет screenshot. |
+| BUG-10 Channel name overflow | 🟡 PARTIAL | — | Truncate без tooltip. См. U-06. |
+| BUG-11 SupplierQuotes | ⚠️ NEED INFO | — | Нет screenshot. |
+| BUG-12 Periods layout | 🟡 PARTIAL | — | AG Grid horiz scroll на mobile. |
+
+**Вывод:** пользователь заявил "38/40 замечаний v1 закрыты", но **BUG-01,
+BUG-07 реально открыты** в коде; BUG-02/05/06/08/10/12 — частично;
+BUG-03/04/09/11 — нужна верификация на prod с клиентом.
+
+### Блокеры демо
+
+🔴 **Критичные перед демо:**
+1. **U-02 BUG-01** export на prod — если клиент нажмёт «Скачать» на
+   живом демо и увидит ошибку — катастрофа.
+2. **U-03 BUG-07** layout при пустом SKU — первая картинка нового
+   проекта выглядит криво.
+
+🟡 **Средние (улучшат impression):**
+3. **U-01 toast** — отсутствие явного success feedback делает UI
+   "безответным".
+4. **U-04 export progress** — без ETA выглядит зависшим.
+5. **L-01 SCENARIO_LABELS** из Phase 3 — "Base/Conservative/Aggressive"
+   на одном экране вместо "Базовый/Консервативный/Агрессивный".
+
+### Quick wins (1-2 часа суммарно)
+
+1. **U-01** Sonner toasts — 1ч.
+2. **U-03** min-h SKU panel — 10 мин.
+3. **U-04** export progress — 15 мин.
+4. **U-06** tooltip channel name — 10 мин.
+5. **L-01..L-06** русификация labels — 1.5ч (Phase 3).
+
+Всего: **~3.5 часа** полного fix quick wins + BUG-01 дебаг (~1-2ч) = ~5
+часов до демо-ready.
+
+**U-02 (BUG-01 prod export)** — отдельный debug session с прод-логами
+и Chrome Network tab. Без этого демо показывать только без export buttons.
 
 ## Фаза 5 — HelpButton (реализация)
 
