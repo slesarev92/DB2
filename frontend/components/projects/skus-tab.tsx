@@ -21,15 +21,15 @@ export function SkusTab({ projectId }: SkusTabProps) {
   const [selectedPskId, setSelectedPskId] = useState<number | null>(null);
 
   return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-      <div className="md:col-span-1">
+    <div className="grid grid-cols-1 items-stretch gap-6 md:grid-cols-3">
+      <div className="min-h-[320px] md:col-span-1">
         <SkuPanel
           projectId={projectId}
           selectedPskId={selectedPskId}
           onSelectPsk={setSelectedPskId}
         />
       </div>
-      <div className="md:col-span-2 min-h-[200px]">
+      <div className="min-h-[320px] md:col-span-2">
         {selectedPskId !== null ? (
           <BomPanel projectId={projectId} pskId={selectedPskId} />
         ) : (

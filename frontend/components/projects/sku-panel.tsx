@@ -84,7 +84,7 @@ export function SkuPanel({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex h-full flex-col space-y-4">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">SKU проекта</h2>
         <Button size="sm" onClick={() => setDialogOpen(true)}>
