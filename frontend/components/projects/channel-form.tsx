@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { FieldError } from "@/components/ui/field-error";
+import { HelpButton } from "@/components/ui/help-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -214,7 +215,10 @@ export function ChannelForm({
             <FieldError error={errors.launch_year} />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="launch_month">Месяц запуска (1-12)</Label>
+            <Label htmlFor="launch_month" className="flex items-center gap-1.5">
+              Месяц запуска (1-12)
+              <HelpButton help="channel.launch_month" />
+            </Label>
             <Input
               id="launch_month"
               type="number"
@@ -234,7 +238,10 @@ export function ChannelForm({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
-          <Label htmlFor="nd_target">Числ. дистрибуция (доля)</Label>
+          <Label htmlFor="nd_target" className="flex items-center gap-1.5">
+            Числ. дистрибуция (доля)
+            <HelpButton help="channel.nd_target" />
+          </Label>
           <Input
             id="nd_target"
             type="number"
@@ -250,7 +257,10 @@ export function ChannelForm({
           <FieldError error={errors.nd_target} />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="nd_ramp_months">Рамп-ап, мес.</Label>
+          <Label htmlFor="nd_ramp_months" className="flex items-center gap-1.5">
+            Рамп-ап, мес.
+            <HelpButton help="channel.nd_ramp_months" />
+          </Label>
           <Input
             id="nd_ramp_months"
             type="number"
@@ -268,7 +278,10 @@ export function ChannelForm({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
-          <Label htmlFor="offtake_target">Офтейк (ед./точка/мес.)</Label>
+          <Label htmlFor="offtake_target" className="flex items-center gap-1.5">
+            Офтейк (ед./точка/мес.)
+            <HelpButton help="channel.offtake_target" />
+          </Label>
           <Input
             id="offtake_target"
             type="number"
@@ -283,7 +296,10 @@ export function ChannelForm({
           <FieldError error={errors.offtake_target} />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="shelf_price_reg">Цена полки (с НДС), ₽/ед.</Label>
+          <Label htmlFor="shelf_price_reg" className="flex items-center gap-1.5">
+            Цена полки (с НДС), ₽/ед.
+            <HelpButton help="channel.shelf_price_reg" />
+          </Label>
           <Input
             id="shelf_price_reg"
             type="number"
@@ -301,7 +317,10 @@ export function ChannelForm({
 
       <div className="grid grid-cols-3 gap-3">
         <div className="space-y-1">
-          <Label htmlFor="channel_margin">Маржа канала (доля)</Label>
+          <Label htmlFor="channel_margin" className="flex items-center gap-1.5">
+            Маржа канала (доля)
+            <HelpButton help="channel.channel_margin" />
+          </Label>
           <Input
             id="channel_margin"
             type="number"
@@ -317,7 +336,10 @@ export function ChannelForm({
           <FieldError error={errors.channel_margin} />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="promo_discount">Промо-скидка (доля)</Label>
+          <Label htmlFor="promo_discount" className="flex items-center gap-1.5">
+            Промо-скидка (доля)
+            <HelpButton help="channel.promo_discount" />
+          </Label>
           <Input
             id="promo_discount"
             type="number"
@@ -333,7 +355,10 @@ export function ChannelForm({
           <FieldError error={errors.promo_discount} />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="promo_share">Доля промо (доля)</Label>
+          <Label htmlFor="promo_share" className="flex items-center gap-1.5">
+            Доля промо (доля)
+            <HelpButton help="channel.promo_share" />
+          </Label>
           <Input
             id="promo_share"
             type="number"

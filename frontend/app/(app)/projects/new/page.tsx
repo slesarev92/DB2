@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { HelpButton } from "@/components/ui/help-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -139,7 +140,10 @@ export default function NewProjectPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="wacc">Ставка дисконтирования (WACC)</Label>
+                <Label htmlFor="wacc" className="flex items-center gap-1.5">
+                  Ставка дисконтирования (WACC)
+                  <HelpButton help="project.wacc" />
+                </Label>
                 <Input
                   id="wacc"
                   type="number"
@@ -152,7 +156,10 @@ export default function NewProjectPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="tax_rate">Налог на прибыль</Label>
+                <Label htmlFor="tax_rate" className="flex items-center gap-1.5">
+                  Налог на прибыль
+                  <HelpButton help="project.tax_rate" />
+                </Label>
                 <Input
                   id="tax_rate"
                   type="number"
@@ -168,7 +175,10 @@ export default function NewProjectPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="wc_rate">Working Capital ratio</Label>
+                <Label htmlFor="wc_rate" className="flex items-center gap-1.5">
+                  Working Capital ratio
+                  <HelpButton help="project.wc_rate" />
+                </Label>
                 <Input
                   id="wc_rate"
                   type="number"
@@ -181,7 +191,10 @@ export default function NewProjectPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="vat_rate">VAT</Label>
+                <Label htmlFor="vat_rate" className="flex items-center gap-1.5">
+                  VAT
+                  <HelpButton help="project.vat_rate" />
+                </Label>
                 <Input
                   id="vat_rate"
                   type="number"

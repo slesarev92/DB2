@@ -12,6 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { FieldError } from "@/components/ui/field-error";
+import { HelpButton } from "@/components/ui/help-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -285,7 +286,10 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
         <CardContent>
           {/* Тип производства: own / copacking */}
           <div className="mb-3 flex items-center gap-4">
-            <span className="text-sm font-medium">Тип производства:</span>
+            <span className="text-sm font-medium flex items-center gap-1.5">
+              Тип производства:
+              <HelpButton help="project_sku.production_mode" />
+            </span>
             <label className="flex items-center gap-1.5 text-sm cursor-pointer">
               <input
                 type="radio"
@@ -313,8 +317,9 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {productionMode === "own" ? (
               <div className="space-y-2">
-                <Label htmlFor="production_cost_rate">
+                <Label htmlFor="production_cost_rate" className="flex items-center gap-1.5">
                   Произв. затраты, % от цены отгрузки
+                  <HelpButton help="project_sku.production_cost_rate" />
                 </Label>
                 <Input
                   id="production_cost_rate"
@@ -330,8 +335,9 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
               </div>
             ) : (
               <div className="space-y-2">
-                <Label htmlFor="copacking_rate">
+                <Label htmlFor="copacking_rate" className="flex items-center gap-1.5">
                   Тариф копакера, ₽/ед.
+                  <HelpButton help="project_sku.copacking_rate" />
                 </Label>
                 <Input
                   id="copacking_rate"
@@ -346,7 +352,10 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="ca_m_rate">КАиУР, % от выручки</Label>
+              <Label htmlFor="ca_m_rate" className="flex items-center gap-1.5">
+                КАиУР, % от выручки
+                <HelpButton help="project_sku.ca_m_rate" />
+              </Label>
               <Input
                 id="ca_m_rate"
                 type="number"
@@ -360,7 +369,10 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="marketing_rate">Маркетинг, % от выручки</Label>
+              <Label htmlFor="marketing_rate" className="flex items-center gap-1.5">
+                Маркетинг, % от выручки
+                <HelpButton help="project_sku.marketing_rate" />
+              </Label>
               <Input
                 id="marketing_rate"
                 type="number"
@@ -534,8 +546,9 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
               <FieldError error={bomErrors.ingredient_name} />
             </div>
             <div className="col-span-2 space-y-1">
-              <Label htmlFor="bom-qty" className="text-xs">
+              <Label htmlFor="bom-qty" className="flex items-center gap-1.5 text-xs">
                 Кол-во *
+                <HelpButton help="bom.quantity_per_unit" />
               </Label>
               <Input
                 id="bom-qty"
@@ -555,8 +568,9 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
               <FieldError error={bomErrors.quantity_per_unit} />
             </div>
             <div className="col-span-2 space-y-1">
-              <Label htmlFor="bom-loss" className="text-xs">
+              <Label htmlFor="bom-loss" className="flex items-center gap-1.5 text-xs">
                 Потери (доля)
+                <HelpButton help="bom.loss_pct" />
               </Label>
               <Input
                 id="bom-loss"
@@ -576,8 +590,9 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
               <FieldError error={bomErrors.loss_pct} />
             </div>
             <div className="col-span-2 space-y-1">
-              <Label htmlFor="bom-price" className="text-xs">
+              <Label htmlFor="bom-price" className="flex items-center gap-1.5 text-xs">
                 Цена/ед, ₽ (без НДС)
+                <HelpButton help="bom.price_per_unit" />
               </Label>
               <Input
                 id="bom-price"
@@ -596,8 +611,9 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
               <FieldError error={bomErrors.price_per_unit} />
             </div>
             <div className="col-span-2 space-y-1">
-              <Label htmlFor="bom-vat" className="text-xs">
+              <Label htmlFor="bom-vat" className="flex items-center gap-1.5 text-xs">
                 НДС (доля)
+                <HelpButton help="bom.vat_rate" />
               </Label>
               <Input
                 id="bom-vat"
