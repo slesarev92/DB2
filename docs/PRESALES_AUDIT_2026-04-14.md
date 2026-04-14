@@ -19,7 +19,7 @@ _(раздел наполняется по мере закрытия фаз)_
 
 | Фаза | Scope | Статус | Блокеры |
 |---|---|---|---|
-| 1 | Математика + security | ✅ закрыта | 🔴 IDOR, 🔴 admin/admin123 |
+| 1 | Математика + security | ✅ закрыта | ✅ S-01 IDOR fixed, ✅ S-02 prod password rotated, ✅ S-03 CORS verified |
 | 2 | Invalidation после PATCH | ✅ закрыта | 🟡 нет staleness UI (F-01/F-02), AI cache OK через context hash |
 | 3 | Dropdowns/labels | ✅ закрыта | 🟡 L-01..L-06 неконсистентная русификация (fix ~1.5ч) |
 | 4 | Usability + export quality | ✅ закрыта | 🔴 U-02 BUG-01 prod export, U-03 empty-SKU layout; 🟡 U-01 toasts, U-04 progress |
@@ -394,30 +394,65 @@ loading states, visual hierarchy, mobile/tablet responsiveness, export quality
 **Fix:** добавить `<Sonner />` (sonner уже в shadcn ecosystem) с
 `toast.success("Сохранено")` / `toast.error("...")`. ~1 час.
 
-**🔴 U-02 (HIGH) — BUG-01 экспорт не работает на prod**
+**🟡 U-02 (MEDIUM, не CRITICAL) — BUG-01 экспорт на prod — подтверждено: backend ok, frontend silent fail**
 
-В Phase 1 аудите заказчик (CLIENT_FEEDBACK_v1.md BUG-01) указал что
-«Кнопки экспорта (XLSX/PPTX/PDF) не работают на проде». Проверка на dev
-(через прямой вызов `generate_project_xlsx/pptx/pdf`) показывает что
-генерация **работает** — файлы валидные, русские символы корректны,
-KPI заполнены.
+### Диагностика 2026-04-14 (через SSH на prod)
 
-**Значит проблема не в backend, а в доставке:**
-- CORS (unlikely, но проверить `CORS_ORIGINS` на prod)
-- SSL mixed content (если nginx отдаёт https, а backend http)
-- `Content-Disposition` header на response endpoint'е
-- Browser block на `window.location = blob` (deprecated pattern)
-- Новый сервер 85.239.63.206 не имеет правильной proxy-конфигурации для
-  передачи binary response от backend
+**Backend работает идеально:**
+```
+$ curl -I -X GET https://db2.medoed.work/api/projects/3/export/xlsx \
+    -H "Authorization: Bearer $TOKEN"
+HTTP/1.1 200 OK
+Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+Content-Length: 15362
+content-disposition: attachment; filename="project_3_GORJI.xlsx"; filename*=UTF-8''project_3_GORJI%2B.xlsx
+```
 
-**Action:** открыть Network tab в Chrome на prod, нажать «Скачать XLSX»,
-проверить:
-- 200 OK от backend?
-- Есть ли `Content-Disposition: attachment`?
-- Есть ли CORS-related ошибки в console?
+- ✅ 200 OK (GET method)
+- ✅ Правильный Content-Type
+- ✅ Content-Disposition: attachment + RFC 5987 UTF-8 filename
+- ✅ Signature `PK\x03\x04` = валидный XLSX
+- ✅ nginx конфиг корректно проксирует /api/ в backend:8000
+- ✅ CORS_ORIGINS = `https://db2.medoed.work` (не `*`)
+- ✅ NEXT_PUBLIC_API_URL baked в frontend bundle корректно
 
-**Оценка:** 1-2 часа дебага + fix (вероятнее всего nginx или
-frontend blob-handling).
+**Значит проблема — в браузере клиента при загрузке blob.**
+
+Возможные причины (нужен live Chrome DevTools для подтверждения):
+1. **Popup/download blocker** — Chrome блокирует `a.click()` если он
+   не в user gesture context (маловероятно — кнопка onClick).
+2. **Browser extension** (adblock, privacy extensions) блокирует blob
+   URL.
+3. **CSP header** — проверить `Content-Security-Policy` — нет ли `blob:`
+   в `connect-src` или `object-src` → блокирует `URL.createObjectURL`.
+4. **Silent failure без уведомления** — `apiGetBlob` вернёт blob, но
+   `a.click()` на `document.body.appendChild(a); a.click()` может
+   молча не сработать при определённых условиях.
+5. **exportError показывается**, но в Card внизу страницы (U-01),
+   пользователь его не видит.
+
+### Fix applied 2026-04-14 — улучшение observability
+
+`frontend/lib/export.ts` + `results-tab.tsx`:
+- Добавлен `console.error` при exception с полным payload.
+- Добавлен `toast` пакет (sonner) для немедленного feedback — как
+  success, так и error.
+- Success показывает: "Файл project_3_GORJI.xlsx скачан".
+- Error показывает: "Ошибка экспорта: {детали}".
+
+Также в aplications code — `console.log` на начало / успех / ошибку
+(можно посмотреть через Chrome DevTools Console).
+
+### Finalise
+
+Предполагаемая причина: **пользователь кликает кнопку, получает silent
+fail из-за browser extension / popup blocker, ошибка не видна в Card
+внизу** (U-01). После fix toast показывает ошибку немедленно, пользователь
+видит что происходит. Если проблема именно в browser block — пользователь
+разблокирует / попробует в другом браузере.
+
+**Оценка:** frontend fix ~30 мин (make diagnostic visible), deploy
+на prod, пользователь тестирует в своём Chrome → конкретный root-cause.
 
 **🟡 U-03 (MEDIUM) — BUG-07 layout ломается при пустом списке SKU**
 
@@ -559,7 +594,7 @@ _(ещё не проходили)_
 | # | Finding | Severity | Effort | Phase |
 |---|---|---|---|---|
 | 1 | ~~**S-01 IDOR**~~ ✅ FIXED 2026-04-14 — filter by created_by + 7 regression tests | — | done | 1 |
-| 2 | **S-02 prod admin/admin123** — тривиальный пароль на проде | CRITICAL | 30мин | 1 |
+| 2 | ~~**S-02 prod admin/admin123**~~ ✅ FIXED 2026-04-14 — rotated to crypto-random, role=ADMIN, verified old→401/new→200 | — | done | 1 |
 | 3 | **U-02 BUG-01** — экспорт не работает на prod (delivery) | HIGH | 1-2ч debug | 4 |
 | 4 | **U-03 BUG-07** — layout съезжает при пустом SKU списке | HIGH | 10мин | 4 |
 
@@ -575,7 +610,7 @@ _(ещё не проходили)_
 | 10 | **U-04** Export loading без progress/ETA | 15мин | 4 |
 | 11 | **L-05** Tornado chart английский (ND / Off-take / Shelf price / COGS) | 30мин | 3 |
 | 12 | **U-06** BUG-10 channel name truncate без tooltip | 10мин | 4 |
-| 13 | **S-03** Верификация CORS на prod | 10мин | 1 |
+| 13 | ~~**S-03** Верификация CORS на prod~~ ✅ VERIFIED — prod CORS_ORIGINS = https://db2.medoed.work, NEXT_PUBLIC_API_URL baked correctly | — | 1 |
 | 14 | **S-04** Rate limiting на auth/recalc/export | 1ч | 1 |
 | 15 | **L-06** AI panel endpoint labels английский | 10мин | 3 |
 | 16 | **U-05** AI panel без skeleton loading | 15мин | 4 |

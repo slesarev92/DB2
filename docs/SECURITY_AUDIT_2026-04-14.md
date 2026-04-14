@@ -12,7 +12,7 @@
 | # | Severity | Finding | Статус |
 |---|---|---|---|
 | S-01 | 🔴 **CRITICAL** | IDOR: endpoints не проверяют ownership | ✅ **FIXED 2026-04-14** (коммит в main) |
-| S-02 | 🔴 **CRITICAL** | Hardcoded prod admin creds (admin/admin123) | Блокер продаж |
+| S-02 | 🔴 **CRITICAL** | Hardcoded prod admin creds (admin/admin123) | ✅ **FIXED 2026-04-14** (password rotated, role → ADMIN) |
 | S-03 | 🟡 MEDIUM | CORS конфиг ок, но нужна верификация prod env | Low effort |
 | S-04 | 🟡 MEDIUM | Rate limiting только на AI endpoints | Low effort |
 | S-05 | 🟢 OK | XSS в PDF защищён через Jinja2 autoescape | — |
@@ -183,27 +183,43 @@ PASSWORD = "admin123"
 
 Estimated effort: **30 минут** (смена пароля + рефакторинг script).
 
+### ✅ Fix implemented 2026-04-14
+
+- Новый пароль для `admin@example.com` сгенерирован через
+  `secrets.token_urlsafe(24)` (32 символа, crypto-random).
+- Role поднят с `analyst` → `admin` (единственный prod-пользователь —
+  владелец всех 3 проектов, после IDOR-fix нужен admin-доступ).
+- Verified: old `admin123` → 401, новый → 200.
+- Пароль выдан пользователю **один раз через чат**, попросили сохранить
+  в secure vault (1Password / Bitwarden). После подтверждения — удалён
+  из контекста сессии.
+- TODO (backlog): рефакторить `scripts/seed_demo_project.py` на env
+  vars (`DEMO_ADMIN_EMAIL`, `DEMO_ADMIN_PASSWORD`, `DEMO_API_URL`).
+  Скрипт в `.gitignore` до рефакторинга.
+- TODO (backlog): в `backend/scripts/create_dev_user.py` добавить
+  `assert os.environ.get("APP_ENV") == "dev"` чтобы исключить
+  случайный запуск на prod.
+
 ---
 
-## S-03 (MEDIUM) — Верификация CORS на prod
+## S-03 (MEDIUM) — Верификация CORS на prod ✅ VERIFIED 2026-04-14
 
-### Проблема
+### Проблема (была)
 
 `backend/app/core/config.py:40` — default `cors_origins = "http://localhost:3000"`.
 Настраивается через env `CORS_ORIGINS`. Код корректен.
-`docs/SSL_SETUP.md:147` упоминает что на prod должно быть
-`https://db2.medoed.work`.
 
-### Требуется верификация
+### Верификация 2026-04-14
 
 ```bash
-ssh -i ~/.ssh/db2_deploy root@85.239.63.206 \
-    "grep CORS_ORIGINS /opt/dbpassport/infra/.env"
+$ ssh root@85.239.63.206 "grep CORS_ORIGINS /opt/dbpassport/infra/.env"
+CORS_ORIGINS=https://db2.medoed.work
 ```
-Ожидаемое: `CORS_ORIGINS=https://db2.medoed.work`.
-Если пусто или `*` — нужно поправить.
 
-Estimated effort: **10 минут** (проверить, поправить env, перезапустить backend).
+✅ **Конфигурация правильная.** Prod CORS ограничен `https://db2.medoed.work`,
+не `*`. NEXT_PUBLIC_API_URL тоже verified: `https://db2.medoed.work`,
+baked в frontend bundle (`grep -oE "https?://[a-zA-Z0-9._-]+" .next/static/chunks/*.js`
+нашёл `https://db2.medoed.work` в 134-*.js chunk).
 
 ---
 

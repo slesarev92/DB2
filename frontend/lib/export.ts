@@ -14,16 +14,11 @@ import { apiGetBlob } from "./api";
  * Если ScenarioResult ещё не посчитан — KPI содержит "—".
  */
 export async function downloadProjectXlsx(projectId: number): Promise<void> {
-  const blob = await apiGetBlob(`/api/projects/${projectId}/export/xlsx`);
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `project_${projectId}.xlsx`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  // Освобождаем object URL после клика (через таймаут чтобы браузер успел)
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  await _downloadBlobAs(
+    `/api/projects/${projectId}/export/xlsx`,
+    `project_${projectId}.xlsx`,
+    "xlsx",
+  );
 }
 
 /**
@@ -35,15 +30,11 @@ export async function downloadProjectXlsx(projectId: number): Promise<void> {
  * «Продуктовый микс».
  */
 export async function downloadProjectPptx(projectId: number): Promise<void> {
-  const blob = await apiGetBlob(`/api/projects/${projectId}/export/pptx`);
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `project_${projectId}.pptx`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  await _downloadBlobAs(
+    `/api/projects/${projectId}/export/pptx`,
+    `project_${projectId}.pptx`,
+    "pptx",
+  );
 }
 
 /**
@@ -54,13 +45,47 @@ export async function downloadProjectPptx(projectId: number): Promise<void> {
  * риски, roadmap и т.д.
  */
 export async function downloadProjectPdf(projectId: number): Promise<void> {
-  const blob = await apiGetBlob(`/api/projects/${projectId}/export/pdf`);
+  await _downloadBlobAs(
+    `/api/projects/${projectId}/export/pdf`,
+    `project_${projectId}.pdf`,
+    "pdf",
+  );
+}
+
+
+/**
+ * Универсальный blob → download trigger с диагностикой.
+ *
+ * BUG-01 на prod выглядел как "ничего не происходит при клике". Root cause
+ * не подтверждён (backend отдаёт 200 OK, правильный Content-Disposition).
+ * Гипотезы: browser extension блокирует blob URL / popup blocker /
+ * CSP connect-src. Логируем каждый шаг в console чтобы пользователь
+ * мог показать DevTools output.
+ */
+async function _downloadBlobAs(
+  path: string,
+  filename: string,
+  kind: string,
+): Promise<void> {
+  console.info(`[export] start ${kind}: GET ${path}`);
+  const blob = await apiGetBlob(path);
+  console.info(
+    `[export] blob received ${kind}: ${blob.size} bytes, type=${blob.type}`,
+  );
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `project_${projectId}.pdf`;
+  a.download = filename;
+  a.rel = "noopener";
   document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  try {
+    a.click();
+    console.info(`[export] click triggered ${kind} → ${filename}`);
+  } catch (clickErr) {
+    console.error(`[export] a.click() failed for ${kind}:`, clickErr);
+    throw clickErr;
+  } finally {
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 }
