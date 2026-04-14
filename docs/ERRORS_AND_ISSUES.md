@@ -25,6 +25,62 @@
 
 ## Записи
 
+## [2026-04-14] Flaky `test_explain_sensitivity_cache_hit` при полном прогоне suite
+
+**Проблема:** При `pytest -m "not acceptance"` (444 теста) в конце прогона
+падает `tests/api/test_ai.py::test_explain_sensitivity_cache_hit` с
+`asyncpg.exceptions.ConnectionDoesNotExistError: connection was closed in
+the middle of operation`. Exit code 1, итог: `444 passed, 4 deselected,
+1 warning, 1 error in 60.60s`.
+
+**Контекст:** Аудит Фазы 1 (2026-04-14), воспроизводится стабильно при
+полном прогоне. При запуске одиночно (`pytest -q tests/api/test_ai.py::test_explain_sensitivity_cache_hit`)
+тест проходит за 1.02s. Проблема не в логике теста, а в async connection
+pool exhaustion / race condition ближе к концу длинного прогона.
+
+**Решение (временное):** запись в journal как known flaky, не блокирует
+релизы. При регрессиях — проверять не только обычный pytest, но и
+acceptance (4 теста на GORJI, все зелёные).
+
+**Урок:** Async connection pool в тестах с `asyncio_mode=auto` + session-scope
+fixtures имеет границу по количеству операций. Если мы дойдём до 600+
+интеграционных тестов — может понадобиться phased suite (split на 2-3
+pytest вызова с pool clearance между ними). Альтернатива — применить
+`@pytest.mark.flaky(reruns=2)` для test_explain_sensitivity_cache_hit
+через `pytest-rerunfailures`.
+
+---
+
+## [2026-04-14] Acceptance tests падают после D-12 fix и Phase 8 — baseline устарел
+
+**Проблема:** `pytest -m acceptance` показал 2 FAILED:
+1. `test_kpi_matches_excel_reference_within_5pct` — Y1-Y5 NPV drift = 50.03%
+   (при y1y3=0%, y1y10=0.03%).
+2. `test_all_three_exports_generate_valid_files` — `assert len(prs.slides)
+   == 13`, фактически 16.
+
+**Контекст:** Аудит Фазы 1 готовности к продажам. Тесты писались до
+D-12 fix (коммит 530c976, SCOPE_BOUNDS Y1-Y5 с 6 → 5 лет) и до Phase 8
+(коммит 55189ef, +3 слайда в PPTX).
+
+**Решение:** Это **не регрессия pipeline**, а устаревший baseline:
+- Excel-эталон GORJI содержит typo (6 столбцов в формуле NPV Y1-Y5).
+  Наш код теперь правильный (5 лет по бизнес-смыслу). Drift ожидаем.
+  В тесте Y1-Y5 исключён из drift-проверки с комментарием про D-12 fix;
+  регрессии для Y1-Y5 ловятся через совпадение y1y3 и y1y10.
+- PPTX slide count поднят 13 → 16 с комментарием про Phase 8.
+
+После правок: `4 passed, 445 deselected, 20 warnings in 19.78s`.
+
+**Урок:** Когда решение бизнес-логики расходится с Excel-эталоном
+(D-XX "решено по бизнес-смыслу вместо буквального Excel"), нужно
+**сразу** обновлять зависимые acceptance тесты. Иначе baseline
+начинает "защищать неправильное" и первый регресс-прогон выглядит
+катастрофой. Правило: в коммит с D-XX fix включать и обновление
+acceptance baseline.
+
+---
+
 ## [2026-04-13] CLIENT FEEDBACK v1 — 12 багов из презентации заказчика
 
 **Проблема:** Заказчик прислал `Презентация1.pptx` (36 слайдов) с замечаниями

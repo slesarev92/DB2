@@ -239,12 +239,18 @@ class TestE2EGorji:
         assert PeriodScope.Y1Y5 in by_scope
         assert PeriodScope.Y1Y10 in by_scope
 
-        # NPV drift проверка для всех 3 scope
+        # NPV drift проверка для y1y3 и y1y10.
+        #
+        # y1y5 намеренно исключён: Excel-эталон GORJI содержит typo в формуле
+        # NPV/ROI/IRR для scope Y1-Y5 (суммирует 6 столбцов вместо 5).
+        # После D-12 fix (коммит 530c976) наш код считает Y1-Y5 как 5 лет —
+        # это даёт ожидаемый drift ~50% vs Excel-reference (который не обновляется).
+        # Регрессии pipeline для Y1-Y5 ловятся через совпадение y1y3 (0%)
+        # и y1y10 (<0.1%) — одни и те же формулы применяются к разному scope.
         max_drift = 0.0
         drifts: dict[str, float] = {}
         for scope_key, scope_enum in [
             ("y1y3", PeriodScope.Y1Y3),
-            ("y1y5", PeriodScope.Y1Y5),
             ("y1y10", PeriodScope.Y1Y10),
         ]:
             actual = float(by_scope[scope_enum].npv) if by_scope[scope_enum].npv else 0.0
@@ -283,10 +289,13 @@ class TestE2EGorji:
         # PPTX
         pptx = await generate_project_pptx(db_session, project_id)
         assert pptx[:2] == b"PK", "PPTX должен быть ZIP (sig PK)"
-        # Парсим 13 слайдов
+        # Phase 8 добавила презентационные слайды (pricing, value chain, P&L,
+        # per-unit KPI, gate timeline) → 16 слайдов. Было 13 до Phase 8.
         from pptx import Presentation
         prs = Presentation(BytesIO(pptx))
-        assert len(prs.slides) == 13
+        assert len(prs.slides) == 16, (
+            f"Expected 16 slides after Phase 8, got {len(prs.slides)}"
+        )
 
         # PDF
         pdf = await generate_project_pdf(db_session, project_id)

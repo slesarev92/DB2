@@ -65,3 +65,14 @@ backend/exports/
 # --- Local SQLite (не для этого проекта, но на всякий случай) ---
 *.sqlite
 *.db
+
+# --- Windows Git Bash output redirection leftovers ---
+# `> nul` на Windows bash создаёт реальный файл "nul"
+/nul
+
+# --- Scripts с hardcoded prod credentials (до рефакторинга на env vars) ---
+/scripts/seed_demo_project.py
+
+# --- Архив сырых client inputs (тяжёлые pptx/xlsx) — лежат локально ---
+# Обработанные findings идут в docs/CLIENT_FEEDBACK_*.md
+/docs/client_inputs/
