@@ -21,7 +21,7 @@ _(раздел наполняется по мере закрытия фаз)_
 |---|---|---|---|
 | 1 | Математика + security | ✅ закрыта | 🔴 IDOR, 🔴 admin/admin123 |
 | 2 | Invalidation после PATCH | ✅ закрыта | 🟡 нет staleness UI (F-01/F-02), AI cache OK через context hash |
-| 3 | Dropdowns/labels | ⏳ | — |
+| 3 | Dropdowns/labels | ✅ закрыта | 🟡 L-01..L-06 неконсистентная русификация (fix ~1.5ч) |
 | 4 | Usability + export quality | ⏳ | — |
 | 5 | HelpButton (реализация) | ⏳ | — |
 
@@ -206,7 +206,148 @@ CLAUDE.md явно указывает:
 
 ## Фаза 3 — Dropdowns / labels
 
-_(ещё не проходили)_
+**Scope:** все Select / option компоненты в `frontend/components/projects/`,
+все enum values из backend (ScenarioType, PeriodScope, PeriodType, SourceType,
+PriceTier, PackFormat, GateStage, FunctionReadinessStatus, UserRole,
+OpexCategory), консистентность русских переводов.
+
+### Coverage matrix
+
+| Enum | Backend values | Frontend LABELS map | Покрытие | Комментарий |
+|---|---|---|---|---|
+| ScenarioType | base / conservative / aggressive | ❌ **расхождение** | 33% | Три разных map в разных tabs |
+| PeriodScope | y1y3 / y1y5 / y1y10 | SCOPE_LABELS ✅ | 100% | "Y1-Y3 / Y1-Y5 / Y1-Y10" (аббр ок) |
+| PeriodType | monthly / annual | ❌ нет map | 0% | Raw values в SelectItem |
+| GateStage | G0-G5 | GATE_LABELS ✅ | 100% | "Идея/Концепция/.../Масштабирование" |
+| FunctionReadinessStatus | green / yellow / red | FUNCTION_STATUS_LABELS ✅ | 100% | Ок |
+| PriceTier | premium / mainstream / value | ❌ нет map | 0% | `obppc-tab.tsx:236-238` hardcoded английский |
+| PackFormat | "bottle" (только это используется) | ❌ нет map и нет enum | 0% | `obppc-tab.tsx:92` raw "bottle" |
+| OpexCategory | 14 значений | OPEX_CATEGORY_LABELS ⚠️ | 50% | **Смешаны:** "Digital"/"PR"/"SMM" + "ПОСМ"/"Листинги" |
+| SourceType | predict / finetuned / actual | SOURCE_LABELS ❌ | 0% | `value-history-dialog.tsx:34-37` на английском |
+| ViewMode (P&L) | monthly / quarterly / annual | MODE_LABELS ✅ | 100% | Ок |
+
+### Findings
+
+**🟡 L-01 (MEDIUM) — SCENARIO_LABELS расходятся в 3 файлах**
+
+Один и тот же enum `ScenarioType` переводится по-разному:
+- `scenarios-tab.tsx:45-49` → "Base" / "Conservative" / "Aggressive" 🔴
+- `periods-tab.tsx:38-42` → "Base" / "Conservative" / "Aggressive" 🔴
+- `results-tab.tsx:50-54` → "Базовый" / "Консервативный" / "Агрессивный" ✅
+
+На экране **Сценарии** (scenarios-tab) показано "Base", на экране
+**Результаты** (results-tab) то же самое называется "Базовый". Для
+enterprise-клиента это выглядит как "разные разработчики писали, никто
+не проверил согласованность" — первый красный флажок на демо.
+
+**Fix:** вынести единый `SCENARIO_LABELS` в `frontend/types/api.ts`
+с русскими значениями, импортировать во все 3 файла (plus
+`channel-deltas-editor.tsx:231`). **15 минут.**
+
+**🟡 L-02 (MEDIUM) — PriceTier / PackFormat / SourceType без LABELS**
+
+- `obppc-tab.tsx:236-238` — `<SelectItem value="premium">Premium</SelectItem>`
+  — английский захардкожен.
+- `obppc-tab.tsx:92` — `pack_format === "bottle"` без перевода → в UI
+  отображается сырое `"bottle"`.
+- `value-history-dialog.tsx:34-37` — `SOURCE_LABELS = {predict: "Predict",
+  finetuned: "Fine-tuned", actual: "Actual"}` — **весь history-диалог
+  на английском.**
+
+**Fix:** создать PRICE_TIER_LABELS, PACK_FORMAT_LABELS, SOURCE_LABELS
+в `types/api.ts`, заменить raw values на `LABELS[value] ?? value`. **30 мин.**
+
+**🟡 L-03 (MEDIUM) — OpexCategory смешанный язык**
+
+`types/api.ts:607-622`:
+```typescript
+OPEX_CATEGORY_LABELS = {
+  digital: "Digital",        // ← англ
+  pr: "PR",                  // ← англ (аббр)
+  smm: "SMM",                // ← англ (аббр)
+  design: "Design",          // ← англ
+  posm: "ПОСМ",              // ← рус
+  listings: "Листинги",      // ← рус
+  other: "Другое",           // ← рус
+  ...
+}
+```
+
+В одном выпадающем списке маркетинговых категорий пользователь видит
+"Digital / PR / SMM / Design / ПОСМ / Листинги / Другое" — half-and-half.
+**Fix:** единообразно все по-русски: "Диджитал / PR / СММ / Дизайн /
+ПОСМ / Листинги / Другое". Аббревиатуры PR/SMM можно оставить латиницей
+(индустриальный стандарт), но тогда последовательно везде. **15 мин.**
+
+**🟢 L-04 (LOW) — fallback к raw enum**
+
+`scenarios-tab.tsx:231`, `periods-tab.tsx:224`, `channel-deltas-editor.tsx:231`:
+```tsx
+{SCENARIO_LABELS[s.type] ?? s.type}   // fallback показывает "base"/"aggressive"
+```
+
+Если backend вернёт новый тип сценария (например `"custom"`), UI покажет
+сырой enum. Это на будущее — сейчас enum стабилен. **Fix:** fallback
+на `"—"`. 5 минут.
+
+**🟡 L-05 (MEDIUM) — tornado chart без русификации**
+
+`tornado-chart.tsx:30-34`:
+```typescript
+PARAM_LABELS = { nd: "ND", offtake: "Off-take", shelf_price: "Shelf price", cogs: "COGS" }
+```
+
+Tornado chart — визуальный ключевой артефакт на демо (sensitivity analysis).
+"Off-take" и "Shelf price" — английский. "ND" и "COGS" — аббревиатуры
+можно оставить с подсказкой в HelpButton (Phase 5), но "Off-take" должно
+стать "Отгрузка" (или оставить "Off-take" как индустриальный термин
+с подсказкой).
+
+**🟡 L-06 (MEDIUM) — AI panel history endpoint labels**
+
+`ai-panel-history.tsx:14-26`:
+```typescript
+ENDPOINT_LABELS = {
+  explain_kpi: "Explain KPI",
+  sensitivity: "Sensitivity",
+  executive_summary: "Executive Summary",
+  ...
+}
+```
+
+Весь history-просмотр AI-запросов на английском. **Fix:** "Объяснение KPI /
+Анализ чувствительности / Executive summary / ...". 10 минут.
+
+### Untranslated placeholders / UI strings (не критично)
+
+✅ Good:
+- Все form placeholders: "Выберите SKU", "Выберите канал", "Нет данных".
+- Заголовки карточек, labels, кнопки — русские.
+- Validation messages базовые ("Обязательное поле").
+
+🟡 Minor:
+- `content-tab.tsx:361` — `<SelectValue placeholder="—" />` для G0-G5
+  (placeholder norm, но можно "Выберите стадию").
+- Validation "Score 0-100" hardcoded где-то в формах.
+
+### Рекомендации по Фазе 3
+
+**Total effort:** ~1.5 часа для полного fix всех 6 labels issues.
+
+Приоритет:
+1. **L-01** SCENARIO_LABELS — видно на каждом табе. Fix first.
+2. **L-02** PriceTier/PackFormat/SourceType — видно при opening value history.
+3. **L-03** OpexCategory смешанный — видно в финплане.
+4. **L-05** Tornado chart — важно для demo по sensitivity.
+5. **L-06** AI history — менее заметно, но нужно для полноты.
+6. **L-04** fallback — defensive, можно отложить.
+
+### Блокеры продаж из Фазы 3
+
+**Нет 🔴 блокеров.** Но 🟡 **L-01/L-02/L-03/L-05** суммарно создают
+впечатление "русификация не доведена" — для enterprise-клиента это
+аргумент снизить цену / попросить "доделать перед оплатой". **Fix
+перед первой продажей.**
 
 ## Фаза 4 — Usability + export quality
 
