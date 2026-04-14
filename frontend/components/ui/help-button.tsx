@@ -3,9 +3,8 @@
 import { Popover } from "@base-ui/react/popover";
 import { Info } from "lucide-react";
 
+import { PARAMETER_HELP, type ParameterHelp } from "@/lib/parameter-help";
 import { cn } from "@/lib/utils";
-
-import type { ParameterHelp } from "@/lib/parameter-help";
 
 interface HelpButtonProps {
   /**
@@ -38,12 +37,6 @@ export function HelpButton({
   className,
   ariaLabel,
 }: HelpButtonProps) {
-  // Ленивый импорт map'ы через require чтобы избежать круговых зависимостей
-  // в момент построения. Для строки — достаём entry, для объекта — используем as-is.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const PARAMETER_HELP: Record<string, ParameterHelp> =
-    require("@/lib/parameter-help").PARAMETER_HELP;
-
   const entry: ParameterHelp | null =
     typeof help === "string" ? PARAMETER_HELP[help] ?? null : help;
 
