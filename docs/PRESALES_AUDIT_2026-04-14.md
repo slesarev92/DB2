@@ -552,20 +552,70 @@ _(ещё не проходили)_
 
 ---
 
-## Итоги по готовности к продажам (обновляется)
+## Итоги аудита Phase 1-4
 
-### 🔴 Блокеры (не продавать enterprise до fix)
-1. S-01 IDOR — 3-5 часов.
-2. S-02 admin/admin123 на prod — 30 минут.
+### 🔴 Критические блокеры (fix обязательно перед enterprise-продажей)
 
-### 🟡 Средние (заметны на демо, но не блокируют)
-1. F-01/F-02 — invalidation + staleness UI.
-2. F-03 — AI cache invalidation.
-3. S-03 — CORS verify на prod.
-4. S-04 — rate limit на критичных endpoints.
+| # | Finding | Severity | Effort | Phase |
+|---|---|---|---|---|
+| 1 | **S-01 IDOR** — любой юзер читает/меняет чужие проекты | CRITICAL | 3-5ч | 1 |
+| 2 | **S-02 prod admin/admin123** — тривиальный пароль на проде | CRITICAL | 30мин | 1 |
+| 3 | **U-02 BUG-01** — экспорт не работает на prod (delivery) | HIGH | 1-2ч debug | 4 |
+| 4 | **U-03 BUG-07** — layout съезжает при пустом SKU списке | HIGH | 10мин | 4 |
 
-### 🟢 Готово к продажам (прошло аудит)
-1. Математика pipeline — D-01..D-22 верифицированы.
-2. XSS в PDF защищён.
-3. SQL-injection защита (ORM).
-4. Raw SQL — только в тестах.
+### 🟡 Средние (заметны на демо, сильно портят impression)
+
+| # | Finding | Effort | Phase |
+|---|---|---|---|
+| 5 | **U-01** Нет toast/snackbar — все ошибки в Card внизу, success silent | 1ч | 4 |
+| 6 | **L-01** SCENARIO_LABELS: "Base/Conservative/Aggressive" vs "Базовый/..." в разных табах | 15мин | 3 |
+| 7 | **L-02** PriceTier/PackFormat/SourceType — raw English в UI | 30мин | 3 |
+| 8 | **L-03** OpexCategory смешан "Digital/PR/SMM + ПОСМ/Листинги" | 15мин | 3 |
+| 9 | **F-01/F-02** Нет staleness-индикатора после PATCH (вручную пересчитывать) | 4-5ч | 2 |
+| 10 | **U-04** Export loading без progress/ETA | 15мин | 4 |
+| 11 | **L-05** Tornado chart английский (ND / Off-take / Shelf price / COGS) | 30мин | 3 |
+| 12 | **U-06** BUG-10 channel name truncate без tooltip | 10мин | 4 |
+| 13 | **S-03** Верификация CORS на prod | 10мин | 1 |
+| 14 | **S-04** Rate limiting на auth/recalc/export | 1ч | 1 |
+| 15 | **L-06** AI panel endpoint labels английский | 10мин | 3 |
+| 16 | **U-05** AI panel без skeleton loading | 15мин | 4 |
+
+### 🟢 Прошло аудит (ок для продаж)
+
+- ✅ Математика pipeline — D-01..D-22 верифицированы через acceptance.
+  Y1-Y3 drift 0%, Y1-Y10 drift 0.03% vs Excel-эталон.
+- ✅ Экспорты физически работают на dev (XLSX русский, PPTX 16 слайдов, PDF <5MB).
+- ✅ XSS в PDF защищён (Jinja2 autoescape).
+- ✅ SQL-injection защита (SQLAlchemy ORM параметризованные запросы).
+- ✅ Rate limiting на AI endpoints (10/min, 5/min).
+- ✅ Empty states информативные, form validation inline.
+- ✅ KPI color coding (green/yellow/red маржи), Go/No-Go badge.
+- ✅ Responsive form layouts (`md:grid-cols-3`).
+- ✅ AI cache auto-invalidates через `input_hash(context)` после recalc.
+- ✅ Docker deploy pipeline: прод стабильный, 21 час uptime контейнеров.
+
+### Итого усилий до полной demo-readiness
+
+- Security фаза (S-01, S-02, S-03, S-04): ~5-6 часов
+- Usability quick wins (U-01..U-06): ~2-3 часа
+- Labels русификация (L-01..L-06): ~1.5 часа
+- Invalidation UI (F-01, F-02): ~4-5 часов (optional для демо)
+- BUG-01 prod export debug: ~1-2 часа
+
+**Total:** 14-18 часов (~2 рабочих дня) до "enterprise-ready" состояния.
+
+### Рекомендуемый порядок fix
+
+1. **S-02** (30 мин) — сменить admin пароль на prod немедленно.
+2. **U-03 + U-04 + L-01 + U-06 + L-02** (~2 часа) — все дешёвые
+   UI-квик-фиксы одним PR, чтобы демо выглядело чисто.
+3. **S-01** (3-5 часов) — IDOR fix, самый важный security-блокер.
+4. **U-02 BUG-01** (1-2 часа) — прод-экспорт дебаг.
+5. **F-01/F-02** (4-5 часов) — invalidation UI, optional.
+6. **S-04 + S-03** (~1.5 часа) — остаток security.
+
+---
+
+## Фаза 5 — HelpButton (реализация)
+
+**Не часть аудита — это implementation task.** См. следующий commit.
