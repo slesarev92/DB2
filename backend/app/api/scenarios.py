@@ -36,6 +36,20 @@ _scenario_not_found = HTTPException(
 )
 
 
+async def _require_scenario_owned(
+    session: AsyncSession, scenario_id: int, user: User
+):
+    """Load scenario и проверить ownership через project. 404 otherwise."""
+    scenario = await scenario_service.get_scenario(session, scenario_id)
+    if scenario is None:
+        raise _scenario_not_found
+    if not await project_service.is_project_owned_by(
+        session, scenario.project_id, user
+    ):
+        raise _scenario_not_found
+    return scenario
+
+
 @router.get(
     "/api/projects/{project_id}/scenarios",
     response_model=list[ScenarioRead],
@@ -46,7 +60,7 @@ async def list_project_scenarios_endpoint(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[ScenarioRead]:
     """Возвращает 3 сценария проекта в порядке Base → Conservative → Aggressive."""
-    project = await project_service.get_project(session, project_id)
+    project = await project_service.get_project(session, project_id, user=current_user)
     if project is None:
         raise _project_not_found
 
@@ -65,9 +79,7 @@ async def get_scenario_endpoint(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> ScenarioRead:
-    scenario = await scenario_service.get_scenario(session, scenario_id)
-    if scenario is None:
-        raise _scenario_not_found
+    scenario = await _require_scenario_owned(session, scenario_id, current_user)
     return ScenarioRead.model_validate(scenario)
 
 
@@ -82,9 +94,7 @@ async def update_scenario_endpoint(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> ScenarioRead:
     """Обновляет дельты сценария. type и project_id не изменяются."""
-    scenario = await scenario_service.get_scenario(session, scenario_id)
-    if scenario is None:
-        raise _scenario_not_found
+    scenario = await _require_scenario_owned(session, scenario_id, current_user)
     updated = await scenario_service.update_scenario(session, scenario, data)
     await session.commit()
     return ScenarioRead.model_validate(updated)
@@ -104,9 +114,7 @@ async def get_scenario_results_endpoint(
     Возвращает 404 с actionable-сообщением если расчёт ещё не запускался.
     Расчётный pipeline появится в задаче 2.4.
     """
-    scenario = await scenario_service.get_scenario(session, scenario_id)
-    if scenario is None:
-        raise _scenario_not_found
+    scenario = await _require_scenario_owned(session, scenario_id, current_user)
 
     results = await scenario_service.list_results_for_scenario(
         session, scenario_id
@@ -139,9 +147,7 @@ async def get_channel_deltas_endpoint(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[ChannelDeltaItem]:
     """Per-channel delta overrides для сценария."""
-    scenario = await scenario_service.get_scenario(session, scenario_id)
-    if scenario is None:
-        raise _scenario_not_found
+    scenario = await _require_scenario_owned(session, scenario_id, current_user)
     return await scenario_service.list_channel_deltas(session, scenario_id)
 
 
@@ -156,9 +162,7 @@ async def put_channel_deltas_endpoint(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[ChannelDeltaItem]:
     """Полная замена per-channel overrides. Items без записей → fallback."""
-    scenario = await scenario_service.get_scenario(session, scenario_id)
-    if scenario is None:
-        raise _scenario_not_found
+    scenario = await _require_scenario_owned(session, scenario_id, current_user)
     result = await scenario_service.replace_channel_deltas(
         session, scenario_id, body.items
     )

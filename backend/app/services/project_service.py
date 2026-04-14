@@ -12,8 +12,25 @@ from app.models import (
     Scenario,
     ScenarioResult,
     ScenarioType,
+    User,
+    UserRole,
 )
 from app.schemas.project import ProjectCreate, ProjectUpdate
+
+
+def _ownership_filter(user: User | None):
+    """Возвращает список условий фильтрации проектов по owner.
+
+    - `user=None` — нет фильтра (для вспомогательных путей: acceptance-тесты,
+      импорт-скрипты, celery tasks которые уже получили project_id от
+      authorized endpoint). Никогда **не** вызывать из HTTP endpoint с
+      `user=None`.
+    - `user.role == ADMIN` — нет фильтра, админ видит все проекты.
+    - Иначе — `Project.created_by == user.id`.
+    """
+    if user is None or user.role == UserRole.ADMIN:
+        return []
+    return [Project.created_by == user.id]
 
 
 @dataclass
@@ -30,11 +47,17 @@ class ProjectListRow:
     go_no_go: bool | None
 
 
-async def list_projects(session: AsyncSession) -> list[ProjectListRow]:
+async def list_projects(
+    session: AsyncSession,
+    user: User | None = None,
+) -> list[ProjectListRow]:
     """Все проекты, не помеченные удалёнными, + KPI Base/Y1Y10.
 
     LEFT JOIN на Scenario (Base) → ScenarioResult (Y1Y10). Если расчёт
     не выполнен — KPI поля None. Один SQL запрос вместо N+1.
+
+    `user` — текущий пользователь для фильтрации ownership. None только
+    для не-HTTP путей (see `_ownership_filter`).
     """
     stmt = (
         select(
@@ -55,7 +78,7 @@ async def list_projects(session: AsyncSession) -> list[ProjectListRow]:
             & (ScenarioResult.period_scope == PeriodScope.Y1Y10),
             isouter=True,
         )
-        .where(Project.deleted_at.is_(None))
+        .where(Project.deleted_at.is_(None), *_ownership_filter(user))
         .order_by(Project.created_at.desc())
     )
     result = await session.execute(stmt)
@@ -70,13 +93,45 @@ async def list_projects(session: AsyncSession) -> list[ProjectListRow]:
     ]
 
 
+async def is_project_owned_by(
+    session: AsyncSession,
+    project_id: int,
+    user: User | None,
+) -> bool:
+    """Короткая проверка ownership — для cascade-endpoints, где уже
+    загружен dependent entity и нужно только подтвердить owner.
+
+    Без загрузки полного Project объекта — только `SELECT 1 ... WHERE ...`.
+    """
+    stmt = (
+        select(Project.id)
+        .where(
+            Project.id == project_id,
+            Project.deleted_at.is_(None),
+            *_ownership_filter(user),
+        )
+        .limit(1)
+    )
+    return (await session.scalar(stmt)) is not None
+
+
 async def get_project(
-    session: AsyncSession, project_id: int
+    session: AsyncSession,
+    project_id: int,
+    user: User | None = None,
 ) -> Project | None:
-    """Один проект по id, или None если не найден / помечен удалённым."""
+    """Один проект по id, или None если не найден / помечен удалённым.
+
+    `user` — текущий пользователь. Если передан и role != ADMIN, запрос
+    фильтрует по `Project.created_by == user.id` — возвращает None
+    вместо чужого проекта (SQ-01 IDOR fix). None передаётся только из
+    не-HTTP путей (celery tasks, acceptance tests, CLI scripts), где
+    ownership уже проверен выше по стеку.
+    """
     stmt = select(Project).where(
         Project.id == project_id,
         Project.deleted_at.is_(None),
+        *_ownership_filter(user),
     )
     return await session.scalar(stmt)
 

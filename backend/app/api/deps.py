@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decode_token
 from app.db import get_db
-from app.models import User
+from app.models import Project, User
+from app.services import project_service
 from app.services.user_service import get_user_by_id
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -50,3 +51,32 @@ async def get_current_user(
     if user is None:
         raise _credentials_exception
     return user
+
+
+_project_not_found = HTTPException(
+    status_code=status.HTTP_404_NOT_FOUND,
+    detail="Project not found",
+)
+
+
+async def require_owned_project(
+    project_id: int,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> Project:
+    """FastAPI dependency: резолвит проект и проверяет ownership.
+
+    - 401 если нет / невалидный токен (из `get_current_user`).
+    - 404 если проекта нет **или** он принадлежит другому пользователю
+      (не раскрываем факт существования — S-01 IDOR fix).
+    - Админ (UserRole.ADMIN) видит любые проекты.
+
+    Возвращает `Project` entity. Endpoint'у больше не нужно самому
+    вызывать `project_service.get_project()`.
+    """
+    project = await project_service.get_project(
+        session, project_id, user=current_user
+    )
+    if project is None:
+        raise _project_not_found
+    return project

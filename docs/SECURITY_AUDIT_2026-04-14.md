@@ -11,7 +11,7 @@
 
 | # | Severity | Finding | Статус |
 |---|---|---|---|
-| S-01 | 🔴 **CRITICAL** | IDOR: endpoints не проверяют ownership | Блокер продаж |
+| S-01 | 🔴 **CRITICAL** | IDOR: endpoints не проверяют ownership | ✅ **FIXED 2026-04-14** (коммит в main) |
 | S-02 | 🔴 **CRITICAL** | Hardcoded prod admin creds (admin/admin123) | Блокер продаж |
 | S-03 | 🟡 MEDIUM | CORS конфиг ок, но нужна верификация prod env | Low effort |
 | S-04 | 🟡 MEDIUM | Rate limiting только на AI endpoints | Low effort |
@@ -102,6 +102,35 @@ Depends(get_current_user)`, но используют его **только дл
    В модели роль уже есть (`scripts/create_dev_user.py:23`). Использовать.
 
 Estimated effort: **3-5 часов** (fix + 10-15 integration-тестов + регрессия).
+
+### ✅ Fix implemented 2026-04-14
+
+- `project_service.get_project()` и `list_projects()` принимают `user: User | None`.
+- `is_project_owned_by()` — короткая проверка owner'а для cascade endpoints.
+- `require_owned_project` dependency в `app/api/deps.py` — применена через
+  router-level `dependencies=[...]` на akb / obppc / ai / period_values
+  batch routers (префикс `/api/projects/{project_id}/...`).
+- Cascade endpoints (project_skus, project_sku_channels, bom, scenarios,
+  period_values через psk_channel_id) — inline helper функции
+  `_require_X_owned(session, id, user)` проверяют ownership через
+  entity → psk → project.
+- Admin (UserRole.ADMIN) bypass — админы видят все проекты.
+- 7 regression tests в `backend/tests/api/test_security_idor.py`:
+  GET/PATCH/DELETE/recalculate/list от чужого user → 404, от owner → 200,
+  от admin → 200.
+
+### ⚠️ S-01b — остаток (в backlog, не блокер для MVP)
+
+`GET /api/media/{media_id}` **намеренно без auth** (используется в
+`<img src>` тегах, которые не передают Authorization header). Если
+attacker угадает media_id — скачает файл (дизайн упаковок).
+
+Варианты fix на будущее:
+- Pre-signed URLs с TTL (например minio direct links).
+- Cookie-based session auth для media endpoints.
+- Signed media tokens в query string.
+
+Не критично для MVP демо, но для enterprise нужно закрыть.
 
 ---
 

@@ -9,7 +9,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_owned_project
 from app.db import get_db
 from app.models import User
 from app.schemas.period_value import (
@@ -20,12 +20,39 @@ from app.schemas.period_value import (
     ResetOverrideResponse,
     ViewMode,
 )
-from app.services import period_value_service
+from app.services import (
+    period_value_service,
+    project_service,
+    project_sku_channel_service,
+    project_sku_service,
+)
 
 router = APIRouter(
     prefix="/api/project-sku-channels",
     tags=["period-values"],
 )
+
+
+_psc_not_found = HTTPException(
+    status_code=status.HTTP_404_NOT_FOUND,
+    detail="ProjectSKUChannel not found",
+)
+
+
+async def _require_psc_owned(
+    session: AsyncSession, psk_channel_id: int, user: User
+) -> None:
+    """Load psc → psk → project, verify ownership. 404 otherwise."""
+    psc = await project_sku_channel_service.get_psk_channel(
+        session, psk_channel_id
+    )
+    if psc is None:
+        raise _psc_not_found
+    psk = await project_sku_service.get_project_sku(session, psc.project_sku_id)
+    if psk is None or not await project_service.is_project_owned_by(
+        session, psk.project_id, user
+    ):
+        raise _psc_not_found
 
 
 # ============================================================
@@ -84,6 +111,7 @@ async def get_values_endpoint(
     response_model=Any потому что union response model в FastAPI
     путает OpenAPI генерацию.
     """
+    await _require_psc_owned(session, psk_channel_id, current_user)
     await _validate_or_raise(session, psk_channel_id, scenario_id)
 
     if view_mode == ViewMode.HYBRID:
@@ -126,6 +154,7 @@ async def patch_value_endpoint(
     Append-only: каждый PATCH = новая строка с увеличенным version_id.
     Старые версии остаются как audit log.
     """
+    await _require_psc_owned(session, psk_channel_id, current_user)
     await _validate_or_raise(session, psk_channel_id, scenario_id, period_id)
 
     pv = await period_value_service.patch_value(
@@ -165,6 +194,7 @@ async def get_value_history_endpoint(
 
     Возвращает append-only историю: predict → finetuned (v1, v2, ...) → actual.
     """
+    await _require_psc_owned(session, psk_channel_id, current_user)
     await _validate_or_raise(session, psk_channel_id, scenario_id, period_id)
     return await period_value_service.get_value_history(
         session, psk_channel_id, scenario_id, period_id
@@ -179,6 +209,7 @@ async def get_value_history_endpoint(
 batch_router = APIRouter(
     prefix="/api/projects/{project_id}/scenarios/{scenario_id}",
     tags=["period-values"],
+    dependencies=[Depends(require_owned_project)],
 )
 
 
@@ -256,6 +287,7 @@ async def reset_override_endpoint(
     период. Идемпотентно: если finetuned не было — вернёт deleted=0
     без ошибки.
     """
+    await _require_psc_owned(session, psk_channel_id, current_user)
     await _validate_or_raise(session, psk_channel_id, scenario_id, period_id)
 
     deleted = await period_value_service.reset_value_to_predict(

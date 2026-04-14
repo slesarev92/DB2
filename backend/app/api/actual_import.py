@@ -58,7 +58,7 @@ async def upload_actual_data_endpoint(
     Формат: колонки Period, SKU, Channel, nd, offtake, shelf_price.
     Скачайте шаблон через GET .../actual-import/template.
     """
-    project = await project_service.get_project(session, project_id)
+    project = await project_service.get_project(session, project_id, user=current_user)
     if project is None:
         raise _project_not_found
 
@@ -117,7 +117,7 @@ async def download_actual_template_endpoint(
     Шаблон содержит строки для каждой комбинации
     (Period × SKU × Channel) данного проекта.
     """
-    project = await project_service.get_project(session, project_id)
+    project = await project_service.get_project(session, project_id, user=current_user)
     if project is None:
         raise _project_not_found
 

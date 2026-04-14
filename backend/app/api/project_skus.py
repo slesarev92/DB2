@@ -41,7 +41,7 @@ async def list_project_skus_endpoint(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[ProjectSKURead]:
-    project = await project_service.get_project(session, project_id)
+    project = await project_service.get_project(session, project_id, user=current_user)
     if project is None:
         raise _project_not_found
 
@@ -60,7 +60,7 @@ async def add_sku_to_project_endpoint(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> ProjectSKURead:
-    project = await project_service.get_project(session, project_id)
+    project = await project_service.get_project(session, project_id, user=current_user)
     if project is None:
         raise _project_not_found
 
@@ -81,6 +81,22 @@ async def add_sku_to_project_endpoint(
     return ProjectSKURead.model_validate(psk)
 
 
+async def _load_owned_psk(
+    session: AsyncSession, psk_id: int, user: User
+):
+    """Резолвит ProjectSKU и проверяет что его проект принадлежит user.
+    Возвращает psk или raises 404 (не раскрывая факт существования).
+    """
+    psk = await project_sku_service.get_project_sku(session, psk_id)
+    if psk is None:
+        raise _not_found
+    # S-01 IDOR: verify the project belongs to current user.
+    owned = await project_service.get_project(session, psk.project_id, user=user)
+    if owned is None:
+        raise _not_found
+    return psk
+
+
 @router.get(
     "/api/project-skus/{psk_id}",
     response_model=ProjectSKUDetail,
@@ -91,9 +107,7 @@ async def get_project_sku_endpoint(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> ProjectSKUDetail:
     """Detail с preview-расчётом COGS_PER_UNIT (только на single GET)."""
-    psk = await project_sku_service.get_project_sku(session, psk_id)
-    if psk is None:
-        raise _not_found
+    psk = await _load_owned_psk(session, psk_id, current_user)
 
     cogs = await project_sku_service.calculate_cogs_per_unit_preview(
         session, psk_id
@@ -114,9 +128,7 @@ async def update_project_sku_endpoint(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> ProjectSKURead:
-    psk = await project_sku_service.get_project_sku(session, psk_id)
-    if psk is None:
-        raise _not_found
+    psk = await _load_owned_psk(session, psk_id, current_user)
     updated = await project_sku_service.update_project_sku(session, psk, data)
     await session.commit()
     return ProjectSKURead.model_validate(updated)
@@ -132,8 +144,6 @@ async def delete_project_sku_endpoint(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> None:
     """Удаляет ProjectSKU. Связанные BOMItem каскадно удаляются (FK CASCADE)."""
-    psk = await project_sku_service.get_project_sku(session, psk_id)
-    if psk is None:
-        raise _not_found
+    psk = await _load_owned_psk(session, psk_id, current_user)
     await project_sku_service.delete_project_sku(session, psk)
     await session.commit()

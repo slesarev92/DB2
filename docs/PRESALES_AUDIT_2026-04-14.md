@@ -558,7 +558,7 @@ _(ещё не проходили)_
 
 | # | Finding | Severity | Effort | Phase |
 |---|---|---|---|---|
-| 1 | **S-01 IDOR** — любой юзер читает/меняет чужие проекты | CRITICAL | 3-5ч | 1 |
+| 1 | ~~**S-01 IDOR**~~ ✅ FIXED 2026-04-14 — filter by created_by + 7 regression tests | — | done | 1 |
 | 2 | **S-02 prod admin/admin123** — тривиальный пароль на проде | CRITICAL | 30мин | 1 |
 | 3 | **U-02 BUG-01** — экспорт не работает на prod (delivery) | HIGH | 1-2ч debug | 4 |
 | 4 | **U-03 BUG-07** — layout съезжает при пустом SKU списке | HIGH | 10мин | 4 |

@@ -17,7 +17,11 @@ from app.schemas.project_sku_channel import (
     ProjectSKUChannelRead,
     ProjectSKUChannelUpdate,
 )
-from app.services import project_sku_channel_service, project_sku_service
+from app.services import (
+    project_service,
+    project_sku_channel_service,
+    project_sku_service,
+)
 
 router = APIRouter(tags=["psk-channels"])
 
@@ -31,6 +35,37 @@ _psk_channel_not_found = HTTPException(
 )
 
 
+async def _require_psk_owned(
+    session: AsyncSession, psk_id: int, user: User
+):
+    """Load ProjectSKU и проверить ownership через project. 404 если нет."""
+    psk = await project_sku_service.get_project_sku(session, psk_id)
+    if psk is None:
+        raise _psk_not_found
+    if not await project_service.is_project_owned_by(
+        session, psk.project_id, user
+    ):
+        raise _psk_not_found
+    return psk
+
+
+async def _require_psk_channel_owned(
+    session: AsyncSession, psk_channel_id: int, user: User
+):
+    """Load PSC и проверить ownership через psk → project. 404 если нет."""
+    psc = await project_sku_channel_service.get_psk_channel(
+        session, psk_channel_id
+    )
+    if psc is None:
+        raise _psk_channel_not_found
+    psk = await project_sku_service.get_project_sku(session, psc.project_sku_id)
+    if psk is None or not await project_service.is_project_owned_by(
+        session, psk.project_id, user
+    ):
+        raise _psk_channel_not_found
+    return psc
+
+
 @router.get(
     "/api/project-skus/{psk_id}/channels",
     response_model=list[ProjectSKUChannelRead],
@@ -40,9 +75,7 @@ async def list_psk_channels_endpoint(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[ProjectSKUChannelRead]:
-    psk = await project_sku_service.get_project_sku(session, psk_id)
-    if psk is None:
-        raise _psk_not_found
+    await _require_psk_owned(session, psk_id, current_user)
 
     items = await project_sku_channel_service.list_channels_for_psk(
         session, psk_id
@@ -61,9 +94,7 @@ async def add_channel_to_psk_endpoint(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> ProjectSKUChannelRead:
-    psk = await project_sku_service.get_project_sku(session, psk_id)
-    if psk is None:
-        raise _psk_not_found
+    await _require_psk_owned(session, psk_id, current_user)
 
     try:
         psk_channel = await project_sku_channel_service.create_psk_channel(
@@ -93,11 +124,9 @@ async def get_psk_channel_endpoint(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> ProjectSKUChannelRead:
-    psk_channel = await project_sku_channel_service.get_psk_channel(
-        session, psk_channel_id
+    psk_channel = await _require_psk_channel_owned(
+        session, psk_channel_id, current_user
     )
-    if psk_channel is None:
-        raise _psk_channel_not_found
     return ProjectSKUChannelRead.model_validate(psk_channel)
 
 
@@ -111,11 +140,9 @@ async def update_psk_channel_endpoint(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> ProjectSKUChannelRead:
-    psk_channel = await project_sku_channel_service.get_psk_channel(
-        session, psk_channel_id
+    psk_channel = await _require_psk_channel_owned(
+        session, psk_channel_id, current_user
     )
-    if psk_channel is None:
-        raise _psk_channel_not_found
 
     updated = await project_sku_channel_service.update_psk_channel(
         session, psk_channel, data
@@ -133,10 +160,8 @@ async def delete_psk_channel_endpoint(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> None:
-    psk_channel = await project_sku_channel_service.get_psk_channel(
-        session, psk_channel_id
+    psk_channel = await _require_psk_channel_owned(
+        session, psk_channel_id, current_user
     )
-    if psk_channel is None:
-        raise _psk_channel_not_found
     await project_sku_channel_service.delete_psk_channel(session, psk_channel)
     await session.commit()

@@ -33,7 +33,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 from datetime import datetime, timezone
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_owned_project
 from app.core.rate_limit import limiter
 from app.db import get_db
 from app.models import (
@@ -110,9 +110,12 @@ logger = logging.getLogger(__name__)
 
 # Префикс /api/projects/{project_id}/ai — все AI endpoint'ы привязаны
 # к проекту. Исключение — админ endpoint'ы (в MVP не нужны).
+# router-level require_owned_project dependency закрывает S-01 IDOR
+# для всех AI endpoint'ов одним махом.
 router = APIRouter(
     prefix="/api/projects/{project_id}/ai",
     tags=["ai"],
+    dependencies=[Depends(require_owned_project)],
 )
 
 

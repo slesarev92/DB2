@@ -168,10 +168,18 @@ async def client(
 
 @pytest_asyncio.fixture
 async def test_user(db_session: AsyncSession) -> User:
-    """Тестовый пользователь, который используется в защищённых endpoint'ах."""
+    """Тестовый пользователь для защищённых endpoint'ов.
+
+    Role=ADMIN — смотрит любые проекты (для тестов бизнес-логики,
+    которые создают projects напрямую через session без `created_by`).
+    Для specific security/IDOR тестов использовать отдельный ANALYST
+    fixture (см. tests/api/test_security_idor.py).
+    """
+    from app.models import UserRole
     user = User(
         email="testuser@example.com",
         hashed_password=hash_password("testpass123"),
+        role=UserRole.ADMIN,
     )
     db_session.add(user)
     await db_session.flush()

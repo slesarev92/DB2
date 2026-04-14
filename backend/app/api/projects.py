@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_owned_project
 from app.db import get_db
 from app.models import Project, User
 from app.schemas.project import (
@@ -74,7 +74,7 @@ async def list_projects_endpoint(
     После POST /api/projects/{id}/recalculate появляются значения из
     ScenarioResult (LEFT JOIN в project_service.list_projects).
     """
-    rows = await project_service.list_projects(session)
+    rows = await project_service.list_projects(session, user=current_user)
     items: list[ProjectListItem] = []
     for row in rows:
         item = ProjectListItem.model_validate(row.project)
@@ -108,7 +108,7 @@ async def get_project_endpoint(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> ProjectRead:
-    project = await project_service.get_project(session, project_id)
+    project = await project_service.get_project(session, project_id, user=current_user)
     if project is None:
         raise _not_found
     return ProjectRead.model_validate(project)
@@ -121,7 +121,7 @@ async def update_project_endpoint(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> ProjectRead:
-    project = await project_service.get_project(session, project_id)
+    project = await project_service.get_project(session, project_id, user=current_user)
     if project is None:
         raise _not_found
     updated = await project_service.update_project(session, project, data)
@@ -137,7 +137,7 @@ async def delete_project_endpoint(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> None:
     """Soft delete: проставляет deleted_at, физически не удаляет."""
-    project = await project_service.get_project(session, project_id)
+    project = await project_service.get_project(session, project_id, user=current_user)
     if project is None:
         raise _not_found
     await project_service.soft_delete_project(session, project)
@@ -161,7 +161,7 @@ async def recalculate_project_endpoint(
     Импорт task'а внутри функции, чтобы при загрузке модуля projects.py
     не подтягивать celery_app (упрощает unit-тестирование api без worker).
     """
-    project = await project_service.get_project(session, project_id)
+    project = await project_service.get_project(session, project_id, user=current_user)
     if project is None:
         raise _not_found
 
@@ -209,7 +209,7 @@ async def sensitivity_analysis_endpoint(
     from sqlalchemy import select
     from app.models import Scenario, ScenarioType
 
-    project = await project_service.get_project(session, project_id)
+    project = await project_service.get_project(session, project_id, user=current_user)
     if project is None:
         raise _not_found
 
@@ -257,7 +257,7 @@ async def pricing_summary_endpoint(
     """Сводная ценовая таблица (Phase 8.1)."""
     from app.services.pricing_service import build_pricing_summary
 
-    project = await project_service.get_project(session, project_id)
+    project = await project_service.get_project(session, project_id, user=current_user)
     if project is None:
         raise _not_found
 
@@ -277,7 +277,7 @@ async def value_chain_endpoint(
     """Стакан / Value Chain (Phase 8.2)."""
     from app.services.pricing_service import build_value_chain
 
-    project = await project_service.get_project(session, project_id)
+    project = await project_service.get_project(session, project_id, user=current_user)
     if project is None:
         raise _not_found
 
@@ -310,7 +310,7 @@ async def pnl_endpoint(
         build_line_inputs,
     )
 
-    project = await project_service.get_project(session, project_id)
+    project = await project_service.get_project(session, project_id, user=current_user)
     if project is None:
         raise _not_found
 
@@ -434,7 +434,7 @@ async def export_project_xlsx_endpoint(
     except ProjectNotFoundForExport:
         raise _not_found
 
-    project = await project_service.get_project(session, project_id)
+    project = await project_service.get_project(session, project_id, user=current_user)
     content_disposition = _build_export_content_disposition(
         project, project_id, ".xlsx"
     )
@@ -488,7 +488,7 @@ async def export_project_pptx_endpoint(
     except ProjectNotFoundForExport:
         raise _not_found
 
-    project = await project_service.get_project(session, project_id)
+    project = await project_service.get_project(session, project_id, user=current_user)
     content_disposition = _build_export_content_disposition(
         project, project_id, ".pptx"
     )
@@ -537,7 +537,7 @@ async def export_project_pdf_endpoint(
     except ProjectNotFoundForExport:
         raise _not_found
 
-    project = await project_service.get_project(session, project_id)
+    project = await project_service.get_project(session, project_id, user=current_user)
     content_disposition = _build_export_content_disposition(
         project, project_id, ".pdf"
     )

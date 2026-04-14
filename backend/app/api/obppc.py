@@ -7,13 +7,17 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_owned_project
 from app.db import get_db
 from app.models import User
 from app.schemas.obppc import OBPPCCreate, OBPPCRead, OBPPCUpdate
 from app.services import obppc_service
 
-router = APIRouter(prefix="/api/projects/{project_id}/obppc", tags=["obppc"])
+router = APIRouter(
+    prefix="/api/projects/{project_id}/obppc",
+    tags=["obppc"],
+    dependencies=[Depends(require_owned_project)],
+)
 
 _not_found = HTTPException(
     status_code=status.HTTP_404_NOT_FOUND,

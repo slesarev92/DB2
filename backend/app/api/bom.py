@@ -13,7 +13,7 @@ from app.api.deps import get_current_user
 from app.db import get_db
 from app.models import User
 from app.schemas.bom import BOMItemCreate, BOMItemRead, BOMItemUpdate
-from app.services import bom_service, project_sku_service
+from app.services import bom_service, project_service, project_sku_service
 
 router = APIRouter(tags=["bom"])
 
@@ -27,6 +27,35 @@ _psk_not_found = HTTPException(
 )
 
 
+async def _require_psk_owned(
+    session: AsyncSession, psk_id: int, user: User
+):
+    """Load PSK and verify project ownership; raises 404 otherwise."""
+    psk = await project_sku_service.get_project_sku(session, psk_id)
+    if psk is None:
+        raise _psk_not_found
+    if not await project_service.is_project_owned_by(
+        session, psk.project_id, user
+    ):
+        raise _psk_not_found
+    return psk
+
+
+async def _require_bom_owned(
+    session: AsyncSession, bom_id: int, user: User
+):
+    """Load BOM item → psk → project, verify ownership. 404 otherwise."""
+    bom = await bom_service.get_bom_item(session, bom_id)
+    if bom is None:
+        raise _bom_not_found
+    psk = await project_sku_service.get_project_sku(session, bom.project_sku_id)
+    if psk is None or not await project_service.is_project_owned_by(
+        session, psk.project_id, user
+    ):
+        raise _bom_not_found
+    return bom
+
+
 @router.get(
     "/api/project-skus/{psk_id}/bom",
     response_model=list[BOMItemRead],
@@ -36,9 +65,7 @@ async def list_bom_endpoint(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[BOMItemRead]:
-    psk = await project_sku_service.get_project_sku(session, psk_id)
-    if psk is None:
-        raise _psk_not_found
+    await _require_psk_owned(session, psk_id, current_user)
     items = await bom_service.list_bom_items(session, psk_id)
     # Enrich with ingredient category from catalog (UX-10)
     result = []
@@ -70,9 +97,7 @@ async def create_bom_endpoint(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> BOMItemRead:
-    psk = await project_sku_service.get_project_sku(session, psk_id)
-    if psk is None:
-        raise _psk_not_found
+    await _require_psk_owned(session, psk_id, current_user)
     bom = await bom_service.create_bom_item(session, psk_id, data)
     await session.commit()
     await session.refresh(bom)
@@ -89,9 +114,7 @@ async def update_bom_endpoint(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> BOMItemRead:
-    bom = await bom_service.get_bom_item(session, bom_id)
-    if bom is None:
-        raise _bom_not_found
+    bom = await _require_bom_owned(session, bom_id, current_user)
     updated = await bom_service.update_bom_item(session, bom, data)
     await session.commit()
     await session.refresh(updated)
@@ -107,8 +130,6 @@ async def delete_bom_endpoint(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> None:
-    bom = await bom_service.get_bom_item(session, bom_id)
-    if bom is None:
-        raise _bom_not_found
+    bom = await _require_bom_owned(session, bom_id, current_user)
     await bom_service.delete_bom_item(session, bom)
     await session.commit()

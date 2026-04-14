@@ -67,7 +67,7 @@ async def upload_media_endpoint(
     Валидация: kind ∈ whitelist, content_type ∈ {png,jpeg,webp},
     размер ≤ 10 MB, файл не пустой. При ошибках — 400.
     """
-    project = await project_service.get_project(session, project_id)
+    project = await project_service.get_project(session, project_id, user=current_user)
     if project is None:
         raise _project_not_found
 
@@ -107,7 +107,7 @@ async def list_project_media_endpoint(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[MediaAssetRead]:
     """Все MediaAsset проекта (DESC по created_at)."""
-    project = await project_service.get_project(session, project_id)
+    project = await project_service.get_project(session, project_id, user=current_user)
     if project is None:
         raise _project_not_found
 

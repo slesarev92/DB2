@@ -42,7 +42,7 @@ async def get_project_financial_plan_endpoint(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[FinancialPlanItem]:
     """Всегда 10 строк Y1..Y10. Отсутствующие значения = 0."""
-    project = await project_service.get_project(session, project_id)
+    project = await project_service.get_project(session, project_id, user=current_user)
     if project is None:
         raise _project_not_found
     return await financial_plan_service.list_plan_by_year(session, project_id)
@@ -59,7 +59,7 @@ async def put_project_financial_plan_endpoint(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[FinancialPlanItem]:
     """Полная замена плана проекта. Возвращает обновлённый список."""
-    project = await project_service.get_project(session, project_id)
+    project = await project_service.get_project(session, project_id, user=current_user)
     if project is None:
         raise _project_not_found
     result = await financial_plan_service.replace_plan(
