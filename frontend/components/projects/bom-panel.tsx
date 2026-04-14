@@ -67,6 +67,7 @@ interface NewBomDraft {
   quantity_per_unit: string;
   loss_pct: string;
   price_per_unit: string;
+  vat_rate: string;
 }
 
 const EMPTY_DRAFT: NewBomDraft = {
@@ -74,6 +75,7 @@ const EMPTY_DRAFT: NewBomDraft = {
   quantity_per_unit: "",
   loss_pct: "0",
   price_per_unit: "",
+  vat_rate: "0.20",
 };
 
 type BomField = keyof NewBomDraft;
@@ -83,6 +85,7 @@ const BOM_RULES: ValidationRules<BomField> = {
   quantity_per_unit: { required: true, numeric: true, min: 0 },
   loss_pct: { numeric: true, min: 0, max: 1 },
   price_per_unit: { numeric: true, min: 0 },
+  vat_rate: { numeric: true, min: 0, max: 1 },
 };
 
 /** Σ (qty × price × (1 + loss)) — preview расчёт COGS на единицу. */
@@ -188,6 +191,7 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
         quantity_per_unit: draft.quantity_per_unit,
         loss_pct: draft.loss_pct || "0",
         price_per_unit: draft.price_per_unit || "0",
+        vat_rate: draft.vat_rate || "0.20",
       });
       setDraft(EMPTY_DRAFT);
       reload();
@@ -453,8 +457,9 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
                     % потерь{sortIndicator(bomSortState, "loss")}
                   </TableHead>
                   <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleBomSort("price")}>
-                    Цена/ед, ₽{sortIndicator(bomSortState, "price")}
+                    Цена/ед, ₽ (без НДС){sortIndicator(bomSortState, "price")}
                   </TableHead>
+                  <TableHead className="text-right">НДС, %</TableHead>
                   <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleBomSort("cost")}>
                     Стоимость, ₽{sortIndicator(bomSortState, "cost")}
                   </TableHead>
@@ -483,6 +488,9 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
                           maximumFractionDigits: 4,
                         })}
                       </TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {(Number(b.vat_rate ?? 0.20) * 100).toFixed(0)}%
+                      </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatMoney(String(itemCost))}
                       </TableCell>
@@ -507,7 +515,7 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
             onSubmit={handleAdd}
             className="grid grid-cols-12 items-end gap-2 border-t pt-4"
           >
-            <div className="col-span-4 space-y-1">
+            <div className="col-span-3 space-y-1">
               <Label htmlFor="bom-name" className="text-xs">
                 Ингредиент *
               </Label>
@@ -587,9 +595,36 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
               />
               <FieldError error={bomErrors.price_per_unit} />
             </div>
-            <div className="col-span-2">
-              <Button type="submit" disabled={adding} className="w-full">
-                {adding ? "..." : "Добавить"}
+            <div className="col-span-2 space-y-1">
+              <Label htmlFor="bom-vat" className="text-xs">
+                НДС (доля)
+              </Label>
+              <Input
+                id="bom-vat"
+                type="number"
+                step="0.01"
+                min="0"
+                max="1"
+                value={draft.vat_rate}
+                onChange={(e) => {
+                  setDraft({ ...draft, vat_rate: e.target.value });
+                  clearBomError("vat_rate");
+                }}
+                aria-invalid={!!bomErrors.vat_rate}
+                disabled={adding}
+                placeholder="0.20"
+                list="vat-presets"
+              />
+              <datalist id="vat-presets">
+                <option value="0" />
+                <option value="0.10" />
+                <option value="0.20" />
+              </datalist>
+              <FieldError error={bomErrors.vat_rate} />
+            </div>
+            <div className="col-span-1">
+              <Button type="submit" disabled={adding} className="w-full" size="sm">
+                {adding ? "..." : "+"}
               </Button>
             </div>
           </form>

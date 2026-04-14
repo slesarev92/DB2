@@ -590,6 +590,12 @@ class BOMItem(Base, TimestampMixin):
     price_per_unit: Mapped[Decimal] = mapped_column(
         Numeric(15, 4), nullable=False, default=Decimal("0")
     )
+    # LOGIC-07: НДС ингредиента (справочная информация, не влияет на COGS).
+    # Типичные значения: 0.00 (нулевая), 0.10 (льготная для продуктов),
+    # 0.20 (стандартная в РФ). Используется только для закупочной справки.
+    vat_rate: Mapped[Decimal] = mapped_column(
+        Numeric(8, 6), nullable=False, default=Decimal("0.20")
+    )
     # B-04: optional link to ingredient catalog for auto-pricing
     ingredient_id: Mapped[int | None] = mapped_column(
         ForeignKey("ingredients.id", ondelete="SET NULL"),

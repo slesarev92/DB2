@@ -10,6 +10,8 @@ class BOMItemBase(BaseModel):
     quantity_per_unit: Decimal = Field(..., ge=0)
     loss_pct: Decimal = Field(default=Decimal("0"), ge=0, le=1)
     price_per_unit: Decimal = Field(default=Decimal("0"), ge=0)
+    # LOGIC-07: НДС ингредиента (справочная, не влияет на расчёты).
+    vat_rate: Decimal = Field(default=Decimal("0.20"), ge=0, le=1)
 
 
 class BOMItemCreate(BOMItemBase):
@@ -29,6 +31,7 @@ class BOMItemUpdate(BaseModel):
     quantity_per_unit: Decimal | None = Field(default=None, ge=0)
     loss_pct: Decimal | None = Field(default=None, ge=0, le=1)
     price_per_unit: Decimal | None = Field(default=None, ge=0)
+    vat_rate: Decimal | None = Field(default=None, ge=0, le=1)
     ingredient_id: int | None = None
 
 

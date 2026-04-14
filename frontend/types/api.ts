@@ -276,6 +276,7 @@ export interface BOMItemCreate {
   quantity_per_unit: string;
   loss_pct?: string;
   price_per_unit?: string;
+  vat_rate?: string;
 }
 
 export interface BOMItemUpdate {
@@ -283,6 +284,7 @@ export interface BOMItemUpdate {
   quantity_per_unit?: string;
   loss_pct?: string;
   price_per_unit?: string;
+  vat_rate?: string;
 }
 
 export interface BOMItemRead {
@@ -292,6 +294,7 @@ export interface BOMItemRead {
   quantity_per_unit: string;
   loss_pct: string;
   price_per_unit: string;
+  vat_rate: string;
   ingredient_id?: number | null;
   ingredient_category?: string | null;
   created_at: string;
