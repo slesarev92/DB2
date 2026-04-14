@@ -111,7 +111,10 @@ export default function NewProjectPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="start_date">Дата старта *</Label>
+                <Label htmlFor="start_date" className="flex items-center gap-1.5">
+                  Дата старта *
+                  <HelpButton help="project.start_date" />
+                </Label>
                 <Input
                   id="start_date"
                   type="date"
@@ -122,7 +125,10 @@ export default function NewProjectPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="horizon_years">Горизонт, лет *</Label>
+                <Label htmlFor="horizon_years" className="flex items-center gap-1.5">
+                  Горизонт, лет *
+                  <HelpButton help="project.horizon_years" />
+                </Label>
                 <Input
                   id="horizon_years"
                   type="number"

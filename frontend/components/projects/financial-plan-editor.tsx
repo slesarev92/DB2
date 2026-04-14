@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { HelpButton } from "@/components/ui/help-button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -246,8 +247,18 @@ export function FinancialPlanEditor({ projectId }: FinancialPlanEditorProps) {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-24">Год</TableHead>
-                <TableHead>CAPEX, ₽</TableHead>
-                <TableHead>Project OPEX, ₽</TableHead>
+                <TableHead>
+                  <span className="inline-flex items-center gap-1.5">
+                    CAPEX, ₽
+                    <HelpButton help="financial_plan.capex" />
+                  </span>
+                </TableHead>
+                <TableHead>
+                  <span className="inline-flex items-center gap-1.5">
+                    Project OPEX, ₽
+                    <HelpButton help="financial_plan.opex" />
+                  </span>
+                </TableHead>
                 <TableHead className="w-28" />
               </TableRow>
             </TableHeader>

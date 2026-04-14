@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { HelpButton } from "@/components/ui/help-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -379,9 +380,10 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
                   <div className="space-y-2">
                     <Label
                       htmlFor={`delta-nd-${s.id}`}
-                      className="text-xs text-muted-foreground"
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground"
                     >
                       ND, %
+                      <HelpButton help="scenario.delta_nd" />
                     </Label>
                     <Input
                       id={`delta-nd-${s.id}`}
@@ -397,9 +399,10 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
                   <div className="space-y-2">
                     <Label
                       htmlFor={`delta-off-${s.id}`}
-                      className="text-xs text-muted-foreground"
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground"
                     >
                       Off-take, %
+                      <HelpButton help="scenario.delta_offtake" />
                     </Label>
                     <Input
                       id={`delta-off-${s.id}`}
@@ -415,9 +418,10 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
                   <div className="space-y-2">
                     <Label
                       htmlFor={`delta-opex-${s.id}`}
-                      className="text-xs text-muted-foreground"
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground"
                     >
                       OPEX, %
+                      <HelpButton help="scenario.delta_opex" />
                     </Label>
                     <Input
                       id={`delta-opex-${s.id}`}
