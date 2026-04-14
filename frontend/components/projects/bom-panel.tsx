@@ -122,6 +122,21 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
   const { sorted: sortedBom, sortState: bomSortState, toggleSort: toggleBomSort } =
     useSortableTable(bom ?? [], BOM_SORT_COLUMNS);
 
+  // UX-10: BOM summary by ingredient category (moved here, hooks before early returns)
+  const categorySums = useMemo(() => {
+    const sums: Record<string, number> = {};
+    if (bom === null) return sums;
+    for (const b of bom) {
+      const cat = b.ingredient_category ?? "other";
+      const cost =
+        Number(b.quantity_per_unit) *
+        Number(b.price_per_unit) *
+        (1 + Number(b.loss_pct));
+      sums[cat] = (sums[cat] ?? 0) + cost;
+    }
+    return sums;
+  }, [bom]);
+
   // Локальные значения rates для редактирования (PATCH on blur)
   const [productionMode, setProductionMode] = useState("own");
   const [copackingRate, setCopackingRate] = useState("");
@@ -243,24 +258,12 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
 
   const cogsPreview = computeCogsPreview(bom);
 
-  // UX-10: BOM summary by ingredient category
+  // UX-10: BOM summary by ingredient category — labels
   const CATEGORY_LABELS_BOM: Record<string, string> = {
     raw_material: "Сырьё",
     packaging: "Упаковка",
     other: "Прочее",
   };
-  const categorySums = useMemo(() => {
-    const sums: Record<string, number> = {};
-    for (const b of bom) {
-      const cat = b.ingredient_category ?? "other";
-      const cost =
-        Number(b.quantity_per_unit) *
-        Number(b.price_per_unit) *
-        (1 + Number(b.loss_pct));
-      sums[cat] = (sums[cat] ?? 0) + cost;
-    }
-    return sums;
-  }, [bom]);
 
   return (
     <div className="space-y-4">
