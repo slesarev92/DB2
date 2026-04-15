@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { AddSkuDialog } from "@/components/projects/add-sku-dialog";
 import { Button } from "@/components/ui/button";
@@ -72,14 +73,16 @@ export function SkuPanel({
     setDeletingPskId(null);
     try {
       await deleteProjectSku(id);
+      toast.success("SKU удалён");
       if (selectedPskId === id) {
         onSelectPsk(null);
       }
       reload();
     } catch (err) {
-      setError(
-        err instanceof ApiError ? err.detail ?? err.message : "Ошибка удаления",
-      );
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка удаления";
+      setError(msg);
+      toast.error(`Не удалось удалить SKU: ${msg}`);
     }
   }
 

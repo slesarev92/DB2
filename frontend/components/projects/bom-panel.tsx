@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -233,9 +234,13 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
         vat_rate: draft.vat_rate || "0.20",
       });
       setDraft(EMPTY_DRAFT);
+      toast.success("Ингредиент добавлен в BOM");
       reload();
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail ?? err.message : "Ошибка");
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка";
+      setError(msg);
+      toast.error(`Не удалось добавить ингредиент: ${msg}`);
     } finally {
       setAdding(false);
     }
@@ -276,9 +281,13 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
     setDeletingBomId(null);
     try {
       await deleteBomItem(id);
+      toast.success("Ингредиент удалён");
       reload();
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail ?? err.message : "Ошибка");
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка";
+      setError(msg);
+      toast.error(`Не удалось удалить: ${msg}`);
     }
   }
 
@@ -304,9 +313,13 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
         ca_m_rate: caMRate,
         marketing_rate: marketingRate,
       });
+      toast.success("Параметры SKU сохранены");
       reload();
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail ?? err.message : "Ошибка");
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка";
+      setError(msg);
+      toast.error(`Не удалось сохранить параметры: ${msg}`);
     } finally {
       setSavingRates(false);
     }

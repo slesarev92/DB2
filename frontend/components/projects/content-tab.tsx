@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { GanttChart } from "@/components/projects/gantt-chart";
 import { Button } from "@/components/ui/button";
@@ -231,14 +232,16 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
         const updated = await updateProject(projectId, body);
         setProject(updated);
         setSavedAt(new Date());
+        toast.success(`Поле «${field}» сохранено`);
         onProjectUpdate?.(body as unknown as Record<string, unknown>);
         return true;
       } catch (err) {
-        setSaveError(
+        const msg =
           err instanceof ApiError
             ? err.detail ?? err.message
-            : "Ошибка сохранения",
-        );
+            : "Ошибка сохранения";
+        setSaveError(msg);
+        toast.error(`Не удалось сохранить «${field}»: ${msg}`);
         return false;
       } finally {
         setSavingField(null);

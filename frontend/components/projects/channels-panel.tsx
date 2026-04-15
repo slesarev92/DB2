@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import {
   AddChannelDialog,
@@ -99,9 +100,13 @@ export function ChannelsPanel({ pskId }: ChannelsPanelProps) {
     setDeletingId(null);
     try {
       await deletePskChannel(id);
+      toast.success("Канал отвязан");
       reload();
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail ?? err.message : "Ошибка");
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка";
+      setError(msg);
+      toast.error(`Не удалось отвязать канал: ${msg}`);
     }
   }
 

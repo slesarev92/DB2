@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -77,9 +78,13 @@ export default function NewProjectPage() {
     setSubmitting(true);
     try {
       const created = await createProject(form);
+      toast.success(`Проект «${created.name}» создан`);
       router.push(`/projects/${created.id}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail ?? err.message : "Ошибка создания");
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка создания";
+      setError(msg);
+      toast.error(`Не удалось создать проект: ${msg}`);
       setSubmitting(false);
     }
   }

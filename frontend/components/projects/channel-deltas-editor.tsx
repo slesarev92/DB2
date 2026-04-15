@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -173,12 +174,14 @@ export function ChannelDeltasEditor({
         await putChannelDeltas(s.id, { items });
       }
       setSavedAt(new Date());
+      toast.success("Дельты каналов сохранены");
     } catch (err) {
-      setError(
+      const msg =
         err instanceof ApiError
           ? err.detail ?? err.message
-          : "Ошибка сохранения",
-      );
+          : "Ошибка сохранения";
+      setError(msg);
+      toast.error(`Не удалось сохранить дельты: ${msg}`);
     } finally {
       setSaving(false);
     }

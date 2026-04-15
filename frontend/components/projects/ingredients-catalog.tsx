@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -117,11 +118,13 @@ export function IngredientsCatalog() {
         category: newCategory,
       });
       setNewName("");
+      toast.success("Ингредиент добавлен в каталог");
       await loadIngredients();
     } catch (err) {
-      setError(
-        err instanceof ApiError ? err.detail ?? err.message : "Ошибка",
-      );
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка";
+      setError(msg);
+      toast.error(`Не удалось добавить: ${msg}`);
     } finally {
       setAdding(false);
     }
@@ -136,11 +139,13 @@ export function IngredientsCatalog() {
     try {
       await deleteIngredient(id);
       if (expandedId === id) setExpandedId(null);
+      toast.success("Ингредиент удалён");
       await loadIngredients();
     } catch (err) {
-      setError(
-        err instanceof ApiError ? err.detail ?? err.message : "Ошибка",
-      );
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка";
+      setError(msg);
+      toast.error(`Не удалось удалить ингредиент: ${msg}`);
     }
   }
 
@@ -172,11 +177,13 @@ export function IngredientsCatalog() {
       setPrices(data);
       setNewPrice("");
       setNewDate("");
+      toast.success("Цена ингредиента обновлена");
       await loadIngredients();
     } catch (err) {
-      setError(
-        err instanceof ApiError ? err.detail ?? err.message : "Ошибка",
-      );
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка";
+      setError(msg);
+      toast.error(`Не удалось добавить цену: ${msg}`);
     } finally {
       setAddingPrice(false);
     }

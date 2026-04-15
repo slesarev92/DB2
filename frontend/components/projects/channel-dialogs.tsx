@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { toast } from "sonner";
 
 import {
   ChannelForm,
@@ -66,10 +67,14 @@ export function AddChannelDialog({
     setSubmitting(true);
     try {
       await addChannelToPsk(pskId, toPscPayload(form));
+      toast.success("Канал привязан");
       onAdded();
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail ?? err.message : "Ошибка");
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка";
+      setError(msg);
+      toast.error(`Не удалось привязать канал: ${msg}`);
       setSubmitting(false);
     }
   }
@@ -187,10 +192,14 @@ export function EditChannelDialog({
       const { channel_id: _, ...patch } = payload;
       void _;
       await updatePskChannel(pskChannel.id, patch);
+      toast.success("Канал сохранён");
       onSaved();
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail ?? err.message : "Ошибка");
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка";
+      setError(msg);
+      toast.error(`Не удалось сохранить канал: ${msg}`);
       setSubmitting(false);
     }
   }

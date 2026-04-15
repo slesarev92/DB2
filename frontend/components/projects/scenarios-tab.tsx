@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { ChannelDeltasEditor } from "@/components/projects/channel-deltas-editor";
 import { GoNoGoBadge } from "@/components/go-no-go-badge";
@@ -225,14 +226,18 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
       const { task_id } = await recalculateProject(projectId);
       const result = await pollTaskStatus(task_id, (s) => setRecalcStatus(s));
       if (!result.ok) {
-        setRecalcError(result.error ?? "Неизвестная ошибка");
+        const errMsg = result.error ?? "Неизвестная ошибка";
+        setRecalcError(errMsg);
+        toast.error(`Расчёт упал: ${errMsg}`);
       } else {
+        toast.success("Сценарии сохранены и пересчитаны");
         await loadAll();
       }
     } catch (err) {
-      setRecalcError(
-        err instanceof ApiError ? err.detail ?? err.message : "Ошибка",
-      );
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка";
+      setRecalcError(msg);
+      toast.error(`Ошибка сохранения сценариев: ${msg}`);
     } finally {
       setRecalculating(false);
     }

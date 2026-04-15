@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { Toaster } from "sonner";
 
 import { AuthProvider } from "@/components/auth-provider";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,12 @@ export default function RootLayout({
     <html lang="ru" className={cn("font-sans", inter.variable)}>
       <body className="min-h-screen bg-background text-foreground antialiased">
         <AuthProvider>{children}</AuthProvider>
+        <Toaster
+          position="top-right"
+          richColors
+          closeButton
+          duration={4000}
+        />
       </body>
     </html>
   );

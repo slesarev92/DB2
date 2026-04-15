@@ -2,11 +2,12 @@
 from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_owned_project
+from app.core.rate_limit import limiter
 from app.db import get_db
 from app.models import Project, User
 from app.schemas.project import (
@@ -148,7 +149,9 @@ async def delete_project_endpoint(
     "/{project_id}/recalculate",
     status_code=status.HTTP_202_ACCEPTED,
 )
+@limiter.limit("10/minute")
 async def recalculate_project_endpoint(
+    request: Request,  # noqa: ARG001 — slowapi key_func читает request.client
     project_id: int,
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
@@ -403,7 +406,9 @@ async def pnl_endpoint(
         404: {"description": "Project не найден"},
     },
 )
+@limiter.limit("20/minute")
 async def export_project_xlsx_endpoint(
+    request: Request,  # noqa: ARG001 — slowapi key_func читает request.client
     project_id: int,
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
@@ -461,7 +466,9 @@ async def export_project_xlsx_endpoint(
         404: {"description": "Project не найден"},
     },
 )
+@limiter.limit("20/minute")
 async def export_project_pptx_endpoint(
+    request: Request,  # noqa: ARG001 — slowapi key_func читает request.client
     project_id: int,
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
@@ -513,7 +520,9 @@ async def export_project_pptx_endpoint(
         404: {"description": "Project не найден"},
     },
 )
+@limiter.limit("20/minute")
 async def export_project_pdf_endpoint(
+    request: Request,  # noqa: ARG001 — slowapi key_func читает request.client
     project_id: int,
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],

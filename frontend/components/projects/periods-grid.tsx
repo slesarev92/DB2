@@ -10,6 +10,7 @@ import {
 } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { ValueHistoryDialog } from "@/components/projects/value-history-dialog";
 import { Button } from "@/components/ui/button";
@@ -274,11 +275,13 @@ export function PeriodsGrid({
 
     try {
       await batchPatchPeriodValues(projectId, scenarioId, items);
+      toast.success(`Сохранено ${items.length} изменений`);
       reload();
     } catch (err) {
-      setError(
-        err instanceof ApiError ? err.detail ?? err.message : "Ошибка batch save",
-      );
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка batch save";
+      setError(msg);
+      toast.error(`Не удалось сохранить изменения: ${msg}`);
       reload();
     }
   }
@@ -305,11 +308,13 @@ export function PeriodsGrid({
           resetPeriodOverride(pskChannelId, it.period_id, scenarioId),
         ),
       );
+      toast.success(`Сброшено ${overridden.length} overrides`);
       reload();
     } catch (err) {
-      setError(
-        err instanceof ApiError ? err.detail ?? err.message : "Ошибка reset",
-      );
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка reset";
+      setError(msg);
+      toast.error(`Не удалось сбросить: ${msg}`);
     }
   }
 

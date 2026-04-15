@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -183,12 +184,14 @@ export function FinancialPlanEditor({ projectId }: FinancialPlanEditorProps) {
       const saved = await putFinancialPlan(projectId, { items: sanitized });
       setItems(saved);
       setSavedAt(new Date());
+      toast.success("Финансовый план сохранён");
     } catch (err) {
-      setError(
+      const msg =
         err instanceof ApiError
           ? err.detail ?? err.message
-          : "Ошибка сохранения",
-      );
+          : "Ошибка сохранения";
+      setError(msg);
+      toast.error(`Не удалось сохранить: ${msg}`);
     } finally {
       setSaving(false);
     }

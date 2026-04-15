@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -142,11 +143,13 @@ export function AkbTab({ projectId }: AkbTabProps) {
       setUniverse("");
       setTarget("");
       setCoverage("");
+      toast.success("АКБ запись добавлена");
       await load();
     } catch (err) {
-      setError(
-        err instanceof ApiError ? err.detail ?? err.message : "Ошибка",
-      );
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка";
+      setError(msg);
+      toast.error(`Не удалось добавить АКБ: ${msg}`);
     } finally {
       setAdding(false);
     }
@@ -160,11 +163,13 @@ export function AkbTab({ projectId }: AkbTabProps) {
     setDeletingId(null);
     try {
       await deleteAkbEntry(projectId, id);
+      toast.success("АКБ запись удалена");
       await load();
     } catch (err) {
-      setError(
-        err instanceof ApiError ? err.detail ?? err.message : "Ошибка",
-      );
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка";
+      setError(msg);
+      toast.error(`Не удалось удалить: ${msg}`);
     }
   }
 

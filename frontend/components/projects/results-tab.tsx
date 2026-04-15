@@ -2,6 +2,7 @@
 
 import { Loader2 } from "lucide-react";
 import { Fragment, useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { ExecutiveSummaryInline } from "@/components/ai-panel/executive-summary-inline";
 import { ExplainKpiInline } from "@/components/ai-panel/explain-kpi-inline";
@@ -221,60 +222,51 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
       const { task_id } = await recalculateProject(projectId);
       const result = await pollTaskStatus(task_id, (s) => setRecalcStatus(s));
       if (!result.ok) {
-        setRecalcError(result.error ?? "Неизвестная ошибка");
+        const errMsg = result.error ?? "Неизвестная ошибка";
+        setRecalcError(errMsg);
+        toast.error(`Расчёт упал: ${errMsg}`);
       } else if (selectedScenarioId !== null) {
-        // Refetch результаты после успешного расчёта
+        toast.success("Пересчёт завершён");
         await loadResults(selectedScenarioId);
       }
     } catch (err) {
-      setRecalcError(
-        err instanceof ApiError ? err.detail ?? err.message : "Ошибка",
-      );
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка";
+      setRecalcError(msg);
+      toast.error(`Ошибка расчёта: ${msg}`);
     } finally {
       setRecalculating(false);
     }
   }
 
-  async function handleExportXlsx() {
+  async function runExport(
+    format: ExportFormat,
+    downloader: (id: number) => Promise<void>,
+    label: string,
+  ) {
     setExportError(null);
-    setExportingFormat("xlsx");
+    setExportingFormat(format);
     try {
-      await downloadProjectXlsx(projectId);
+      await downloader(projectId);
+      toast.success(`${label} скачан`);
     } catch (err) {
-      setExportError(
-        err instanceof ApiError ? err.detail ?? err.message : "Ошибка экспорта",
-      );
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка экспорта";
+      setExportError(msg);
+      toast.error(`Ошибка экспорта ${label}: ${msg}`);
     } finally {
       setExportingFormat(null);
     }
   }
 
-  async function handleExportPptx() {
-    setExportError(null);
-    setExportingFormat("pptx");
-    try {
-      await downloadProjectPptx(projectId);
-    } catch (err) {
-      setExportError(
-        err instanceof ApiError ? err.detail ?? err.message : "Ошибка экспорта",
-      );
-    } finally {
-      setExportingFormat(null);
-    }
+  function handleExportXlsx() {
+    void runExport("xlsx", downloadProjectXlsx, "XLSX");
   }
-
-  async function handleExportPdf() {
-    setExportError(null);
-    setExportingFormat("pdf");
-    try {
-      await downloadProjectPdf(projectId);
-    } catch (err) {
-      setExportError(
-        err instanceof ApiError ? err.detail ?? err.message : "Ошибка экспорта",
-      );
-    } finally {
-      setExportingFormat(null);
-    }
+  function handleExportPptx() {
+    void runExport("pptx", downloadProjectPptx, "PPTX");
+  }
+  function handleExportPdf() {
+    void runExport("pdf", downloadProjectPdf, "PDF");
   }
 
   // --- Рендеринг ---

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -121,10 +122,14 @@ export function AddSkuDialog({
         skuId = newSku.id;
       }
       await addSkuToProject(projectId, { sku_id: skuId });
+      toast.success("SKU добавлен в проект");
       onAdded();
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail ?? err.message : "Ошибка");
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка";
+      setError(msg);
+      toast.error(`Не удалось добавить SKU: ${msg}`);
       setSubmitting(false);
     }
   }

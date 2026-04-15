@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -144,11 +145,13 @@ export function ObppcTab({ projectId }: ObppcTabProps) {
       setPackFormat("bottle");
       setPackSize("");
       setPricePoint("");
+      toast.success("OBPPC запись добавлена");
       await load();
     } catch (err) {
-      setError(
-        err instanceof ApiError ? err.detail ?? err.message : "Ошибка",
-      );
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка";
+      setError(msg);
+      toast.error(`Не удалось добавить: ${msg}`);
     } finally {
       setAdding(false);
     }
@@ -165,11 +168,13 @@ export function ObppcTab({ projectId }: ObppcTabProps) {
     setDeletingId(null);
     try {
       await deleteObppcEntry(projectId, id);
+      toast.success("OBPPC запись удалена");
       await load();
     } catch (err) {
-      setError(
-        err instanceof ApiError ? err.detail ?? err.message : "Ошибка",
-      );
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка";
+      setError(msg);
+      toast.error(`Не удалось удалить: ${msg}`);
     }
   }
 

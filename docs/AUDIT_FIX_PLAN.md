@@ -13,15 +13,15 @@ Phase 5 HelpButton, L-01..L-06 русификация labels). Этот доку
 |----|-------|--------|--------|----------|
 | F-01 | `ScenarioResult.is_stale` колонка | OPEN | ~1ч | `models/entities.py:756` — колонки нет |
 | F-02 | Staleness badge в results/scenarios/pnl/value-chain tabs | OPEN | ~2ч | нет Alert в `*-tab.tsx` |
-| F-05 | `watchmedo auto-restart` для celery-worker dev | OPEN | 15м | `infra/docker-compose.dev.yml:126` — нет |
-| S-04 | Rate limit на `/auth/login`, `/recalculate`, `/export/*` | OPEN | 1ч | только `api/ai.py` имеет `@limiter.limit` |
-| U-01 | Sonner Toaster + `toast.success/error` во всех save-хэндлерах | PARTIAL | 1-1.5ч | добавлен только для export (f17b2fa) |
-| U-04 | `Loader2` spinner + "Генерирую XLSX…" в export button | PARTIAL | 15м | сейчас просто текст "Экспорт…" |
-| U-05 | Typing indicator / skeleton в AI panel chat | OPEN | 15м | пустой экран во время pending |
-| U-06 | `Tooltip` на truncate channel name | OPEN | 10м | `channels-panel.tsx:171` |
-| U-07 | `focus-visible:ring-2` на sortable headers | OPEN | 30м | |
-| U-08 | `overflow-x-auto` на `financial-plan-editor` | OPEN | 15м | |
-| BUG-01 | Prod export silent fail | PARTIAL | 30м | diagnostics есть (f17b2fa), но ошибка не видна — зависит от U-01 |
+| F-05 | `watchmedo auto-restart` для celery-worker dev | ✅ DONE | 15м | коммит f0e1734 (+ `--debug-force-polling` для Windows/WSL2) |
+| S-04 | Rate limit на `/auth/login`, `/recalculate`, `/export/*` | ✅ DONE | 1ч | login 10/min, recalc 10/min, export 20/min. Smoke test в `test_security_rate_limit.py`. |
+| U-01 | Sonner Toaster + `toast.success/error` во всех save-хэндлерах | ✅ DONE | 1.5ч | Toaster в `app/layout.tsx`; toasts в 14 файлах (results/sku/channel/bom/finplan/scenarios/obppc/akb/add-sku/periods-grid/ingredients/content/channel-deltas/project-new). Неохваченные: AI-фичи (marketing-research, mockup-gallery, content-field-ai) — отложено, имеют свои error cards. |
+| U-04 | `Loader2` spinner + "Генерирую XLSX…" в export button | ✅ DONE | 15м | коммит f0e1734 |
+| U-05 | Typing indicator / skeleton в AI panel chat | ✅ DONE | 15м | коммит f0e1734 (TypingDots) |
+| U-06 | `Tooltip` на truncate channel name | ✅ DONE | 10м | коммит f0e1734 (`components/ui/tooltip.tsx`) |
+| U-07 | `focus-visible:ring-2` на sortable headers | ✅ DONE | 30м | коммит f0e1734 (`sortableHeaderProps` helper + 5 tables) |
+| U-08 | `overflow-x-auto` на `financial-plan-editor` | ✅ DONE | 15м | коммит f0e1734 |
+| BUG-01 | Prod export silent fail | ✅ DONE | 30м | после U-01 toast.error показывает причину пользователю — закрытие через видимость ошибки, не root cause (blob/CSP гипотеза). |
 | 4.1 | Loss carryforward в `s08_tax.py` (ст.283 НК РФ) | OPEN | 2ч | сейчас `tax = max(0, contribution*rate)` без accumulated loss |
 | 4.3 | Validation вводных (shelf_price>0, universe>0, margin<1.0, bom>0) в `calculation_service._build_line_input` | OPEN | 2ч | |
 | 4.4 | Дробный Payback (линейная интерполяция) | OPEN | 1ч | `s11_kpi.py` возвращает целые годы |
