@@ -78,24 +78,60 @@ def _scope_payback(
     fcf: list[float],
     end: int,
     threshold_years: int,
-) -> int | None:
-    """Excel формула: count лет где (FCF≠0 AND cumulative<0); NaN если count > threshold.
+) -> float | None:
+    """Payback с линейной интерполяцией (4.4 — engine audit).
 
-    Для simple payback использует cumulative_fcf, для discounted — cumulative_dcf.
-    Слайсинг по `end` соответствует Excel SUM(B54:K54) — Excel считает по всем
-    10 столбцам, не по слайсу скоупа. Threshold проверяется против label'а
-    скоупа (3, 5, 10 лет).
+    Возвращает дробное число лет до момента когда cumulative FCF/DCF
+    пересекает ноль. Логика:
+    - Найти первый год с cumulative[i] >= 0 (переход из минуса в ноль).
+    - fraction = |cumulative[i-1]| / fcf[i]  (доля года потраченная после
+      начала годового периода до момента выхода в ноль).
+    - payback_years = i + fraction  где i — 0-based индекс пересечения,
+      соответствующий "i полных лет после Y0, плюс fraction дополнительного
+      года внутри Y(i+1)".
+    - Scope threshold: если payback_years > threshold_years → None.
+
+    Возвращает float (было int до 4.4). D-23 в TZ_VS_EXCEL_DISCREPANCIES.md:
+    Excel считает целое число лет (count строк где cumulative<0); наша
+    реализация даёт точнее для принятия Gate-решений (3.7 vs 4 года).
+
+    Для simple payback используется cumulative_fcf, для discounted —
+    cumulative_dcf; логика идентична.
     """
-    # Excel формулы payback (rows 51, 52) суммируют по ВСЕМ 10 годам (B..K),
-    # не только по скоупу. См. DATA row 51 col 2: SUM(B54:K54).
-    # Слайс end игнорируется — суммируем по всему массиву.
-    count = 0
+    if not cumulative or not fcf:
+        return None
+
+    # Найти первый год выхода в плюс
+    crossing = None
     for i in range(len(cumulative)):
-        if fcf[i] != 0 and cumulative[i] < 0:
-            count += 1
-    if count > threshold_years:
-        return None  # "НЕ ОКУПАЕТСЯ"
-    return count
+        if cumulative[i] >= 0:
+            crossing = i
+            break
+    if crossing is None:
+        return None  # не окупается за весь горизонт
+
+    # Y1 сразу положительный — нет prior cumulative, payback < 1 года
+    # (проект с FCF[0] > 0 имеет "almost instant" payback). Возвращаем
+    # fraction как |prior|/fcf[0], но prior = 0 → 0. Для единообразия
+    # UX показываем 1.0 как минимум (не окупается быстрее чем за год).
+    if crossing == 0:
+        return 1.0
+
+    prev_cum = cumulative[crossing - 1]  # последнее отрицательное значение
+    year_fcf = fcf[crossing]  # FCF года окупаемости
+    if year_fcf <= 0:
+        # Cumulative повысился с -X до -Y при negative FCF — мат. невозможно
+        # при корректном вычислении cumulative. Fallback на integer count.
+        return float(crossing + 1)
+
+    fraction = abs(prev_cum) / year_fcf
+    # `crossing` — 0-based индекс, значит crossing полных лет прошло
+    # ДО этого года, плюс fraction текущего года.
+    payback_years = crossing + fraction
+
+    if payback_years > threshold_years:
+        return None
+    return payback_years
 
 
 def step(ctx: PipelineContext) -> PipelineContext:

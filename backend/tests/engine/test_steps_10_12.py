@@ -112,10 +112,22 @@ GORJI_ROI = {
     "y1y5":   0.4190954053141331,    # D-12 fix: 5 лет вместо 6
     "y1y10":  1.5826332975973127,
 }
-# Excel: simple payback все 3 скоупа = 3
-GORJI_PAYBACK_SIMPLE = {"y1y3": 3, "y1y5": 3, "y1y10": 3}
-# Excel: discounted payback Y1-Y3 = "НЕ ОКУПАЕТСЯ" (4 > 3), Y1-Y5/Y10 = 4
-GORJI_PAYBACK_DISC = {"y1y3": None, "y1y5": 4, "y1y10": 4}
+# 4.4 fractional payback (D-23): линейная интерполяция вместо integer count.
+# Simple: cumulative FCF выходит в плюс в Y4 (~3.6 лет), поэтому для Y1-Y3
+# scope (threshold=3) это "не окупается", для Y1-Y5/Y10 — дробное.
+# Discounted: выход в плюс в Y5 (~4.0 лет), для Y1-Y3 не окупается.
+# Excel считает integer (3, 3, 3 / None, 4, 4) — наша реализация точнее
+# для Gate-решений.
+GORJI_PAYBACK_SIMPLE = {
+    "y1y3": None,
+    "y1y5": 3.605650539987577,
+    "y1y10": 3.605650539987577,
+}
+GORJI_PAYBACK_DISC = {
+    "y1y3": None,
+    "y1y5": 4.002642979915103,
+    "y1y10": 4.002642979915103,
+}
 
 
 def _build_gorji_ctx() -> PipelineContext:

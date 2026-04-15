@@ -73,12 +73,13 @@ function marginClass(value: string | null): string {
   return "text-red-600";
 }
 
-/** Payback из string | null в "N лет" или "НЕ ОКУПАЕТСЯ". */
+/** Payback из string | null в "N.N лет" или "НЕ ОКУПАЕТСЯ".
+ *  4.4: дробный payback с линейной интерполяцией (было integer). */
 function formatPayback(value: string | null): string {
   if (value === null) return "НЕ ОКУПАЕТСЯ";
   const num = Number(value);
   if (Number.isNaN(num)) return "—";
-  return `${num.toFixed(0)} лет`;
+  return `${num.toFixed(1)} лет`;
 }
 
 /** Per-unit row definitions for the table (Phase 8.3). */
