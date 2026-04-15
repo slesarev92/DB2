@@ -9,7 +9,108 @@
 
 ## [Unreleased]
 
-### Infra
+_No unreleased changes._
+
+---
+
+## [2.4.0] — 2026-04-15
+
+Post-audit remediation + engine quick wins. 4 фазы из
+[`docs/archive/AUDIT_FIX_PLAN.md`](docs/archive/AUDIT_FIX_PLAN.md)
+закрыты. Полный отчёт по аудиту — в
+[`docs/ENGINE_AUDIT_REPORT.md`](docs/ENGINE_AUDIT_REPORT.md),
+[`docs/PRESALES_AUDIT_2026-04-14.md`](docs/PRESALES_AUDIT_2026-04-14.md),
+[`docs/SECURITY_AUDIT_2026-04-14.md`](docs/SECURITY_AUDIT_2026-04-14.md).
+
+> **NB о промежуточных версиях:** между `v0.3.0` и `v2.4.0` в git
+> tags были `v2.1.0`, `v2.2.0`, `v2.2.1`, `v2.3.0`, `v2.3.1`
+> (клиентский milestone-релизы без подробных entries здесь). История
+> коммитов полная в git log.
+
+### Added (UI — demo polish)
+- **U-04 Export spinner:** Loader2 + "Генерирую XLSX/PPTX/PDF…"
+  в results-tab вместо текста "Экспорт…".
+- **U-05 AI typing indicator:** анимированные точки в ai-panel-chat
+  во время streaming до первого токена.
+- **U-06 Channel Tooltip:** новый `components/ui/tooltip.tsx`
+  (обёртка над @base-ui/react/tooltip); truncate названия канала
+  раскрывается полным кодом + именем на hover.
+- **U-07 Sortable headers a11y:** helper `sortableHeaderProps`
+  в `use-sortable-table.ts` — focus-visible:ring, tabIndex=0,
+  onKeyDown для Enter/Space. Применён в 5 таблицах.
+- **U-08 financial-plan overflow:** горизонтальный скролл таблицы
+  CAPEX/OPEX на узких экранах.
+- **Sonner toasts:** `<Toaster />` в `app/layout.tsx`
+  + `toast.success/error` в 14 save/delete хэндлерах
+  (SKU, channel, BOM, finplan, scenarios, OBPPC, АКБ, ингредиенты,
+  content, period-values batch, project create/patch, exports).
+  Закрывает `U-01` + `BUG-01` (prod export silent fail теперь
+  видимый через toast).
+- **HelpButton для новых полей:** tax_loss_carryforward +
+  3× scenario deltas (price/COGS/logistics) с формулами и
+  defaults (parameter-help.ts + inline HelpButton в scenarios-tab
+  и new/page.tsx).
+
+### Added (backend — security)
+- **S-04 Rate limiting:** slowapi `@limiter.limit` применён к:
+  `POST /api/auth/login` (10/min per IP, защита от brute-force),
+  `POST /api/projects/{id}/recalculate` (10/min, защита Celery
+  worker'ов), `GET /api/projects/{id}/export/*` (20/min, защита
+  от DoS на тяжёлой PPT/PDF генерации). Smoke tests в
+  `tests/api/test_security_rate_limit.py`.
+
+### Added (backend — staleness invalidation F-01/F-02)
+- **`scenario_results.is_stale` BOOLEAN NOT NULL DEFAULT FALSE**
+  (миграция `c30b0e3ac9bb`). Флаг "параметры проекта изменились,
+  но пересчёт не выполнялся".
+- **`services/invalidation_service.py`** —
+  `mark_project_stale(session, project_id)` bulk UPDATE + 3
+  convenience-хелпера (`mark_stale_by_psc/scenario/fp`).
+- **Hooks** во всех PATCH/POST/DELETE endpoint'ах, меняющих
+  pipeline input: projects, project_skus, project_sku_channels,
+  period_values (включая batch и reset), bom, scenarios, financial_plan,
+  actual_import.
+- **`StalenessBadge` компонент** — жёлтый баннер "⚠️ Расчёт устарел"
+  с CTA "Пересчитать" в results-tab, scenarios-tab, pnl-tab,
+  value-chain-tab. При успешном recalculate новые строки создаются
+  с `server_default='false'` — флаг автоматически сбрасывается.
+
+### Added (backend — engine quick wins)
+- **4.3 Input validation** — `LineValidationError` на
+  `channel_margin ≥ 1.0` (иначе `ex_factory ≤ 0` → мусорные KPI).
+  Warnings в логе на `universe=0` / `bom_unit_cost=0` /
+  `shelf_price=0` (pipeline валиден, но вероятно незавершённая
+  настройка). `pollTaskStatus` в frontend проверяет
+  `result.error` на Celery SUCCESS — логические ошибки доходят
+  до пользователя через recalcError + toast.
+- **4.4 Fractional payback** — линейная интерполяция вместо
+  integer count. `int → float`. GORJI payback_simple y1y10 теперь
+  3.606 лет (было 3). Frontend `.toFixed(1)`. D-23 в
+  `TZ_VS_EXCEL_DISCREPANCIES.md`.
+- **4.1 Loss carryforward (ст.283 НК РФ)** — opt-in через
+  `Project.tax_loss_carryforward` (миграция `d894b52f645b`,
+  default `false` сохраняет Excel-compat). С cap 50% прибыли
+  года. Pure-function `_compute_annual_tax` в `s10_discount.py`
+  для unit-тестов. Checkbox в форме создания проекта. D-24.
+- **4.5 Scenario deltas price/COGS/logistics** — 3 новых
+  project-wide поля на Scenario (миграция `3e5dcbc50271`):
+  `delta_shelf_price`, `delta_bom_cost`, `delta_logistics`.
+  Мультипликативное применение во всех psc сценария в
+  `_build_line_input`. UI editor в scenarios-tab — 3 новых
+  input'а с HelpButton в каждой Conservative/Aggressive
+  карточке. Позволяет моделировать risk scenarios
+  "сырьё +15%" / "логистика +25%" / "ритейл требует −10% цены".
+
+### Changed (dev tooling)
+- **F-05 celery-worker auto-reload:** команда в
+  `infra/docker-compose.dev.yml` заменена на
+  `watchmedo auto-restart --debug-force-polling --interval=2 --
+  celery -A app.worker worker`. Polling режим обязателен на
+  Windows+Docker/WSL2 (inotify не пробрасывается через bind
+  mount). `watchdog` добавлен в `backend/requirements.txt`.
+  Prod команда не трогается.
+
+### Changed (infra)
 - **Server migration: 45.144.221.215 → 85.239.63.206.** Старый VPS попал
   в RKN-блокировки и имел плохой BGP-peering с европейскими сетями
   (только 5/20 локаций мира открывали сайт). Новый сервер: чистый IP,
@@ -17,6 +118,25 @@
 - **Docker Hub mirror:** на новом сервере настроен `mirror.gcr.io` через
   `/etc/docker/daemon.json` — обходит anonymous rate limit.
 - **SSL_SETUP.md** обновлён под новый сервер (без legacy frpanel конфликта).
+
+### Changed (docs)
+- **`docs/README.md`** — новый индекс активной документации
+  (entry point).
+- **Корневой `README.md`** — overview проекта + quick-start.
+- **`docs/archive/`** — устаревшие документы перенесены:
+  `TZ_COMPLIANCE_REPORT.md` (replaced by TZ_VS_EXCEL_DISCREPANCIES),
+  `AUDIT_FIX_PLAN.md` (все фазы закрыты).
+
+### Verification
+- Backend: 469 tests + 4 acceptance passed (baseline drift
+  сохранён, 3 новых тестовых файла: `test_security_rate_limit`,
+  `test_staleness_invalidation`, `test_calculation_validation`).
+- Frontend: `tsc --noEmit` clean.
+- 3 Alembic миграции (`c30b0e3ac9bb`, `d894b52f645b`,
+  `3e5dcbc50271`) применены на prod без downtime кроме
+  `--force-recreate` (~1 минута). Существующие 18
+  `scenario_results` получили `is_stale=false` через
+  server_default — визуальной регрессии нет.
 
 ---
 
