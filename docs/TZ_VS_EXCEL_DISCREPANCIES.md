@@ -872,6 +872,52 @@ opex += copacking
 
 ---
 
+# D-24: Loss carryforward (4.1 engine audit, ст.283 НК РФ)
+
+**Опциональное поведение. Default False сохраняет Excel-compat.**
+
+## Excel-реализация
+
+`tax[t] = −CM[t] × tax_rate`, если `CM[t] > 0`, иначе 0 (D-03).
+Нет переноса убытков прошлых лет — убыточный Y1 не уменьшает tax Y3.
+
+## Наша реализация (после 4.1)
+
+Новое поле `Project.tax_loss_carryforward: bool`, default `False`.
+Когда `True`:
+```python
+cumulative_loss = 0.0
+for cm in annual_cm:
+    if cm < 0:
+        tax = 0; cumulative_loss += |cm|
+    else:
+        usable = min(cumulative_loss, 0.5 × cm)  # cap 50% (ст.283 НК РФ)
+        tax = −(cm − usable) × tax_rate
+        cumulative_loss −= usable
+```
+
+## Эффект
+
+Для пусковых FMCG-проектов с убыточными Y0-Y2 налог в Y3-Y5
+уменьшается на 10-20% → NPV выше. Тестовый пример:
+- CM = [-100, -50, +200, +200], rate = 0.20
+- Default tax = [0, 0, -40, -40], total -80
+- С carryforward tax = [0, 0, -20, -30], total -50 (экономия 30)
+
+## Обоснование opt-in (а не default on)
+
+GORJI acceptance эталон и 8 engine unit-тестов рассчитаны под Excel
+формулу. Включение carryforward default сломало бы baseline (NPV drift
+~3-5%). User сам выбирает: для gate-review приближение к реальности,
+для compare-с-Excel — default off.
+
+## UI
+
+Checkbox в настройках проекта: "Применять перенос налоговых убытков
+(ст.283 НК РФ)". HelpButton объясняет бизнес-смысл.
+
+---
+
 # D-23: Дробный Payback (4.4 engine audit)
 
 **Наша реализация точнее Excel — сознательный upgrade.**

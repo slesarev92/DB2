@@ -38,6 +38,7 @@ const DEFAULT_FORM: ProjectCreate = {
   tax_rate: "0.20",
   wc_rate: "0.12",
   vat_rate: "0.20",
+  tax_loss_carryforward: false,
   currency: "RUB",
   inflation_profile_id: null,
 };
@@ -216,6 +217,32 @@ export default function NewProjectPage() {
                   onChange={(e) => update("vat_rate", e.target.value)}
                   disabled={submitting}
                 />
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2 rounded-md border p-3">
+              <input
+                id="tax_loss_carryforward"
+                type="checkbox"
+                checked={form.tax_loss_carryforward ?? false}
+                onChange={(e) =>
+                  update("tax_loss_carryforward", e.target.checked)
+                }
+                disabled={submitting}
+                className="mt-1"
+              />
+              <div className="space-y-1">
+                <Label
+                  htmlFor="tax_loss_carryforward"
+                  className="flex items-center gap-1.5 font-medium cursor-pointer"
+                >
+                  Перенос налоговых убытков (ст.283 НК РФ)
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Убытки убыточных лет переносятся вперёд, уменьшая
+                  налогооблагаемую базу прибыльных лет (cap 50%). Default
+                  выкл — совместимо с Excel-моделью.
+                </p>
               </div>
             </div>
 

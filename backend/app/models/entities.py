@@ -180,6 +180,16 @@ class Project(Base, TimestampMixin):
         server_default="0.250000",
     )
 
+    # 4.1 Loss carryforward (engine audit §4.1, ст.283 НК РФ).
+    # True — убытки прошлых лет переносятся вперёд, уменьшая tax base
+    # на min(cumulative_loss, 50% × CM). False — Excel-compat поведение:
+    # tax=0 при убытке, без переноса. Default False сохраняет baseline.
+    # См. D-24 в TZ_VS_EXCEL_DISCREPANCIES.md.
+    tax_loss_carryforward: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False,
+        server_default=sa_text("false"),
+    )
+
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="RUB")
 
     inflation_profile_id: Mapped[int | None] = mapped_column(

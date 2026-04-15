@@ -155,3 +155,55 @@ async def test_bom_zero_warns_but_passes(
     assert any(
         "bom_unit_cost=0" in rec.getMessage() for rec in caplog.records
     )
+
+
+# ============================================================
+# 4.1 Loss carryforward (ст.283 НК РФ) — opt-in через Project.tax_loss_carryforward
+# ============================================================
+
+
+def test_loss_carryforward_off_matches_excel_tax_formula() -> None:
+    """loss_carryforward=False — Excel-compat: tax=−CM×rate только на прибыль."""
+    from app.engine.steps.s10_discount import _compute_annual_tax
+
+    annual_cm = [-100.0, -50.0, 200.0, 200.0]
+    tax = _compute_annual_tax(annual_cm, tax_rate=0.20, loss_carryforward=False)
+    assert tax == [0.0, 0.0, -40.0, -40.0]
+
+
+def test_loss_carryforward_on_reduces_tax_on_profitable_years() -> None:
+    """loss_carryforward=True — убытки Y1+Y2 уменьшают tax Y3+Y4.
+
+    Scenario: Y1=-100, Y2=-50, Y3=+200, Y4=+200, rate=0.20.
+    Without: tax=[0, 0, -40, -40]. Total tax = -80.
+    With carryforward:
+      Y3: cumulative_loss=150, usable=min(150, 0.5×200)=100,
+          taxable=100, tax=-20. remaining_loss=50.
+      Y4: usable=min(50, 0.5×200)=50, taxable=150, tax=-30. loss=0.
+    tax=[0, 0, -20, -30]. Total tax = -50. Saving = 30 ₽.
+    """
+    from app.engine.steps.s10_discount import _compute_annual_tax
+
+    annual_cm = [-100.0, -50.0, 200.0, 200.0]
+    tax = _compute_annual_tax(annual_cm, tax_rate=0.20, loss_carryforward=True)
+    assert tax == [0.0, 0.0, -20.0, -30.0]
+
+
+def test_loss_carryforward_cap_50pct() -> None:
+    """Cap 50% прибыли — нельзя обнулить налог даже при огромном убытке."""
+    from app.engine.steps.s10_discount import _compute_annual_tax
+
+    # Y1 огромный убыток, Y2 прибыль — должен заплатить половину.
+    annual_cm = [-10000.0, 100.0]
+    tax = _compute_annual_tax(annual_cm, tax_rate=0.20, loss_carryforward=True)
+    # Y2: usable = min(10000, 50) = 50, taxable = 100 − 50 = 50, tax = −10
+    assert tax == [0.0, -10.0]
+
+
+def test_loss_carryforward_no_profit_no_tax() -> None:
+    """Все годы убыточны — tax везде 0 (нет базы для налога)."""
+    from app.engine.steps.s10_discount import _compute_annual_tax
+
+    annual_cm = [-100.0, -50.0, -10.0]
+    tax = _compute_annual_tax(annual_cm, tax_rate=0.20, loss_carryforward=True)
+    assert tax == [0.0, 0.0, 0.0]

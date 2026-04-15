@@ -164,6 +164,12 @@ export interface ProjectBase extends ProjectContentFields {
   tax_rate: string;
   wc_rate: string;
   vat_rate: string;
+  /**
+   * 4.1 (ст.283 НК РФ): перенос убытков прошлых лет в налоговом расчёте.
+   * Default false сохраняет Excel-совместимость; true — точнее для
+   * launch-проектов (налог Y3-Y5 меньше на 10-20%, NPV выше).
+   */
+  tax_loss_carryforward?: boolean;
   currency: string;
   inflation_profile_id: number | null;
 }
@@ -178,6 +184,7 @@ export interface ProjectUpdate extends ProjectContentFields {
   tax_rate?: string;
   wc_rate?: string;
   vat_rate?: string;
+  tax_loss_carryforward?: boolean;
   currency?: string;
   inflation_profile_id?: number | null;
 }

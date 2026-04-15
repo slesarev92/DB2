@@ -40,6 +40,10 @@ class ProjectBase(BaseModel):
     # Go/No-Go порог Contribution Margin (настраиваемый per-project).
     cm_threshold: Decimal = Field(default=Decimal("0.25"), ge=0, le=1)
 
+    # 4.1 (ст.283 НК РФ): перенос убытков прошлых лет. Default False
+    # сохраняет Excel-compat baseline; True — точнее для launch-проектов.
+    tax_loss_carryforward: bool = False
+
     currency: str = Field(default="RUB", min_length=3, max_length=3)
     inflation_profile_id: int | None = None
 
@@ -102,6 +106,7 @@ class ProjectUpdate(BaseModel):
     wc_rate: Decimal | None = Field(default=None, ge=0, le=1)
     vat_rate: Decimal | None = Field(default=None, ge=0, le=1)
     cm_threshold: Decimal | None = Field(default=None, ge=0, le=1)
+    tax_loss_carryforward: bool | None = None
     currency: str | None = Field(default=None, min_length=3, max_length=3)
     inflation_profile_id: int | None = None
 

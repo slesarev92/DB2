@@ -98,6 +98,10 @@ class PipelineInput:
     # Go/No-Go порог Contribution Margin (настраиваемый per-project, default 0.25).
     cm_threshold: float = 0.25
 
+    # 4.1 Loss carryforward (ст.283 НК РФ). False — Excel-compat (default);
+    # True — накапливать убытки, применять к прибыли (cap 50%). См. s10.
+    tax_loss_carryforward: bool = False
+
     # --- Project OPEX ---
     # Дискретные периодические затраты проекта (листинги, запускной маркетинг).
     # В Excel — DATA row 26 "PROJECT_OPEX". В MVP источник данных ещё не

@@ -471,6 +471,7 @@ async def _build_line_input(
         tax_rate=float(project.tax_rate),
         wacc=float(project.wacc),
         cm_threshold=float(project.cm_threshold) if project.cm_threshold is not None else 0.25,
+        tax_loss_carryforward=bool(project.tax_loss_carryforward),
         product_density=1.0,
         project_opex=(),
         capex=(),
