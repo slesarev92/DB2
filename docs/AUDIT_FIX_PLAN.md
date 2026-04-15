@@ -11,8 +11,8 @@ Phase 5 HelpButton, L-01..L-06 русификация labels). Этот доку
 
 | ID | Scope | Статус | Effort | Evidence |
 |----|-------|--------|--------|----------|
-| F-01 | `ScenarioResult.is_stale` колонка | OPEN | ~1ч | `models/entities.py:756` — колонки нет |
-| F-02 | Staleness badge в results/scenarios/pnl/value-chain tabs | OPEN | ~2ч | нет Alert в `*-tab.tsx` |
+| F-01 | `ScenarioResult.is_stale` колонка + invalidation hooks | ✅ DONE | ~3ч | Миграция c30b0e3ac9bb; `invalidation_service.mark_project_stale`; хуки в projects/project_skus/project_sku_channels/period_values/bom/scenarios/financial_plan/actual_import; recalculate сбрасывает через server_default. 5 integration тестов (460 total). |
+| F-02 | Staleness badge в results/scenarios/pnl/value-chain tabs | ✅ DONE | ~2ч | `staleness-badge.tsx`; интегрирован во все 4 tabs. В pnl-tab/value-chain-tab флаг читается через `listScenarioResults(baseScenarioId)`. |
 | F-05 | `watchmedo auto-restart` для celery-worker dev | ✅ DONE | 15м | коммит f0e1734 (+ `--debug-force-polling` для Windows/WSL2) |
 | S-04 | Rate limit на `/auth/login`, `/recalculate`, `/export/*` | ✅ DONE | 1ч | login 10/min, recalc 10/min, export 20/min. Smoke test в `test_security_rate_limit.py`. |
 | U-01 | Sonner Toaster + `toast.success/error` во всех save-хэндлерах | ✅ DONE | 1.5ч | Toaster в `app/layout.tsx`; toasts в 14 файлах (results/sku/channel/bom/finplan/scenarios/obppc/akb/add-sku/periods-grid/ingredients/content/channel-deltas/project-new). Неохваченные: AI-фичи (marketing-research, mockup-gallery, content-field-ai) — отложено, имеют свои error cards. |

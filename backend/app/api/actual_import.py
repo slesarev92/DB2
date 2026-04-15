@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.db import get_db
 from app.models import User
-from app.services import project_service
+from app.services import invalidation_service, project_service
 from app.services.actual_import_service import (
     ActualImportError,
     EmptyFileError,
@@ -98,6 +98,8 @@ async def upload_actual_data_endpoint(
             detail=str(exc),
         ) from exc
 
+    if result.imported > 0:
+        await invalidation_service.mark_project_stale(session, project_id)
     await session.commit()
     return ActualImportResponse(
         imported=result.imported,

@@ -9,6 +9,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { StalenessBadge } from "@/components/projects/staleness-badge";
 import {
   Card,
   CardContent,
@@ -16,6 +17,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ApiError, apiGet } from "@/lib/api";
+import { listProjectScenarios, listScenarioResults } from "@/lib/scenarios";
 
 /* ── Types ── */
 
@@ -143,6 +145,7 @@ export function PnlTab({ projectId }: { projectId: number }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<ViewMode>("quarterly");
+  const [isStale, setIsStale] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -152,6 +155,21 @@ export function PnlTab({ projectId }: { projectId: number }) {
         setError(err instanceof ApiError ? err.detail ?? err.message : "Ошибка"),
       )
       .finally(() => setLoading(false));
+  }, [projectId]);
+
+  // F-02: проверяем is_stale через Base сценария (флаг одинаков по всем).
+  useEffect(() => {
+    void (async () => {
+      try {
+        const scenarios = await listProjectScenarios(projectId);
+        const base = scenarios.find((s) => s.type === "base");
+        if (!base) return;
+        const results = await listScenarioResults(base.id);
+        setIsStale(results.some((r) => r.is_stale));
+      } catch {
+        // 404 если расчёт не делался — не stale, просто нет данных
+      }
+    })();
   }, [projectId]);
 
   const buckets = useMemo(
@@ -171,6 +189,10 @@ export function PnlTab({ projectId }: { projectId: number }) {
 
   return (
     <div className="space-y-4">
+      <StalenessBadge
+        isStale={isStale}
+        message="Параметры проекта изменились — P&L может быть неактуален. Пересчитайте в табе «Результаты»."
+      />
       {/* Mode toggle */}
       <div className="flex items-center gap-2">
         {(["monthly", "quarterly", "annual"] as ViewMode[]).map((m) => (

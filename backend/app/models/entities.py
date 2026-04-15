@@ -27,6 +27,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text as sa_text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -808,6 +809,20 @@ class ScenarioResult(Base):
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
+    )
+
+    # F-01/F-02: флаг "данные проекта изменились, но пересчёт не выполнен".
+    # Инвалидируется через `invalidation_service.mark_project_stale` из
+    # PATCH/POST/DELETE endpoint'ов, меняющих pipeline input (project
+    # settings, project_sku, psc, period_values, bom, scenarios,
+    # financial_plan). Сбрасывается автоматически при создании новой
+    # записи в `calculation_service.calculate_and_save_scenario` —
+    # старые строки удаляются, новые создаются со `server_default='false'`.
+    is_stale: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=sa_text("false"),
+        default=False,
     )
 
     __table_args__ = (

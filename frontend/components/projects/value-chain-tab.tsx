@@ -11,6 +11,7 @@
 
 import { useEffect, useState } from "react";
 
+import { StalenessBadge } from "@/components/projects/staleness-badge";
 import {
   Card,
   CardContent,
@@ -18,6 +19,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ApiError, apiGet } from "@/lib/api";
+import { listProjectScenarios, listScenarioResults } from "@/lib/scenarios";
 
 /* ── Types ── */
 
@@ -121,6 +123,22 @@ export function ValueChainTab({ projectId }: { projectId: number }) {
   const [data, setData] = useState<ValueChainData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isStale, setIsStale] = useState(false);
+
+  // F-02: проверяем is_stale через Base сценария
+  useEffect(() => {
+    void (async () => {
+      try {
+        const scenarios = await listProjectScenarios(projectId);
+        const base = scenarios.find((s) => s.type === "base");
+        if (!base) return;
+        const results = await listScenarioResults(base.id);
+        setIsStale(results.some((r) => r.is_stale));
+      } catch {
+        // 404 если расчёт не делался
+      }
+    })();
+  }, [projectId]);
 
   useEffect(() => {
     setLoading(true);
@@ -156,6 +174,10 @@ export function ValueChainTab({ projectId }: { projectId: number }) {
 
   return (
     <div className="space-y-6">
+      <StalenessBadge
+        isStale={isStale}
+        message="Параметры проекта изменились — unit-экономика может быть неактуальна. Пересчитайте в табе «Результаты»."
+      />
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">

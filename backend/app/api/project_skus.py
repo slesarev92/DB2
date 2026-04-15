@@ -18,7 +18,7 @@ from app.schemas.project_sku import (
     ProjectSKURead,
     ProjectSKUUpdate,
 )
-from app.services import project_service, project_sku_service
+from app.services import invalidation_service, project_service, project_sku_service
 
 router = APIRouter(tags=["project-skus"])
 
@@ -77,6 +77,7 @@ async def add_sku_to_project_endpoint(
             detail="This SKU is already added to the project",
         )
 
+    await invalidation_service.mark_project_stale(session, project_id)
     await session.commit()
     return ProjectSKURead.model_validate(psk)
 
@@ -130,6 +131,7 @@ async def update_project_sku_endpoint(
 ) -> ProjectSKURead:
     psk = await _load_owned_psk(session, psk_id, current_user)
     updated = await project_sku_service.update_project_sku(session, psk, data)
+    await invalidation_service.mark_project_stale(session, psk.project_id)
     await session.commit()
     return ProjectSKURead.model_validate(updated)
 
@@ -145,5 +147,7 @@ async def delete_project_sku_endpoint(
 ) -> None:
     """Удаляет ProjectSKU. Связанные BOMItem каскадно удаляются (FK CASCADE)."""
     psk = await _load_owned_psk(session, psk_id, current_user)
+    project_id = psk.project_id
     await project_sku_service.delete_project_sku(session, psk)
+    await invalidation_service.mark_project_stale(session, project_id)
     await session.commit()

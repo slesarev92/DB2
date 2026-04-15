@@ -22,7 +22,7 @@ from app.schemas.financial_plan import (
     FinancialPlanItem,
     FinancialPlanRequest,
 )
-from app.services import financial_plan_service, project_service
+from app.services import financial_plan_service, invalidation_service, project_service
 
 router = APIRouter(tags=["financial-plan"])
 
@@ -65,5 +65,6 @@ async def put_project_financial_plan_endpoint(
     result = await financial_plan_service.replace_plan(
         session, project_id, body.items
     )
+    await invalidation_service.mark_project_stale(session, project_id)
     await session.commit()
     return result

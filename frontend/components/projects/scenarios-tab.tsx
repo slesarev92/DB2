@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { ChannelDeltasEditor } from "@/components/projects/channel-deltas-editor";
 import { GoNoGoBadge } from "@/components/go-no-go-badge";
+import { StalenessBadge } from "@/components/projects/staleness-badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -354,6 +355,17 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* F-02 staleness: any result.is_stale → одна badge. */}
+      <StalenessBadge
+        isStale={
+          Object.values(resultsByScenario)
+            .flat()
+            .some((r) => r.is_stale)
+        }
+        onRecalculate={handleApplyAndRecalc}
+        recalculating={recalculating}
+      />
 
       {/* === Editor дельт сценариев === */}
       <Card>

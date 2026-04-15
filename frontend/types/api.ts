@@ -509,6 +509,12 @@ export interface ScenarioResultRead {
   ebitda_per_kg: string | null;
 
   calculated_at: string;
+  /**
+   * F-01/F-02: true — данные проекта менялись после последнего расчёта,
+   * UI должен показать `<StalenessBadge>`. Сбрасывается автоматически
+   * при recalculate.
+   */
+  is_stale: boolean;
 }
 
 // ============================================================

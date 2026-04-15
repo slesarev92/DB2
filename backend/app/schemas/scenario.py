@@ -95,3 +95,8 @@ class ScenarioResultRead(BaseModel):
     ebitda_per_kg: Decimal | None = None
 
     calculated_at: datetime
+
+    # F-01/F-02: True — данные проекта менялись после последнего пересчёта,
+    # результаты устарели. UI показывает badge "⚠️ Расчёт устарел" с CTA
+    # "Пересчитать". Сбрасывается в False при успешном recalculate.
+    is_stale: bool = False

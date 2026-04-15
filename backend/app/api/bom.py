@@ -13,7 +13,12 @@ from app.api.deps import get_current_user
 from app.db import get_db
 from app.models import User
 from app.schemas.bom import BOMItemCreate, BOMItemRead, BOMItemUpdate
-from app.services import bom_service, project_service, project_sku_service
+from app.services import (
+    bom_service,
+    invalidation_service,
+    project_service,
+    project_sku_service,
+)
 
 router = APIRouter(tags=["bom"])
 
@@ -97,8 +102,9 @@ async def create_bom_endpoint(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> BOMItemRead:
-    await _require_psk_owned(session, psk_id, current_user)
+    psk = await _require_psk_owned(session, psk_id, current_user)
     bom = await bom_service.create_bom_item(session, psk_id, data)
+    await invalidation_service.mark_project_stale(session, psk.project_id)
     await session.commit()
     await session.refresh(bom)
     return BOMItemRead.model_validate(bom)
@@ -115,7 +121,10 @@ async def update_bom_endpoint(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> BOMItemRead:
     bom = await _require_bom_owned(session, bom_id, current_user)
+    psk = await project_sku_service.get_project_sku(session, bom.project_sku_id)
     updated = await bom_service.update_bom_item(session, bom, data)
+    if psk is not None:
+        await invalidation_service.mark_project_stale(session, psk.project_id)
     await session.commit()
     await session.refresh(updated)
     return BOMItemRead.model_validate(updated)
@@ -131,5 +140,9 @@ async def delete_bom_endpoint(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> None:
     bom = await _require_bom_owned(session, bom_id, current_user)
+    psk = await project_sku_service.get_project_sku(session, bom.project_sku_id)
+    project_id = psk.project_id if psk is not None else None
     await bom_service.delete_bom_item(session, bom)
+    if project_id is not None:
+        await invalidation_service.mark_project_stale(session, project_id)
     await session.commit()

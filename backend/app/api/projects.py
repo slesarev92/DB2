@@ -20,7 +20,7 @@ from app.schemas.pnl import PnlResponse
 from app.schemas.pricing import PricingSummaryResponse
 from app.schemas.sensitivity import SensitivityResponse
 from app.schemas.value_chain import ValueChainResponse
-from app.services import project_service
+from app.services import invalidation_service, project_service
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -126,6 +126,9 @@ async def update_project_endpoint(
     if project is None:
         raise _not_found
     updated = await project_service.update_project(session, project, data)
+    # F-01: project-level fields (wacc/tax_rate/wc_rate/vat_rate/cm_threshold)
+    # являются pipeline input — помечаем результаты устаревшими.
+    await invalidation_service.mark_project_stale(session, project_id)
     await session.commit()
     await session.refresh(updated)
     return ProjectRead.model_validate(updated)

@@ -18,6 +18,7 @@ from app.schemas.project_sku_channel import (
     ProjectSKUChannelUpdate,
 )
 from app.services import (
+    invalidation_service,
     project_service,
     project_sku_channel_service,
     project_sku_service,
@@ -94,7 +95,7 @@ async def add_channel_to_psk_endpoint(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> ProjectSKUChannelRead:
-    await _require_psk_owned(session, psk_id, current_user)
+    psk = await _require_psk_owned(session, psk_id, current_user)
 
     try:
         psk_channel = await project_sku_channel_service.create_psk_channel(
@@ -111,6 +112,7 @@ async def add_channel_to_psk_endpoint(
             detail="This channel is already attached to the ProjectSKU",
         )
 
+    await invalidation_service.mark_project_stale(session, psk.project_id)
     await session.commit()
     return ProjectSKUChannelRead.model_validate(psk_channel)
 
@@ -143,10 +145,13 @@ async def update_psk_channel_endpoint(
     psk_channel = await _require_psk_channel_owned(
         session, psk_channel_id, current_user
     )
+    psk = await project_sku_service.get_project_sku(session, psk_channel.project_sku_id)
 
     updated = await project_sku_channel_service.update_psk_channel(
         session, psk_channel, data
     )
+    if psk is not None:
+        await invalidation_service.mark_project_stale(session, psk.project_id)
     await session.commit()
     return ProjectSKUChannelRead.model_validate(updated)
 
@@ -163,5 +168,10 @@ async def delete_psk_channel_endpoint(
     psk_channel = await _require_psk_channel_owned(
         session, psk_channel_id, current_user
     )
+    psk = await project_sku_service.get_project_sku(session, psk_channel.project_sku_id)
+    project_id = psk.project_id if psk is not None else None
+
     await project_sku_channel_service.delete_psk_channel(session, psk_channel)
+    if project_id is not None:
+        await invalidation_service.mark_project_stale(session, project_id)
     await session.commit()

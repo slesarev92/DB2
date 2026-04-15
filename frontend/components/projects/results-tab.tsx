@@ -8,6 +8,7 @@ import { ExecutiveSummaryInline } from "@/components/ai-panel/executive-summary-
 import { ExplainKpiInline } from "@/components/ai-panel/explain-kpi-inline";
 import { GoNoGoBadge } from "@/components/go-no-go-badge";
 import { KpiCard } from "@/components/projects/kpi-card";
+import { StalenessBadge } from "@/components/projects/staleness-badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -420,6 +421,16 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
 
       {!loading && !notCalculated && results !== null && (
         <>
+          {/* F-02: staleness badge — показывается когда кто-то менял pipeline
+             input (project/sku/channel/BOM/period/finplan/scenario) после
+             последнего пересчёта. Берём any result — флаг одинаков по всем
+             9 строкам (3 сценария × 3 scope инвалидируются вместе). */}
+          <StalenessBadge
+            isStale={anyResult?.is_stale}
+            onRecalculate={handleRecalculate}
+            recalculating={recalculating}
+          />
+
           {/* Go/No-Go hero */}
           <Card>
             <CardHeader>

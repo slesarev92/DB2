@@ -21,6 +21,7 @@ from app.schemas.period_value import (
     ViewMode,
 )
 from app.services import (
+    invalidation_service,
     period_value_service,
     project_service,
     project_sku_channel_service,
@@ -164,6 +165,7 @@ async def patch_value_endpoint(
         period_id=period_id,
         values=body.values,
     )
+    await invalidation_service.mark_stale_by_psc(session, psk_channel_id)
     await session.commit()
 
     return PatchPeriodValueResponse(
@@ -261,6 +263,9 @@ async def batch_patch_values(
             )
         )
 
+    # F-01: batch PATCH каналов одного проекта → одна инвалидация
+    # по project_id (minimal SQL overhead).
+    await invalidation_service.mark_project_stale(session, project_id)
     await session.commit()
     return BatchPeriodValueResponse(updated=len(results), items=results)
 
@@ -296,5 +301,7 @@ async def reset_override_endpoint(
         scenario_id=scenario_id,
         period_id=period_id,
     )
+    if deleted > 0:
+        await invalidation_service.mark_stale_by_psc(session, psk_channel_id)
     await session.commit()
     return ResetOverrideResponse(deleted_versions=deleted)

@@ -22,7 +22,7 @@ from app.schemas.scenario import (
     ScenarioResultRead,
     ScenarioUpdate,
 )
-from app.services import project_service, scenario_service
+from app.services import invalidation_service, project_service, scenario_service
 
 router = APIRouter(tags=["scenarios"])
 
@@ -96,6 +96,7 @@ async def update_scenario_endpoint(
     """Обновляет дельты сценария. type и project_id не изменяются."""
     scenario = await _require_scenario_owned(session, scenario_id, current_user)
     updated = await scenario_service.update_scenario(session, scenario, data)
+    await invalidation_service.mark_project_stale(session, scenario.project_id)
     await session.commit()
     return ScenarioRead.model_validate(updated)
 
@@ -166,5 +167,6 @@ async def put_channel_deltas_endpoint(
     result = await scenario_service.replace_channel_deltas(
         session, scenario_id, body.items
     )
+    await invalidation_service.mark_project_stale(session, scenario.project_id)
     await session.commit()
     return result
