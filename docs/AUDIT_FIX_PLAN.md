@@ -22,10 +22,10 @@ Phase 5 HelpButton, L-01..L-06 русификация labels). Этот доку
 | U-07 | `focus-visible:ring-2` на sortable headers | ✅ DONE | 30м | коммит f0e1734 (`sortableHeaderProps` helper + 5 tables) |
 | U-08 | `overflow-x-auto` на `financial-plan-editor` | ✅ DONE | 15м | коммит f0e1734 |
 | BUG-01 | Prod export silent fail | ✅ DONE | 30м | после U-01 toast.error показывает причину пользователю — закрытие через видимость ошибки, не root cause (blob/CSP гипотеза). |
-| 4.1 | Loss carryforward в `s08_tax.py` (ст.283 НК РФ) | OPEN | 2ч | сейчас `tax = max(0, contribution*rate)` без accumulated loss |
-| 4.3 | Validation вводных (shelf_price>0, universe>0, margin<1.0, bom>0) в `calculation_service._build_line_input` | OPEN | 2ч | |
-| 4.4 | Дробный Payback (линейная интерполяция) | OPEN | 1ч | `s11_kpi.py` возвращает целые годы |
-| 4.5 | `ScenarioChannelDelta` расширить на `delta_shelf_price`, `delta_bom_cost`, `delta_logistics` | OPEN | 4-6ч | сейчас только `delta_nd/delta_offtake/delta_opex` |
+| 4.1 | Loss carryforward (ст.283 НК РФ) | ✅ DONE | 2ч | opt-in через `Project.tax_loss_carryforward` (default False сохраняет Excel baseline). pure-function `_compute_annual_tax`, 4 unit-теста, D-24 в discrepancies. |
+| 4.3 | Validation вводных | ✅ DONE | 2ч | `LineValidationError` на channel_margin ≥ 1.0; warnings на universe=0/bom=0/shelf=0. `pollTaskStatus` в frontend проверяет `result.error` на SUCCESS. 3 unit-теста. |
+| 4.4 | Дробный Payback | ✅ DONE | 1ч | линейная интерполяция между последним отрицательным и первым положительным cumulative. `int → float`. GORJI expected обновлены. D-23 в discrepancies. Frontend `.toFixed(1)`. |
+| 4.5 | Scenario deltas price/COGS/logistics | ✅ DONE | 4ч | 3 новых поля на Scenario (project-wide, не per-channel — проще UI). Миграция + schema + pipeline + UI editor в scenarios-tab. 2 unit-теста. |
 
 **Закрыто (не делаем):** S-01, S-02, S-03, L-01..L-06, U-03, F-03 (через context hash), Phase 5 HelpButton.
 

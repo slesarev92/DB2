@@ -466,6 +466,14 @@ export interface ScenarioRead {
   delta_nd: string;
   delta_offtake: string;
   delta_opex: string;
+  /**
+   * 4.5 — project-wide дельты к цене/COGS/логистике (risk-сценарии
+   * "сырьё +15%", "логистика +25%"). Мультипликативны, в долях
+   * (0.10 = +10%). Default "0".
+   */
+  delta_shelf_price?: string;
+  delta_bom_cost?: string;
+  delta_logistics?: string;
   notes: string | null;
   created_at: string;
 }
@@ -474,6 +482,9 @@ export interface ScenarioUpdate {
   delta_nd?: string;
   delta_offtake?: string;
   delta_opex?: string;
+  delta_shelf_price?: string;
+  delta_bom_cost?: string;
+  delta_logistics?: string;
   notes?: string | null;
 }
 

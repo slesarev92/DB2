@@ -207,3 +207,48 @@ def test_loss_carryforward_no_profit_no_tax() -> None:
     annual_cm = [-100.0, -50.0, -10.0]
     tax = _compute_annual_tax(annual_cm, tax_rate=0.20, loss_carryforward=True)
     assert tax == [0.0, 0.0, 0.0]
+
+
+# ============================================================
+# 4.5 Scenario deltas price/COGS/logistics
+# ============================================================
+
+
+async def test_scenario_delta_shelf_price_applies_to_pipeline(
+    db_session: AsyncSession,
+) -> None:
+    """Scenario.delta_shelf_price=+0.10 → shelf_price_reg в PipelineInput выше на 10%."""
+    project_id, base_scenario_id = await _seed_project_with_psc(db_session)
+    # Меняем базовую цену 10 → ожидаем в pipeline 10 × 1.1 = 11.0 при дельте 10%.
+    from app.models import Scenario
+    base = await db_session.get(Scenario, base_scenario_id)
+    assert base is not None
+    base.delta_shelf_price = Decimal("0.10")
+    await db_session.flush()
+
+    inputs = await build_line_inputs(db_session, project_id, base_scenario_id)
+    assert len(inputs) == 1
+    # Все 43 периода умножены на 1.1
+    for s in inputs[0].shelf_price_reg:
+        assert s == pytest.approx(11.0)
+
+
+async def test_scenario_delta_bom_and_logistics(
+    db_session: AsyncSession,
+) -> None:
+    """delta_bom_cost=+0.15, delta_logistics=+0.20 → соответствующие тьюплы
+    в pipeline input увеличены."""
+    project_id, base_scenario_id = await _seed_project_with_psc(db_session)
+    from app.models import Scenario
+    base = await db_session.get(Scenario, base_scenario_id)
+    assert base is not None
+    base.delta_bom_cost = Decimal("0.15")
+    base.delta_logistics = Decimal("0.20")
+    await db_session.flush()
+
+    inputs = await build_line_inputs(db_session, project_id, base_scenario_id)
+    inp = inputs[0]
+    # BOM base = 1.0 × 10.0 × 1.0 = 10.0. × 1.15 = 11.5.
+    assert inp.bom_unit_cost[0] == pytest.approx(11.5)
+    # Logistics base = 8.0. × 1.20 = 9.6.
+    assert inp.logistics_cost_per_kg[0] == pytest.approx(9.6)

@@ -63,6 +63,10 @@ interface DeltaDraft {
   delta_nd: string;
   delta_offtake: string;
   delta_opex: string;
+  // 4.5 — project-wide дельты
+  delta_shelf_price: string;
+  delta_bom_cost: string;
+  delta_logistics: string;
 }
 
 /** Конвертация % (UI ввод) в долю (БД хранение). "−10" → -0.10. */
@@ -86,6 +90,9 @@ function deltaFromScenario(s: ScenarioRead): DeltaDraft {
     delta_nd: fractionToPct(s.delta_nd),
     delta_offtake: fractionToPct(s.delta_offtake),
     delta_opex: fractionToPct(s.delta_opex),
+    delta_shelf_price: fractionToPct(s.delta_shelf_price ?? "0"),
+    delta_bom_cost: fractionToPct(s.delta_bom_cost ?? "0"),
+    delta_logistics: fractionToPct(s.delta_logistics ?? "0"),
   };
 }
 
@@ -229,6 +236,9 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
           delta_nd: pctToFraction(draft.delta_nd),
           delta_offtake: pctToFraction(draft.delta_offtake),
           delta_opex: pctToFraction(draft.delta_opex),
+          delta_shelf_price: pctToFraction(draft.delta_shelf_price),
+          delta_bom_cost: pctToFraction(draft.delta_bom_cost),
+          delta_logistics: pctToFraction(draft.delta_logistics),
         });
       }
       // Recalculate
@@ -452,6 +462,61 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
                       value={draft?.delta_opex ?? "0"}
                       onChange={(e) =>
                         updateDraft(s.id, "delta_opex", e.target.value)
+                      }
+                      disabled={isBase || recalculating}
+                    />
+                  </div>
+                  {/* 4.5 — project-wide дельты цены/сырья/логистики */}
+                  <div className="space-y-2 border-t pt-3">
+                    <Label
+                      htmlFor={`delta-shelf-${s.id}`}
+                      className="text-xs text-muted-foreground"
+                    >
+                      Цена полки, %
+                    </Label>
+                    <Input
+                      id={`delta-shelf-${s.id}`}
+                      type="number"
+                      step="0.1"
+                      value={draft?.delta_shelf_price ?? "0"}
+                      onChange={(e) =>
+                        updateDraft(s.id, "delta_shelf_price", e.target.value)
+                      }
+                      disabled={isBase || recalculating}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor={`delta-bom-${s.id}`}
+                      className="text-xs text-muted-foreground"
+                    >
+                      Себестоимость BOM, %
+                    </Label>
+                    <Input
+                      id={`delta-bom-${s.id}`}
+                      type="number"
+                      step="0.1"
+                      value={draft?.delta_bom_cost ?? "0"}
+                      onChange={(e) =>
+                        updateDraft(s.id, "delta_bom_cost", e.target.value)
+                      }
+                      disabled={isBase || recalculating}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor={`delta-log-${s.id}`}
+                      className="text-xs text-muted-foreground"
+                    >
+                      Логистика, %
+                    </Label>
+                    <Input
+                      id={`delta-log-${s.id}`}
+                      type="number"
+                      step="0.1"
+                      value={draft?.delta_logistics ?? "0"}
+                      onChange={(e) =>
+                        updateDraft(s.id, "delta_logistics", e.target.value)
                       }
                       disabled={isBase || recalculating}
                     />

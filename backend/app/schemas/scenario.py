@@ -23,6 +23,10 @@ class ScenarioRead(BaseModel):
     delta_nd: Decimal
     delta_offtake: Decimal
     delta_opex: Decimal
+    # 4.5 — project-wide мультипликативные дельты price/COGS/logistics
+    delta_shelf_price: Decimal = Decimal("0")
+    delta_bom_cost: Decimal = Decimal("0")
+    delta_logistics: Decimal = Decimal("0")
     notes: str | None
     created_at: datetime
 
@@ -33,11 +37,15 @@ class ScenarioUpdate(BaseModel):
     `type` и `project_id` НЕ могут быть изменены — поля отсутствуют
     в схеме (Pydantic v2 по умолчанию ignore unknown fields).
     Дельты могут быть отрицательными (Conservative обычно delta_nd<0).
+    4.5: price/COGS/logistics дельты могут быть большими (до ±50%).
     """
 
     delta_nd: Decimal | None = Field(default=None, ge=-1, le=1)
     delta_offtake: Decimal | None = Field(default=None, ge=-1, le=1)
     delta_opex: Decimal | None = Field(default=None, ge=-1, le=1)
+    delta_shelf_price: Decimal | None = Field(default=None, ge=-1, le=1)
+    delta_bom_cost: Decimal | None = Field(default=None, ge=-1, le=1)
+    delta_logistics: Decimal | None = Field(default=None, ge=-1, le=1)
     notes: str | None = Field(default=None, max_length=5000)
 
 

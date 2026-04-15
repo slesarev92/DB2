@@ -348,6 +348,24 @@ class Scenario(Base, TimestampMixin):
         Numeric(8, 6), nullable=False, default=Decimal("0")
     )
 
+    # 4.5 (engine audit) — дельты по цене/COGS/логистике, project-wide.
+    # Позволяют моделировать риск-сценарии "сырьё подорожало на 15%",
+    # "ритейл потребовал скидку 10%", "логистика подорожала 25%".
+    # Применяются мультипликативно ко всем psk_channel сценария (в отличие
+    # от per-channel delta_nd/delta_offtake в ScenarioChannelDelta).
+    delta_shelf_price: Mapped[Decimal] = mapped_column(
+        Numeric(8, 6), nullable=False, default=Decimal("0"),
+        server_default="0",
+    )
+    delta_bom_cost: Mapped[Decimal] = mapped_column(
+        Numeric(8, 6), nullable=False, default=Decimal("0"),
+        server_default="0",
+    )
+    delta_logistics: Mapped[Decimal] = mapped_column(
+        Numeric(8, 6), nullable=False, default=Decimal("0"),
+        server_default="0",
+    )
+
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (

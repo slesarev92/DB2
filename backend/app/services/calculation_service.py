@@ -405,6 +405,20 @@ async def _build_line_input(
     if delta_offtake != 0.0:
         offtake_arr = [v * (1.0 + delta_offtake) for v in offtake_arr]
 
+    # 4.5 (engine audit) — project-wide дельты price/COGS/logistics.
+    # Применяются мультипликативно ко всем periods (включая launch lag:
+    # после обнуления nd/offtake volume=0, так что дельты цены/COGS
+    # не создают артефактов).
+    delta_shelf = float(scenario.delta_shelf_price or 0)
+    delta_bom = float(scenario.delta_bom_cost or 0)
+    delta_log = float(scenario.delta_logistics or 0)
+    if delta_shelf != 0.0:
+        shelf_arr = [v * (1.0 + delta_shelf) for v in shelf_arr]
+    if delta_bom != 0.0:
+        bom_arr = [v * (1.0 + delta_bom) for v in bom_arr]
+    if delta_log != 0.0:
+        log_arr = [v * (1.0 + delta_log) for v in log_arr]
+
     # Launch lag (D-13): обнуляем nd/offtake для periods до launch month.
     # Excel хранит launch_year/launch_month per (SKU × Channel), не per
     # SKU — TT/E-COM каналы запускаются раньше HM/SM/MM. Поля живут на
