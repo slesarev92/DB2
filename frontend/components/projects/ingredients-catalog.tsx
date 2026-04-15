@@ -40,6 +40,7 @@ import {
 import {
   useSortableTable,
   sortIndicator,
+  sortableHeaderProps,
   type SortableColumn,
 } from "@/lib/use-sortable-table";
 
@@ -238,16 +239,16 @@ export function IngredientsCatalog() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="cursor-pointer select-none" onClick={() => toggleIngSort("name")}>
+                <TableHead {...sortableHeaderProps(toggleIngSort, "name")}>
                   Название{sortIndicator(ingSortState, "name")}
                 </TableHead>
-                <TableHead className="w-16 cursor-pointer select-none" onClick={() => toggleIngSort("unit")}>
+                <TableHead {...sortableHeaderProps(toggleIngSort, "unit", "w-16")}>
                   Ед.{sortIndicator(ingSortState, "unit")}
                 </TableHead>
-                <TableHead className="w-24 cursor-pointer select-none" onClick={() => toggleIngSort("category")}>
+                <TableHead {...sortableHeaderProps(toggleIngSort, "category", "w-24")}>
                   Категория{sortIndicator(ingSortState, "category")}
                 </TableHead>
-                <TableHead className="w-28 cursor-pointer select-none" onClick={() => toggleIngSort("price")}>
+                <TableHead {...sortableHeaderProps(toggleIngSort, "price", "w-28")}>
                   Цена (без НДС){sortIndicator(ingSortState, "price")}
                 </TableHead>
                 <TableHead className="w-24" />

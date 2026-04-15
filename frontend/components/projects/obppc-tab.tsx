@@ -45,6 +45,7 @@ import {
 import {
   useSortableTable,
   sortIndicator,
+  sortableHeaderProps,
   type SortableColumn,
 } from "@/lib/use-sortable-table";
 
@@ -285,22 +286,22 @@ export function ObppcTab({ projectId }: ObppcTabProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="cursor-pointer select-none" onClick={() => toggleObSort("sku")}>
+                <TableHead {...sortableHeaderProps(toggleObSort, "sku")}>
                   SKU{sortIndicator(obSortState, "sku")}
                 </TableHead>
-                <TableHead className="cursor-pointer select-none" onClick={() => toggleObSort("channel")}>
+                <TableHead {...sortableHeaderProps(toggleObSort, "channel")}>
                   Канал{sortIndicator(obSortState, "channel")}
                 </TableHead>
-                <TableHead className="w-28 cursor-pointer select-none" onClick={() => toggleObSort("tier")}>
+                <TableHead {...sortableHeaderProps(toggleObSort, "tier", "w-28")}>
                   Tier{sortIndicator(obSortState, "tier")}
                 </TableHead>
-                <TableHead className="w-24 cursor-pointer select-none" onClick={() => toggleObSort("format")}>
+                <TableHead {...sortableHeaderProps(toggleObSort, "format", "w-24")}>
                   Формат{sortIndicator(obSortState, "format")}
                 </TableHead>
-                <TableHead className="w-20 cursor-pointer select-none text-right" onClick={() => toggleObSort("ml")}>
+                <TableHead {...sortableHeaderProps(toggleObSort, "ml", "w-20 text-right")}>
                   ml{sortIndicator(obSortState, "ml")}
                 </TableHead>
-                <TableHead className="w-24 cursor-pointer select-none text-right" onClick={() => toggleObSort("price")}>
+                <TableHead {...sortableHeaderProps(toggleObSort, "price", "w-24 text-right")}>
                   Цена{sortIndicator(obSortState, "price")}
                 </TableHead>
                 <TableHead className="w-16" />

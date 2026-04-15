@@ -1,5 +1,6 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { Fragment, useCallback, useEffect, useState } from "react";
 
 import { ExecutiveSummaryInline } from "@/components/ai-panel/executive-summary-inline";
@@ -127,8 +128,12 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
   const [recalcStatus, setRecalcStatus] = useState<string>("");
   const [recalcError, setRecalcError] = useState<string | null>(null);
 
-  // Export state
-  const [exporting, setExporting] = useState(false);
+  // Export state — format of current active export or null
+  type ExportFormat = "xlsx" | "pptx" | "pdf";
+  const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(
+    null,
+  );
+  const exporting = exportingFormat !== null;
   const [exportError, setExportError] = useState<string | null>(null);
 
   // Загружаем сценарии
@@ -232,7 +237,7 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
 
   async function handleExportXlsx() {
     setExportError(null);
-    setExporting(true);
+    setExportingFormat("xlsx");
     try {
       await downloadProjectXlsx(projectId);
     } catch (err) {
@@ -240,13 +245,13 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
         err instanceof ApiError ? err.detail ?? err.message : "Ошибка экспорта",
       );
     } finally {
-      setExporting(false);
+      setExportingFormat(null);
     }
   }
 
   async function handleExportPptx() {
     setExportError(null);
-    setExporting(true);
+    setExportingFormat("pptx");
     try {
       await downloadProjectPptx(projectId);
     } catch (err) {
@@ -254,13 +259,13 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
         err instanceof ApiError ? err.detail ?? err.message : "Ошибка экспорта",
       );
     } finally {
-      setExporting(false);
+      setExportingFormat(null);
     }
   }
 
   async function handleExportPdf() {
     setExportError(null);
-    setExporting(true);
+    setExportingFormat("pdf");
     try {
       await downloadProjectPdf(projectId);
     } catch (err) {
@@ -268,7 +273,7 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
         err instanceof ApiError ? err.detail ?? err.message : "Ошибка экспорта",
       );
     } finally {
-      setExporting(false);
+      setExportingFormat(null);
     }
   }
 
@@ -342,21 +347,42 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
             disabled={exporting || recalculating}
             variant="outline"
           >
-            {exporting ? "Экспорт..." : "Скачать XLSX"}
+            {exportingFormat === "xlsx" ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Генерирую XLSX…
+              </>
+            ) : (
+              "Скачать XLSX"
+            )}
           </Button>
           <Button
             onClick={handleExportPptx}
             disabled={exporting || recalculating}
             variant="outline"
           >
-            {exporting ? "Экспорт..." : "Скачать PPTX"}
+            {exportingFormat === "pptx" ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Генерирую PPTX…
+              </>
+            ) : (
+              "Скачать PPTX"
+            )}
           </Button>
           <Button
             onClick={handleExportPdf}
             disabled={exporting || recalculating}
             variant="outline"
           >
-            {exporting ? "Экспорт..." : "Скачать PDF"}
+            {exportingFormat === "pdf" ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Генерирую PDF…
+              </>
+            ) : (
+              "Скачать PDF"
+            )}
           </Button>
           <Button onClick={handleRecalculate} disabled={recalculating}>
             {recalculating ? "Пересчитываем..." : "Пересчитать"}

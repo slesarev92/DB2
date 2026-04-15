@@ -44,6 +44,7 @@ import {
 import {
   useSortableTable,
   sortIndicator,
+  sortableHeaderProps,
   type SortableColumn,
 } from "@/lib/use-sortable-table";
 
@@ -258,19 +259,19 @@ export function AkbTab({ projectId }: AkbTabProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="cursor-pointer select-none" onClick={() => toggleAkbSort("channel")}>
+                <TableHead {...sortableHeaderProps(toggleAkbSort, "channel")}>
                   Канал{sortIndicator(akbSortState, "channel")}
                 </TableHead>
-                <TableHead className="w-28 cursor-pointer select-none text-right" onClick={() => toggleAkbSort("universe")}>
+                <TableHead {...sortableHeaderProps(toggleAkbSort, "universe", "w-28 text-right")}>
                   Universe{sortIndicator(akbSortState, "universe")}
                 </TableHead>
-                <TableHead className="w-28 cursor-pointer select-none text-right" onClick={() => toggleAkbSort("target")}>
+                <TableHead {...sortableHeaderProps(toggleAkbSort, "target", "w-28 text-right")}>
                   Target{sortIndicator(akbSortState, "target")}
                 </TableHead>
-                <TableHead className="w-28 cursor-pointer select-none text-right" onClick={() => toggleAkbSort("coverage")}>
+                <TableHead {...sortableHeaderProps(toggleAkbSort, "coverage", "w-28 text-right")}>
                   Coverage{sortIndicator(akbSortState, "coverage")}
                 </TableHead>
-                <TableHead className="w-28 cursor-pointer select-none text-right" onClick={() => toggleAkbSort("wd")}>
+                <TableHead {...sortableHeaderProps(toggleAkbSort, "wd", "w-28 text-right")}>
                   Wt. Distr.{sortIndicator(akbSortState, "wd")}
                 </TableHead>
                 <TableHead className="w-16" />

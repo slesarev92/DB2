@@ -44,6 +44,20 @@ interface ChatMessage {
   model?: string;
 }
 
+function TypingDots() {
+  return (
+    <div
+      className="flex items-center gap-1 py-1"
+      role="status"
+      aria-label="AI печатает"
+    >
+      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.2s]" />
+      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.1s]" />
+      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" />
+    </div>
+  );
+}
+
 export function AIPanelChat() {
   const params = useParams();
   const projectId = params?.id ? Number(params.id) : null;
@@ -364,24 +378,35 @@ export function AIPanelChat() {
             отрицательный на Y1-Y3?» или «Сравни Base и Conservative».
           </p>
         )}
-        {messages.map((msg, idx) => (
-          <div
-            key={idx}
-            className={cn(
-              "rounded-md p-2 text-xs",
-              msg.role === "user"
-                ? "ml-8 bg-primary/10"
-                : "mr-4 bg-muted/50",
-            )}
-          >
-            <div className="whitespace-pre-wrap">{msg.content || "..."}</div>
-            {msg.role === "assistant" && msg.costRub && (
-              <div className="mt-1 text-[10px] text-muted-foreground">
-                {msg.model} · {formatCostRub(msg.costRub)}
-              </div>
-            )}
-          </div>
-        ))}
+        {messages.map((msg, idx) => {
+          const isLast = idx === messages.length - 1;
+          const isPendingAssistant =
+            msg.role === "assistant" && streaming && isLast && msg.content === "";
+          return (
+            <div
+              key={idx}
+              className={cn(
+                "rounded-md p-2 text-xs",
+                msg.role === "user"
+                  ? "ml-8 bg-primary/10"
+                  : "mr-4 bg-muted/50",
+              )}
+            >
+              {isPendingAssistant ? (
+                <TypingDots />
+              ) : (
+                <div className="whitespace-pre-wrap">
+                  {msg.content || "..."}
+                </div>
+              )}
+              {msg.role === "assistant" && msg.costRub && (
+                <div className="mt-1 text-[10px] text-muted-foreground">
+                  {msg.model} · {formatCostRub(msg.costRub)}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Error */}

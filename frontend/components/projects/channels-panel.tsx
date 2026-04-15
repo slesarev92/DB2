@@ -23,6 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Tooltip } from "@/components/ui/tooltip";
 import { ApiError } from "@/lib/api";
 import {
   deletePskChannel,
@@ -32,6 +33,7 @@ import { formatPercent } from "@/lib/format";
 import {
   useSortableTable,
   sortIndicator,
+  sortableHeaderProps,
   type SortableColumn,
 } from "@/lib/use-sortable-table";
 
@@ -145,20 +147,20 @@ export function ChannelsPanel({ pskId }: ChannelsPanelProps) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="cursor-pointer select-none" onClick={() => toggleChSort("channel")}>
+                  <TableHead {...sortableHeaderProps(toggleChSort, "channel")}>
                     Канал{sortIndicator(chSortState, "channel")}
                   </TableHead>
-                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleChSort("nd")}>
+                  <TableHead {...sortableHeaderProps(toggleChSort, "nd", "text-right")}>
                     ND target{sortIndicator(chSortState, "nd")}
                   </TableHead>
-                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleChSort("offtake")}>
+                  <TableHead {...sortableHeaderProps(toggleChSort, "offtake", "text-right")}>
                     Off-take{sortIndicator(chSortState, "offtake")}
                   </TableHead>
-                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleChSort("margin")}>
+                  <TableHead {...sortableHeaderProps(toggleChSort, "margin", "text-right")}>
                     Margin{sortIndicator(chSortState, "margin")}
                   </TableHead>
                   <TableHead className="text-right">Promo (%/share)</TableHead>
-                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleChSort("shelf")}>
+                  <TableHead {...sortableHeaderProps(toggleChSort, "shelf", "text-right")}>
                     Shelf, ₽{sortIndicator(chSortState, "shelf")}
                   </TableHead>
                   <TableHead></TableHead>
@@ -168,10 +170,19 @@ export function ChannelsPanel({ pskId }: ChannelsPanelProps) {
                 {sortedItems.map((psc) => (
                   <TableRow key={psc.id}>
                     <TableCell className="max-w-[180px]">
-                      <div className="font-medium truncate">{psc.channel.code}</div>
-                      <div className="text-xs text-muted-foreground truncate">
-                        {psc.channel.name}
-                      </div>
+                      <Tooltip
+                        content={`${psc.channel.code} — ${psc.channel.name}`}
+                        side="right"
+                      >
+                        <div>
+                          <div className="font-medium truncate">
+                            {psc.channel.code}
+                          </div>
+                          <div className="text-xs text-muted-foreground truncate">
+                            {psc.channel.name}
+                          </div>
+                        </div>
+                      </Tooltip>
                     </TableCell>
                     <TableCell className="text-right">
                       {formatPercent(psc.nd_target)}

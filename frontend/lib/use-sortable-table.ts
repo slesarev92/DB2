@@ -1,5 +1,6 @@
 "use client";
 
+import type { KeyboardEvent } from "react";
 import { useCallback, useMemo, useState } from "react";
 
 export type SortDirection = "asc" | "desc";
@@ -114,4 +115,47 @@ export function sortIndicator<K extends string>(
 ): string {
   if (state.column !== column) return "";
   return state.direction === "asc" ? " \u2191" : " \u2193";
+}
+
+/**
+ * Ключевой набор props для TableHead, делающий колонку сортируемой + доступной
+ * с клавиатуры (Tab для фокуса, Enter/Space — toggle). Базовые классы курсора
+ * и focus-ring применяются всегда; `extraClassName` добавляется сверху (например
+ * `"text-right w-24"`).
+ *
+ * Использование:
+ * ```tsx
+ * <TableHead {...sortableHeaderProps(toggleChSort, "channel", "w-48")}>
+ *   Канал{sortIndicator(chSortState, "channel")}
+ * </TableHead>
+ * ```
+ */
+export function sortableHeaderProps<K extends string>(
+  toggleSort: (column: K) => void,
+  column: K,
+  extraClassName?: string,
+): {
+  className: string;
+  onClick: () => void;
+  onKeyDown: (e: KeyboardEvent<HTMLTableCellElement>) => void;
+  tabIndex: number;
+  role: "button";
+  "aria-label": string;
+} {
+  const base =
+    "cursor-pointer select-none rounded-sm focus:outline-none " +
+    "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1";
+  return {
+    className: extraClassName ? `${base} ${extraClassName}` : base,
+    onClick: () => toggleSort(column),
+    onKeyDown: (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggleSort(column);
+      }
+    },
+    tabIndex: 0,
+    role: "button",
+    "aria-label": `Сортировать по ${column}`,
+  };
 }

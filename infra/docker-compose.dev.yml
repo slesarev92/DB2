@@ -123,7 +123,19 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    command: celery -A app.worker worker --loglevel=info
+    # F-05: watchmedo auto-restart — celery-worker перезапускается на
+    # изменение *.py файлов. Celery у себя не имеет --reload (uvicorn
+    # делает, celery нет). Без этого флага приходилось руками дёргать
+    # `docker compose restart celery-worker` после правок в engine/,
+    # calculation_service, sensitivity_service — иначе API возвращал
+    # успех, но в БД сохранялись старые значения / новые поля = NULL.
+    #
+    # `--debug-force-polling --interval=2` обязательны на Windows+Docker
+    # Desktop/WSL2: inotify events не прокидываются через bind mount —
+    # без polling auto-restart молчит. На Linux polling не вредит (лёгкий
+    # stat каждые 2 секунды). В prod (docker-compose.prod.yml) watchmedo
+    # не используется вообще.
+    command: watchmedo auto-restart --directory=/app --pattern=*.py --recursive --debug-force-polling --interval=2 -- celery -A app.worker worker --loglevel=info
 
   minio:
     image: minio/minio:latest

@@ -243,7 +243,8 @@ export function FinancialPlanEditor({ projectId }: FinancialPlanEditorProps) {
         )}
 
         {items !== null && (
-          <Table>
+          <div className="overflow-x-auto">
+            <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-24">Год</TableHead>
@@ -293,6 +294,7 @@ export function FinancialPlanEditor({ projectId }: FinancialPlanEditorProps) {
               </TableRow>
             </TableBody>
           </Table>
+          </div>
         )}
       </CardContent>
     </Card>

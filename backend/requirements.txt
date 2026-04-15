@@ -79,3 +79,9 @@ boto3>=1.35.0,<2.0.0
 # gunicorn с uvicorn workers для production. В dev не используется
 # (uvicorn --reload напрямую). Конфиг: 4 workers, timeout 120s.
 gunicorn>=22.0.0,<24.0.0
+
+# --- Dev-only: celery-worker auto-reload (F-05) ---
+# watchdog предоставляет `watchmedo auto-restart` — перезапускает celery
+# на изменение *.py файлов. В prod не активируется (в Dockerfile.prod /
+# docker-compose.prod.yml команда запуска без watchmedo). MIT license.
+watchdog>=4.0.0,<7.0.0

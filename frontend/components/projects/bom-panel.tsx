@@ -42,6 +42,7 @@ import {
 import {
   useSortableTable,
   sortIndicator,
+  sortableHeaderProps,
   type SortableColumn,
 } from "@/lib/use-sortable-table";
 
@@ -523,20 +524,20 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="cursor-pointer select-none" onClick={() => toggleBomSort("name")}>
+                  <TableHead {...sortableHeaderProps(toggleBomSort, "name")}>
                     Ингредиент{sortIndicator(bomSortState, "name")}
                   </TableHead>
-                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleBomSort("qty")}>
+                  <TableHead {...sortableHeaderProps(toggleBomSort, "qty", "text-right")}>
                     Кол-во/ед{sortIndicator(bomSortState, "qty")}
                   </TableHead>
-                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleBomSort("loss")}>
+                  <TableHead {...sortableHeaderProps(toggleBomSort, "loss", "text-right")}>
                     % потерь{sortIndicator(bomSortState, "loss")}
                   </TableHead>
-                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleBomSort("price")}>
+                  <TableHead {...sortableHeaderProps(toggleBomSort, "price", "text-right")}>
                     Цена/ед, ₽ (без НДС){sortIndicator(bomSortState, "price")}
                   </TableHead>
                   <TableHead className="text-right">НДС, %</TableHead>
-                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleBomSort("cost")}>
+                  <TableHead {...sortableHeaderProps(toggleBomSort, "cost", "text-right")}>
                     Стоимость, ₽{sortIndicator(bomSortState, "cost")}
                   </TableHead>
                   <TableHead></TableHead>
