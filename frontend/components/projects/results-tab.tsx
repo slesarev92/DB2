@@ -202,6 +202,16 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
       const resp = await getTaskStatus(taskId);
       onStatus(resp.status);
       if (resp.status === "SUCCESS") {
+        // Celery SUCCESS, но task мог вернуть логическую ошибку в result.error
+        // (ProjectNotFound / NoLines / 4.3 LineValidationError). Backend
+        // специально не raise'ит эти — pipeline не упал, просто bad input.
+        const r = resp.result as { error?: string; message?: string } | undefined;
+        if (r && typeof r === "object" && r.error) {
+          return {
+            ok: false,
+            error: r.message ?? r.error,
+          };
+        }
         return { ok: true };
       }
       if (resp.status === "FAILURE") {

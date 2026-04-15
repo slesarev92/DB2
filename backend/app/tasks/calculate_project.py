@@ -33,6 +33,7 @@ from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 from app.services.calculation_service import (
+    LineValidationError,
     NoLinesError,
     ProjectNotFoundError,
     calculate_all_scenarios,
@@ -90,10 +91,13 @@ def calculate_project_task(self, project_id: int) -> dict[str, Any]:
     """
     try:
         return asyncio.run(_calculate_project_async(project_id))
-    except (ProjectNotFoundError, NoLinesError) as exc:
+    except (ProjectNotFoundError, NoLinesError, LineValidationError) as exc:
         # Эти ошибки — bad request, не баг. Возвращаем как failed result
         # с понятным сообщением. Celery state будет SUCCESS (task не упал),
         # но результат содержит error-поле.
+        # LineValidationError (4.3) — пользователь ввёл невозможные параметры
+        # (channel_margin ≥ 1.0, shelf_price < 0). Frontend показывает
+        # message в recalcError / toast.
         return {
             "project_id": project_id,
             "error": type(exc).__name__,

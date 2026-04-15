@@ -194,7 +194,15 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
     while (Date.now() - start < TIMEOUT_MS) {
       const resp = await getTaskStatus(taskId);
       onStatus(resp.status);
-      if (resp.status === "SUCCESS") return { ok: true };
+      if (resp.status === "SUCCESS") {
+        // Celery SUCCESS, но task мог вернуть логическую ошибку в result.error
+        // (ProjectNotFound / NoLines / 4.3 LineValidationError).
+        const r = resp.result as { error?: string; message?: string } | undefined;
+        if (r && typeof r === "object" && r.error) {
+          return { ok: false, error: r.message ?? r.error };
+        }
+        return { ok: true };
+      }
       if (resp.status === "FAILURE") {
         return {
           ok: false,

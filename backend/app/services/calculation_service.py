@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import logging
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -49,6 +50,36 @@ class NoLinesError(Exception):
 
 class IncompletePeriodValuesError(Exception):
     """Для (psk_channel × scenario) не хватает PeriodValue для покрытия 43 периодов."""
+
+
+class LineValidationError(Exception):
+    """4.3 (engine audit): critical validation failure на уровне линии расчёта.
+
+    Поднимается из `_build_line_input`, когда параметры PSC/Project
+    делают pipeline математически некорректным. Примеры:
+    - channel_margin >= 1.0 → ex_factory = SHELF × (1 − CM) ≤ 0
+    - shelf_price_reg < 0 → отрицательная NR
+
+    Не-critical недостатки (universe=0, bom=0, shelf_price=0)
+    логируются как warnings — pipeline математически валиден,
+    просто возвращает нули/near-zero значения.
+
+    Atтрибуты: `psc_id`, `field`, `value`, `reason`.
+    """
+
+    def __init__(
+        self, psc_id: int, field: str, value: float, reason: str
+    ) -> None:
+        self.psc_id = psc_id
+        self.field = field
+        self.value = value
+        self.reason = reason
+        super().__init__(
+            f"PSC {psc_id}: {field}={value} — {reason}"
+        )
+
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -190,6 +221,66 @@ async def _load_seasonality_coefficients(
         except (ValueError, TypeError):
             return {}
     return {}
+
+
+def _validate_line_input(
+    *,
+    psc_id: int,
+    cm_arr: list[float],
+    shelf_arr: list[float],
+    universe: int,
+    bom_unit_cost_base: float,
+) -> None:
+    """4.3 (engine audit) — валидация параметров PSC/Project до pipeline.
+
+    Critical (raises `LineValidationError`, API → 422):
+    - Любой channel_margin >= 1.0 → ex_factory ≤ 0 → NR отрицательный.
+    - Любой shelf_price < 0 → NR отрицательный.
+
+    Warning (logger.warning):
+    - universe_outlets == 0 → volume=0, весь downstream = 0.
+    - bom_unit_cost == 0 → COGS materials = 0 (возможно BOM не заполнен).
+    - любой shelf_price == 0 → NR=0 в этом периоде.
+    """
+    # --- Critical ---
+    for i, cm in enumerate(cm_arr):
+        if cm >= 1.0:
+            raise LineValidationError(
+                psc_id,
+                "channel_margin",
+                cm,
+                f"channel_margin ≥ 1.0 в периоде {i + 1} → ex_factory ≤ 0 "
+                "(SHELF × (1 − CM) отрицательный). Уменьшите маржу канала.",
+            )
+    for i, s in enumerate(shelf_arr):
+        if s < 0:
+            raise LineValidationError(
+                psc_id,
+                "shelf_price_reg",
+                s,
+                f"shelf_price_reg < 0 в периоде {i + 1} → отрицательная NR.",
+            )
+
+    # --- Warnings ---
+    if universe == 0:
+        logger.warning(
+            "PSC %s: universe_outlets=0 — канал без точек, volume будет 0 "
+            "(проверьте channel.universe_outlets в справочнике).",
+            psc_id,
+        )
+    if bom_unit_cost_base == 0:
+        logger.warning(
+            "PSC %s: bom_unit_cost=0 — BOM SKU пустой или цены = 0, "
+            "COGS materials будет 0 (возможно, забыли заполнить BOM).",
+            psc_id,
+        )
+    zero_shelf_periods = sum(1 for s in shelf_arr if s == 0)
+    if zero_shelf_periods > 0:
+        logger.warning(
+            "PSC %s: shelf_price_reg=0 в %s периодах — NR в этих периодах = 0.",
+            psc_id,
+            zero_shelf_periods,
+        )
 
 
 async def _build_line_input(
@@ -339,6 +430,18 @@ async def _build_line_input(
         if period.period_number < launch_period_number:
             nd_arr[i] = 0.0
             offtake_arr[i] = 0.0
+
+    # 4.3 Input validation (engine audit §4.3). Ловим заведомо некорректные
+    # параметры до запуска pipeline — ошибочный ввод лучше вернуть
+    # пользователю сразу (через 422 на recalculate), чем через бессмысленные
+    # KPI. Non-critical проблемы логируем как warning.
+    _validate_line_input(
+        psc_id=psc.id,
+        cm_arr=cm_arr,
+        shelf_arr=shelf_arr,
+        universe=universe,
+        bom_unit_cost_base=bom_unit_cost_base,
+    )
 
     return PipelineInput(
         project_sku_channel_id=psc.id,
