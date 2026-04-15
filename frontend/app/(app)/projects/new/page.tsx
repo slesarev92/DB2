@@ -237,6 +237,7 @@ export default function NewProjectPage() {
                   className="flex items-center gap-1.5 font-medium cursor-pointer"
                 >
                   Перенос налоговых убытков (ст.283 НК РФ)
+                  <HelpButton help="project.tax_loss_carryforward" />
                 </Label>
                 <p className="text-xs text-muted-foreground">
                   Убытки убыточных лет переносятся вперёд, уменьшая

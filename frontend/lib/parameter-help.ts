@@ -92,6 +92,18 @@ export const PARAMETER_HELP: Record<string, ParameterHelp> = {
     excelRef: "s12_gonogo в engine/",
   },
 
+  "project.tax_loss_carryforward": {
+    title: "Перенос налоговых убытков (ст.283 НК РФ)",
+    description:
+      "Если включён — убыточные годы Y1-Y2 уменьшают налоговую базу прибыльных Y3-Y5 (cap 50% прибыли года). Реалистично для launch-проектов. Выкл — Excel-compat baseline (налог=0 при убытке, без переноса).",
+    impact: "Annual tax → OCF → FCF → NPV/IRR/Payback. Для типичных launch-проектов NPV выше на 2-5%.",
+    formula:
+      "С флагом: taxable[t] = CM[t] − min(cumulative_loss, 0.5×CM[t])\ntax[t] = −taxable × tax_rate",
+    units: "boolean",
+    defaultValue: "false (Excel-compat)",
+    excelRef: "D-24 в TZ_VS_EXCEL_DISCREPANCIES.md",
+  },
+
   "project.horizon_years": {
     title: "Горизонт планирования",
     description:
@@ -367,6 +379,42 @@ export const PARAMETER_HELP: Record<string, ParameterHelp> = {
     impact: "Marketing + CA&M + logistics.",
     units: "доля",
     range: "-0.30 .. +0.30",
+  },
+
+  "scenario.delta_shelf_price": {
+    title: "Дельта цены полки (4.5)",
+    description:
+      "Project-wide сдвиг shelf_price_reg в сценарии. Моделирует риск ценовых переговоров с ритейлом (-10% на давление сетей) или премиум-позиционирование (+15%).",
+    impact: "Net Revenue → GP → CM → EBITDA → FCF → NPV/IRR.",
+    formula: "SHELF[t] = SHELF_BASE[t] × (1 + DELTA_SHELF)",
+    units: "% к Base",
+    range: "-50 .. +50%",
+    defaultValue: "0%",
+    excelRef: "нет (новое в 4.5 engine audit)",
+  },
+
+  "scenario.delta_bom_cost": {
+    title: "Дельта себестоимости BOM (4.5)",
+    description:
+      "Project-wide сдвиг BOM unit cost (сырьё + упаковка). Моделирует инфляцию сырья (+15%) или снижение через локализацию поставщика (-10%).",
+    impact: "COGS материалов → GP → CM → EBITDA → FCF → NPV/IRR.",
+    formula: "BOM[t] = BOM_BASE[t] × (1 + DELTA_BOM)",
+    units: "% к Base",
+    range: "-50 .. +50%",
+    defaultValue: "0%",
+    excelRef: "нет (новое в 4.5 engine audit)",
+  },
+
+  "scenario.delta_logistics": {
+    title: "Дельта логистики (4.5)",
+    description:
+      "Project-wide сдвиг logistics_cost_per_kg. Моделирует рост тарифов перевозчиков (+20%) или оптимизацию маршрутов (-10%).",
+    impact: "Logistics cost → CM → EBITDA → FCF → NPV/IRR.",
+    formula: "LOG[t] = LOG_BASE[t] × (1 + DELTA_LOG)",
+    units: "% к Base",
+    range: "-30 .. +50%",
+    defaultValue: "0%",
+    excelRef: "нет (новое в 4.5 engine audit)",
   },
 
   // ============================================================

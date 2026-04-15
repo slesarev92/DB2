@@ -470,9 +470,10 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
                   <div className="space-y-2 border-t pt-3">
                     <Label
                       htmlFor={`delta-shelf-${s.id}`}
-                      className="text-xs text-muted-foreground"
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground"
                     >
                       Цена полки, %
+                      <HelpButton help="scenario.delta_shelf_price" />
                     </Label>
                     <Input
                       id={`delta-shelf-${s.id}`}
@@ -488,9 +489,10 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
                   <div className="space-y-2">
                     <Label
                       htmlFor={`delta-bom-${s.id}`}
-                      className="text-xs text-muted-foreground"
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground"
                     >
                       Себестоимость BOM, %
+                      <HelpButton help="scenario.delta_bom_cost" />
                     </Label>
                     <Input
                       id={`delta-bom-${s.id}`}
@@ -506,9 +508,10 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
                   <div className="space-y-2">
                     <Label
                       htmlFor={`delta-log-${s.id}`}
-                      className="text-xs text-muted-foreground"
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground"
                     >
                       Логистика, %
+                      <HelpButton help="scenario.delta_logistics" />
                     </Label>
                     <Input
                       id={`delta-log-${s.id}`}
