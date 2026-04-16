@@ -171,6 +171,9 @@ export function AddSkuDialog({
                 value={selectedSkuId}
                 onValueChange={(v) => setSelectedSkuId(v ?? "")}
                 disabled={submitting}
+                items={Object.fromEntries(
+                  skus.map((s) => [String(s.id), `${s.brand} — ${s.name}`]),
+                )}
               >
                 <SelectTrigger id="sku-select">
                   <SelectValue placeholder="Выберите..." />

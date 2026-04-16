@@ -262,6 +262,12 @@ export default function NewProjectPage() {
                   )
                 }
                 disabled={submitting}
+                items={{
+                  [NO_INFLATION_VALUE]: "Без инфляции",
+                  ...Object.fromEntries(
+                    profiles.map((p) => [String(p.id), p.profile_name]),
+                  ),
+                }}
               >
                 <SelectTrigger id="inflation_profile_id">
                   <SelectValue placeholder="Выберите профиль" />

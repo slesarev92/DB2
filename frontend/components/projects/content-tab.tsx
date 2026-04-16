@@ -65,11 +65,11 @@ const VALIDATION_SUBTESTS: Array<{
   key: keyof ValidationTests;
   label: string;
 }> = [
-  { key: "concept_test", label: "Concept test" },
-  { key: "naming", label: "Naming" },
-  { key: "design", label: "Design" },
-  { key: "product", label: "Product" },
-  { key: "price", label: "Price" },
+  { key: "concept_test", label: "Концепт-тест" },
+  { key: "naming", label: "Нейминг" },
+  { key: "design", label: "Дизайн" },
+  { key: "product", label: "Продукт" },
+  { key: "price", label: "Цена" },
 ];
 
 /** Все scalar content-поля проекта, которые редактируются на этом табе. */
@@ -610,7 +610,7 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
                   />
                 </div>
                 <div className="md:col-span-3">
-                  <Label>Notes</Label>
+                  <Label>Заметки</Label>
                   <Textarea
                     rows={2}
                     placeholder="выводы теста"
@@ -726,6 +726,7 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
                       [dept]: { status, notes: entry.notes },
                     }));
                   }}
+                  items={FUNCTION_STATUS_LABELS}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue />
@@ -1007,11 +1008,11 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
                   <tr className="border-b">
                     <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Канал</th>
                     <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Universe (точек)</th>
-                    <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Off-take</th>
+                    <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Отгрузка</th>
                     <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">ND %</th>
                     <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Цена ср., ₽</th>
                     <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Категория %</th>
-                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Note</th>
+                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Заметка</th>
                     <th />
                   </tr>
                 </thead>

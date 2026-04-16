@@ -140,7 +140,7 @@ export function Sidebar() {
             "mb-2 w-full gap-2",
             collapsed ? "justify-center px-0" : "justify-start",
           )}
-          title="AI Assistant (Ctrl+K)"
+          title="AI-ассистент (Ctrl+K)"
         >
           <Sparkles className="h-4 w-4 shrink-0" />
           {!collapsed && (

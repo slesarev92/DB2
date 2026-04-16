@@ -412,6 +412,7 @@ function OpexYearRow({
                       onUpdateOpexItem(item.year, idx, "category", v ?? "other")
                     }
                     disabled={saving}
+                    items={OPEX_CATEGORY_LABELS}
                   >
                     <SelectTrigger className="h-8 w-[130px] text-xs">
                       <SelectValue placeholder="Категория" />

@@ -148,7 +148,7 @@ export function ExplainKpiInline({
                   : "hover:bg-muted",
               )}
             >
-              Standard
+              Обычный
             </button>
             <button
               type="button"
@@ -161,7 +161,7 @@ export function ExplainKpiInline({
               )}
               title="Глубокий анализ через opus — ~10₽"
             >
-              Deep
+              Глубокий
             </button>
           </div>
           {/* Run / abort button */}

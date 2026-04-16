@@ -152,6 +152,7 @@ export function SensitivityTab({ projectId }: SensitivityTabProps) {
               setScope(val);
               void handleCompute(val);
             }}
+            items={SCOPE_OPTIONS}
           >
             <SelectTrigger className="w-28">
               <SelectValue />

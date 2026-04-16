@@ -291,7 +291,7 @@ export function AIPanelChat() {
                   : "hover:bg-muted",
               )}
             >
-              Standard
+              Обычный
             </button>
             <button
               type="button"
@@ -303,7 +303,7 @@ export function AIPanelChat() {
                   : "hover:bg-muted",
               )}
             >
-              Deep
+              Глубокий
             </button>
           </div>
         </div>

@@ -170,6 +170,9 @@ export function ChannelForm({
           value={state.channel_id}
           onValueChange={(v) => update("channel_id", v ?? "")}
           disabled={disabled || channelLocked}
+          items={Object.fromEntries(
+            availableChannels.map((c) => [String(c.id), `${c.code} — ${c.name}`]),
+          )}
         >
           <SelectTrigger id="channel_id">
             <SelectValue placeholder="Выберите канал" />
@@ -408,6 +411,12 @@ export function ChannelForm({
               )
             }
             disabled={disabled}
+            items={{
+              [NO_SEASONALITY]: "Без сезонности",
+              ...Object.fromEntries(
+                seasonality.map((p) => [String(p.id), p.profile_name]),
+              ),
+            }}
           >
             <SelectTrigger id="seasonality_profile_id">
               <SelectValue placeholder="Без сезонности" />

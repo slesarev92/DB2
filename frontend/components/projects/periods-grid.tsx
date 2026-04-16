@@ -47,8 +47,8 @@ interface PeriodsGridProps {
 /** Метрики (rows). Соответствуют ключам в `values` JSONB PeriodValue. */
 const METRICS: Array<{ key: string; label: string; precision: number }> = [
   { key: "nd", label: "ND (доля)", precision: 4 },
-  { key: "offtake", label: "Off-take (ед./точка)", precision: 2 },
-  { key: "shelf_price", label: "Shelf price, ₽", precision: 2 },
+  { key: "offtake", label: "Отгрузка (ед./точка)", precision: 2 },
+  { key: "shelf_price", label: "Цена полки, ₽", precision: 2 },
 ];
 
 interface PivotRow {

@@ -188,6 +188,12 @@ export function PeriodsTab({ projectId }: PeriodsTabProps) {
                   <Select
                     value={selectedPscId === null ? "" : String(selectedPscId)}
                     onValueChange={(v) => setSelectedPscId(Number(v))}
+                    items={Object.fromEntries(
+                      channels.map((psc) => [
+                        String(psc.id),
+                        `${psc.channel.code} — ${psc.channel.name}`,
+                      ]),
+                    )}
                   >
                     <SelectTrigger id="psc-select">
                       <SelectValue placeholder="Канал" />
@@ -211,6 +217,12 @@ export function PeriodsTab({ projectId }: PeriodsTabProps) {
                         : String(selectedScenarioId)
                     }
                     onValueChange={(v) => setSelectedScenarioId(Number(v))}
+                    items={Object.fromEntries(
+                      scenarios.map((s) => [
+                        String(s.id),
+                        SCENARIO_LABELS[s.type] ?? s.type,
+                      ]),
+                    )}
                   >
                     <SelectTrigger id="scenario-select">
                       <SelectValue placeholder="Сценарий" />
@@ -230,6 +242,11 @@ export function PeriodsTab({ projectId }: PeriodsTabProps) {
                   <Select
                     value={periodFilter}
                     onValueChange={(v) => setPeriodFilter(v as PeriodFilter)}
+                    items={{
+                      monthly: "Месяцы (M1-M36)",
+                      yearly: "Годы (Y4-Y10)",
+                      all: "Все 43",
+                    }}
                   >
                     <SelectTrigger id="period-filter">
                       <SelectValue />

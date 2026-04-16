@@ -86,7 +86,7 @@ export function MockupGallery({
         setReferenceAssetId(resp.id);
       } catch (err) {
         setError(
-          err instanceof ApiError ? err.detail ?? err.message : "Upload error",
+          err instanceof ApiError ? err.detail ?? err.message : "Ошибка загрузки",
         );
       } finally {
         setReferenceUploading(false);
@@ -119,7 +119,7 @@ export function MockupGallery({
       await loadGallery();
     } catch (err) {
       setError(
-        err instanceof ApiError ? err.detail ?? err.message : "Generation error",
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка генерации",
       );
     } finally {
       setGenerating(false);
@@ -133,7 +133,7 @@ export function MockupGallery({
         const resp = await setMockupAsPrimary(projectId, mockupId);
         onPrimaryChanged(resp.package_image_id);
       } catch (err) {
-        setError(err instanceof ApiError ? err.detail ?? err.message : "Error");
+        setError(err instanceof ApiError ? err.detail ?? err.message : "Ошибка");
       }
     },
     [projectId, onPrimaryChanged],

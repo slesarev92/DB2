@@ -433,7 +433,7 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
                       htmlFor={`delta-off-${s.id}`}
                       className="flex items-center gap-1.5 text-xs text-muted-foreground"
                     >
-                      Off-take, %
+                      Отгрузка, %
                       <HelpButton help="scenario.delta_offtake" />
                     </Label>
                     <Input

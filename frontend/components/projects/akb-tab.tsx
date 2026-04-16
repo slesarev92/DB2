@@ -196,6 +196,9 @@ export function AkbTab({ projectId }: AkbTabProps) {
             <Select
               value={selectedChannelId}
               onValueChange={(v) => { if (v) { setSelectedChannelId(v); clearAkbError("channel_id"); } }}
+              items={Object.fromEntries(
+                availableChannels.map((c) => [String(c.id), `${c.code} — ${c.name}`]),
+              )}
             >
               <SelectTrigger className={`w-48 ${akbErrors.channel_id ? "border-destructive" : ""}`}>
                 <SelectValue placeholder="Канал *" />

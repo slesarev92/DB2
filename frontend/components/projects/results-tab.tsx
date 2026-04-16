@@ -324,6 +324,12 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
               selectedScenarioId === null ? "" : String(selectedScenarioId)
             }
             onValueChange={(v) => setSelectedScenarioId(v ? Number(v) : null)}
+            items={Object.fromEntries(
+              scenarios.map((s) => [
+                String(s.id),
+                SCENARIO_LABELS[s.type] ?? s.type,
+              ]),
+            )}
           >
             <SelectTrigger id="result-scenario" className="w-48">
               <SelectValue placeholder="Сценарий" />

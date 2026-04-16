@@ -218,7 +218,11 @@ export function IngredientsCatalog() {
             onChange={(e) => setNewUnit(e.target.value)}
             className="w-16"
           />
-          <Select value={newCategory} onValueChange={(v) => { if (v) setNewCategory(v); }}>
+          <Select
+            value={newCategory}
+            onValueChange={(v) => { if (v) setNewCategory(v); }}
+            items={CATEGORY_LABELS}
+          >
             <SelectTrigger className="w-32">
               <SelectValue />
             </SelectTrigger>

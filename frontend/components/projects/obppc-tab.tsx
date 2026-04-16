@@ -197,7 +197,13 @@ export function ObppcTab({ projectId }: ObppcTabProps) {
         {/* Add form */}
         <div className="flex items-end gap-2 flex-wrap border-b pb-4 mb-4">
           <div>
-            <Select value={selectedSkuId} onValueChange={(v) => { if (v) { setSelectedSkuId(v); clearObppcError("sku_id"); } }}>
+            <Select
+              value={selectedSkuId}
+              onValueChange={(v) => { if (v) { setSelectedSkuId(v); clearObppcError("sku_id"); } }}
+              items={Object.fromEntries(
+                skus.map((s) => [String(s.id), `${s.brand} — ${s.name}`]),
+              )}
+            >
               <SelectTrigger className={`w-48 ${obppcErrors.sku_id ? "border-destructive" : ""}`}>
                 <SelectValue placeholder="SKU *" />
               </SelectTrigger>
@@ -215,6 +221,9 @@ export function ObppcTab({ projectId }: ObppcTabProps) {
             <Select
               value={selectedChannelId}
               onValueChange={(v) => { if (v) { setSelectedChannelId(v); clearObppcError("channel_id"); } }}
+              items={Object.fromEntries(
+                channels.map((c) => [String(c.id), c.code]),
+              )}
             >
               <SelectTrigger className={`w-40 ${obppcErrors.channel_id ? "border-destructive" : ""}`}>
                 <SelectValue placeholder="Канал *" />
@@ -232,6 +241,7 @@ export function ObppcTab({ projectId }: ObppcTabProps) {
           <Select
             value={priceTier}
             onValueChange={(v) => { if (v) setPriceTier(v as PriceTier); }}
+            items={PRICE_TIER_LABELS}
           >
             <SelectTrigger className="w-36">
               <SelectValue />

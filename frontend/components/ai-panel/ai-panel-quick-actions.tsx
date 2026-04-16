@@ -23,25 +23,25 @@ export function AIPanelQuickActions() {
       </p>
       <ul className="space-y-2">
         <QuickActionItem
-          label="Explain KPI"
+          label="Объяснение KPI"
           description="Объяснение NPV / IRR / Payback фокусного сценария"
           cost={AI_FEATURE_COST_ESTIMATES_RUB.explain_kpi}
           disabled
           disabledReason="Откройте проект → Результаты → ✨"
         />
         <QuickActionItem
-          label="Executive Summary"
+          label="Executive summary"
           description="Готовый текст для слайда паспорта"
           cost={AI_FEATURE_COST_ESTIMATES_RUB.executive_summary}
           disabled
-          disabledReason="Доступно в Phase 7.4"
+          disabledReason="Доступно в фазе 7.4"
         />
         <QuickActionItem
-          label="Audit params"
+          label="Аудит параметров"
           description="Проверка параметров проекта"
           cost={AI_FEATURE_COST_ESTIMATES_RUB.explain_kpi}
           disabled
-          disabledReason="Доступно в Phase 7.5"
+          disabledReason="Доступно в фазе 7.5"
         />
       </ul>
     </div>

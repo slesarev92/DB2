@@ -129,7 +129,7 @@ export function ExecutiveSummaryInline({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-semibold">Executive Summary</h3>
+          <h3 className="text-sm font-semibold">Executive summary</h3>
         </div>
 
         {savedSummary && !data && (

@@ -9,19 +9,19 @@
  */
 
 const FEATURES = [
-  { id: "explain_kpi", label: "Explain KPI", default_tier: "balanced" },
-  { id: "explain_sensitivity", label: "Explain Sensitivity", default_tier: "balanced" },
-  { id: "executive_summary", label: "Executive Summary", default_tier: "heavy" },
-  { id: "content_field", label: "Content Fields", default_tier: "fast_cheap" },
-  { id: "freeform_chat", label: "Freeform Chat", default_tier: "balanced" },
+  { id: "explain_kpi", label: "Объяснение KPI", default_tier: "balanced" },
+  { id: "explain_sensitivity", label: "Объяснение чувствительности", default_tier: "balanced" },
+  { id: "executive_summary", label: "Executive summary", default_tier: "heavy" },
+  { id: "content_field", label: "Поля контента", default_tier: "fast_cheap" },
+  { id: "freeform_chat", label: "Свободный чат", default_tier: "balanced" },
 ];
 
 const TIER_LABELS: Record<string, string> = {
-  fast_cheap: "Fast / Cheap",
-  balanced: "Balanced (default)",
-  heavy: "Heavy / Deep",
+  fast_cheap: "Быстрая / дешёвая",
+  balanced: "Сбалансированная (по умолчанию)",
+  heavy: "Мощная / глубокая",
   research: "Research + Web",
-  image: "Image gen",
+  image: "Генерация изображений",
 };
 
 export function AIPanelSettings() {

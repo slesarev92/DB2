@@ -156,17 +156,17 @@ export function ChannelsPanel({ pskId }: ChannelsPanelProps) {
                     Канал{sortIndicator(chSortState, "channel")}
                   </TableHead>
                   <TableHead {...sortableHeaderProps(toggleChSort, "nd", "text-right")}>
-                    ND target{sortIndicator(chSortState, "nd")}
+                    ND цель{sortIndicator(chSortState, "nd")}
                   </TableHead>
                   <TableHead {...sortableHeaderProps(toggleChSort, "offtake", "text-right")}>
-                    Off-take{sortIndicator(chSortState, "offtake")}
+                    Отгрузка{sortIndicator(chSortState, "offtake")}
                   </TableHead>
                   <TableHead {...sortableHeaderProps(toggleChSort, "margin", "text-right")}>
-                    Margin{sortIndicator(chSortState, "margin")}
+                    Маржа{sortIndicator(chSortState, "margin")}
                   </TableHead>
-                  <TableHead className="text-right">Promo (%/share)</TableHead>
+                  <TableHead className="text-right">Промо (скидка/доля)</TableHead>
                   <TableHead {...sortableHeaderProps(toggleChSort, "shelf", "text-right")}>
-                    Shelf, ₽{sortIndicator(chSortState, "shelf")}
+                    Цена полки, ₽{sortIndicator(chSortState, "shelf")}
                   </TableHead>
                   <TableHead></TableHead>
                 </TableRow>
