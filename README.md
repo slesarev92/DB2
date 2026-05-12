@@ -41,8 +41,9 @@ docker compose -f infra/docker-compose.dev.yml exec backend pytest -q -m "not ac
 - http://localhost:8000/docs — Swagger UI (FastAPI auto-генерация)
 - http://localhost:8000/health — backend healthcheck
 
-Dev-пользователь создаётся через `backend/scripts/create_dev_user.py`
-(см. CLAUDE.md раздел "Окружения").
+Dev-пользователь создаётся через `backend/scripts/create_dev_user.py`.
+Подробные команды dev-стека и frontend-проверок — в
+[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
 
 ## Структура
 
@@ -71,7 +72,7 @@ DB2/
 ## Документация
 
 Главный entry point — [`docs/README.md`](docs/README.md) (индекс всех
-актуальных документов: ADR, IMPLEMENTATION_PLAN, 3 аудита,
+актуальных документов: ADR, ROADMAP, 3 аудита,
 TZ_VS_EXCEL_DISCREPANCIES, CLIENT_FEEDBACK, SSL_SETUP).
 
 Для LLM-агента читать [`CLAUDE.md`](CLAUDE.md) в корне — содержит роль,
@@ -79,12 +80,13 @@ TZ_VS_EXCEL_DISCREPANCIES, CLIENT_FEEDBACK, SSL_SETUP).
 
 ## Workflow разработки
 
-1. Работа в dev через Docker Compose (CLAUDE.md раздел "Команды разработки").
+1. Работа в dev через Docker Compose
+   (см. [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)).
 2. Коммит с осмысленным message (формат `тип(scope): краткое описание`
    — `feat` / `fix` / `refactor` / `test` / `docs` / `chore` / `ci`).
 3. `git push origin main` → GitHub.
-4. **Deploy на prod — только по явной команде**. Workflow описан
-   в CLAUDE.md разделе "Деплой на production".
+4. **Deploy на prod — только по явной команде**
+   (см. `docs/DEVELOPMENT.md` раздел "Деплой на production").
 
 ## Лицензия
 

@@ -76,3 +76,6 @@ backend/exports/
 # --- Архив сырых client inputs (тяжёлые pptx/xlsx) — лежат локально ---
 # Обработанные findings идут в docs/CLIENT_FEEDBACK_*.md
 /docs/client_inputs/
+
+# --- Claude Code local settings (не шарим личные настройки агента) ---
+.claude/
