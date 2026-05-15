@@ -6,11 +6,14 @@ B-19: добавлены тесты для opex_items breakdown.
 """
 from decimal import Decimal
 
+import pytest
 from httpx import AsyncClient
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import OpexItem, Period, ProjectFinancialPlan
+from app.schemas.financial_plan import FinancialPlanItem, FinancialPlanRequest
 
 
 VALID_PROJECT = {
@@ -376,15 +379,15 @@ async def test_put_plan_mixed_years_with_and_without_items(
 # ============================================================
 # B.9b: schema contract tests for period_number
 # ============================================================
-import pytest
-from pydantic import ValidationError
-
-from app.schemas.financial_plan import FinancialPlanItem, FinancialPlanRequest
 
 
 def test_financial_plan_item_accepts_period_number() -> None:
-    item = FinancialPlanItem(period_number=1, capex="100", opex="0")
-    assert item.period_number == 1
+    assert (
+        FinancialPlanItem(period_number=1, capex="100", opex="0").period_number == 1
+    )
+    assert (
+        FinancialPlanItem(period_number=43, capex="0", opex="0").period_number == 43
+    )
 
 
 def test_financial_plan_item_rejects_period_number_out_of_range() -> None:
