@@ -193,3 +193,103 @@ async def auth_client(client: AsyncClient, test_user: User) -> AsyncClient:
     token = create_access_token(test_user.id)
     client.headers["Authorization"] = f"Bearer {token}"
     return client
+
+
+# ============================================================
+# C #14: fixtures for fine-tuning service tests
+# ============================================================
+
+
+@pytest_asyncio.fixture
+async def sample_project_with_sku(db_session: AsyncSession) -> "Project":
+    """Минимальный проект с одним ProjectSKU (без channel).
+
+    SKU создаётся с дефолтными параметрами — copacking_rate_by_period=NULL.
+    Используется тестами service-слоя C #14 (list/replace SKU overrides).
+    """
+    from datetime import date
+    from decimal import Decimal
+
+    from app.models.entities import Project, ProjectSKU, SKU
+
+    project = Project(
+        name="C14 SKU test project",
+        start_date=date(2025, 1, 1),
+        horizon_years=10,
+    )
+    db_session.add(project)
+    await db_session.flush()
+
+    sku = SKU(brand="TestBrand", name="TestSKU C14", volume_l=Decimal("0.5"))
+    db_session.add(sku)
+    await db_session.flush()
+
+    psk = ProjectSKU(
+        project_id=project.id,
+        sku_id=sku.id,
+        production_cost_rate=Decimal("0.10"),
+    )
+    db_session.add(psk)
+    await db_session.flush()
+    await db_session.refresh(project)
+
+    return project
+
+
+@pytest_asyncio.fixture
+async def sample_project_with_channel(db_session: AsyncSession) -> "Project":
+    """Минимальный проект с ProjectSKU и одним ProjectSKUChannel.
+
+    Channel берётся из засеянных справочников (HM). Все три JSONB
+    per-period поля канала = NULL (дефолт). Используется тестами
+    service-слоя C #14 (list/replace channel overrides).
+    """
+    from datetime import date
+    from decimal import Decimal
+
+    from sqlalchemy import select
+
+    from app.models.entities import Channel, Project, ProjectSKU, ProjectSKUChannel, SKU
+
+    project = Project(
+        name="C14 Channel test project",
+        start_date=date(2025, 1, 1),
+        horizon_years=10,
+    )
+    db_session.add(project)
+    await db_session.flush()
+
+    sku = SKU(brand="TestBrand", name="TestSKU C14 Ch", volume_l=Decimal("0.5"))
+    db_session.add(sku)
+    await db_session.flush()
+
+    psk = ProjectSKU(
+        project_id=project.id,
+        sku_id=sku.id,
+        production_cost_rate=Decimal("0.10"),
+    )
+    db_session.add(psk)
+    await db_session.flush()
+
+    hm = await db_session.scalar(select(Channel).where(Channel.code == "HM"))
+    assert hm is not None, "HM channel must exist in seeded reference data"
+
+    psc = ProjectSKUChannel(
+        project_sku_id=psk.id,
+        channel_id=hm.id,
+        nd_target=Decimal("0.5"),
+        nd_ramp_months=12,
+        offtake_target=Decimal("10.0"),
+        channel_margin=Decimal("0.3"),
+        promo_discount=Decimal("0.1"),
+        promo_share=Decimal("0.2"),
+        shelf_price_reg=Decimal("89.0"),
+        logistics_cost_per_kg=Decimal("8.0"),
+        ca_m_rate=Decimal("0.05"),
+        marketing_rate=Decimal("0.02"),
+    )
+    db_session.add(psc)
+    await db_session.flush()
+    await db_session.refresh(project)
+
+    return project
