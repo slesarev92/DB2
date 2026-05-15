@@ -62,6 +62,9 @@ class ChannelOverridesPayload(BaseModel):
     @field_validator("logistics_cost_per_kg_by_period")
     @classmethod
     def _check_logistics(cls, v: list[Decimal | None] | None) -> list[Decimal | None] | None:
+        # logistics_cost_per_kg — абсолютная стоимость (₽/кг). Upper-bound по
+        # spec §3.3 не задан намеренно (тариф может быть произвольно большим
+        # для удалённых каналов).
         return _validate_non_negative(_validate_length(v))
 
     @field_validator("ca_m_rate_by_period")

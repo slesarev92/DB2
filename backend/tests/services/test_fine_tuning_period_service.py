@@ -80,3 +80,34 @@ def test_sku_overrides_response_round_trip() -> None:
     resp = SkuOverridesResponse(copacking_rate_by_period=arr)
     dumped = resp.model_dump(mode="json")
     assert dumped["copacking_rate_by_period"][0] == "5.5"
+
+
+def test_channel_overrides_response_round_trip() -> None:
+    log_arr = [Decimal("12.34")] * 43
+    rate_arr = [Decimal("0.05")] * 43
+    resp = ChannelOverridesResponse(
+        logistics_cost_per_kg_by_period=log_arr,
+        ca_m_rate_by_period=rate_arr,
+        marketing_rate_by_period=None,
+    )
+    dumped = resp.model_dump(mode="json")
+    assert dumped["logistics_cost_per_kg_by_period"][0] == "12.34"
+    assert dumped["ca_m_rate_by_period"][0] == "0.05"
+    assert dumped["marketing_rate_by_period"] is None
+
+
+def test_channel_overrides_rejects_negative_rate() -> None:
+    arr: list[Decimal | None] = [Decimal("0")] * 43
+    arr[7] = Decimal("-0.01")
+    with pytest.raises(ValidationError):
+        ChannelOverridesPayload(
+            logistics_cost_per_kg_by_period=None,
+            ca_m_rate_by_period=arr,
+            marketing_rate_by_period=None,
+        )
+    with pytest.raises(ValidationError):
+        ChannelOverridesPayload(
+            logistics_cost_per_kg_by_period=None,
+            ca_m_rate_by_period=None,
+            marketing_rate_by_period=arr,
+        )
