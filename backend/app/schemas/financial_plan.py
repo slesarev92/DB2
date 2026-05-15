@@ -1,14 +1,12 @@
 """Pydantic схемы для ProjectFinancialPlan CRUD API.
 
-UI работает по **годам** (Y1..Y10), backend хранит записи с `period_id`
-на конкретные периоды справочника `periods`. Сервис-слой делает
-маппинг year → первый period model_year (для Y1-Y3 это M1/M13/M25,
-для Y4-Y10 — непосредственно Y4..Y10 period).
+B.9b (2026-05-15): UI и API работают per-period. period_number 1..43
+маппится на справочник `periods`: 1..36 = monthly Y1-Y3 (M1..M36,
+model_year 1..3), 37..43 = yearly Y4-Y10 (model_year 4..10).
 
 Pipeline аннуализирует все периоды по model_year в s10_discount,
-поэтому важно только чтобы capex/opex попали в правильный
-`model_year` — на какой именно period_id внутри года они лягут не
-влияет на KPI.
+поэтому CAPEX в M3 (period_number=3) или в M1 (period_number=1)
+даёт одинаковый annual_capex[Y1] = их сумма.
 """
 from decimal import Decimal
 

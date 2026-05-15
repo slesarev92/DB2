@@ -1,14 +1,13 @@
-"""API endpoints для ProjectFinancialPlan — CAPEX/OPEX по годам проекта.
+"""API endpoints для ProjectFinancialPlan — CAPEX/OPEX per-period.
 
-Минимальный CRUD:
+B.9b (2026-05-15): per-period вместо per-year. 43 элемента в массиве
+(1..43): period 1..36 — monthly Y1-Y3, period 37..43 — yearly Y4-Y10.
+
 - GET /api/projects/{project_id}/financial-plan
-  → всегда 10 строк Y1..Y10 (нули если записи нет)
+  → всегда 43 строки (нули если записи нет)
 - PUT /api/projects/{project_id}/financial-plan
-  Body: {items: [{year, capex, opex}, ...]}
-  → полная замена плана, возвращает актуальное состояние
-
-DELETE отдельных записей не реализован — PUT с items=[] полностью
-очищает план. Это упрощает контракт для UI.
+  Body: {items: [{period_number, capex, opex, opex_items?, capex_items?}, ...]}
+  → полная замена плана; period_number уникальны в массиве.
 """
 from typing import Annotated
 
@@ -41,11 +40,11 @@ async def get_project_financial_plan_endpoint(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[FinancialPlanItem]:
-    """Всегда 10 строк Y1..Y10. Отсутствующие значения = 0."""
+    """Всегда 43 строки (period_number 1..43). Отсутствующие = 0."""
     project = await project_service.get_project(session, project_id, user=current_user)
     if project is None:
         raise _project_not_found
-    return await financial_plan_service.list_plan_by_year(session, project_id)
+    return await financial_plan_service.list_plan_by_period(session, project_id)
 
 
 @router.put(
@@ -58,7 +57,7 @@ async def put_project_financial_plan_endpoint(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[FinancialPlanItem]:
-    """Полная замена плана проекта. Возвращает обновлённый список."""
+    """Полная замена плана проекта. Возвращает обновлённый список из 43 элементов."""
     project = await project_service.get_project(session, project_id, user=current_user)
     if project is None:
         raise _project_not_found
