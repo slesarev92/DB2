@@ -463,6 +463,12 @@ class ProjectSKU(Base, TimestampMixin):
         JSONB, nullable=False, default=dict, server_default="{}",
     )
 
+    copacking_rate_by_period: Mapped[list[Decimal | None] | None] = mapped_column(
+        JSONB, nullable=True, default=None
+    )
+    """C #14: per-period override (array length 43, M1..M36 + Y4..Y10).
+    NULL = no override (pipeline uses copacking_rate scalar)."""
+
     # Rate-параметры SKU как % от выручки (D-04 в TZ_VS_EXCEL_DISCREPANCIES).
     # CA&M и Marketing с 2026-05-15 (Q6) живут на ProjectSKUChannel — в HM/SM
     # маркетинг отличается от TT, унификация per-SKU искажала экономику.
@@ -553,6 +559,21 @@ class ProjectSKUChannel(Base, TimestampMixin):
     marketing_rate: Mapped[Decimal] = mapped_column(
         Numeric(8, 6), nullable=False, default=Decimal("0"), server_default="0",
     )
+
+    logistics_cost_per_kg_by_period: Mapped[list[Decimal | None] | None] = mapped_column(
+        JSONB, nullable=True, default=None
+    )
+    """C #14: per-period override (array length 43)."""
+
+    ca_m_rate_by_period: Mapped[list[Decimal | None] | None] = mapped_column(
+        JSONB, nullable=True, default=None
+    )
+    """C #14: per-period override (array length 43)."""
+
+    marketing_rate_by_period: Mapped[list[Decimal | None] | None] = mapped_column(
+        JSONB, nullable=True, default=None
+    )
+    """C #14: per-period override (array length 43)."""
 
     seasonality_profile_id: Mapped[int | None] = mapped_column(
         ForeignKey("ref_seasonality.id", ondelete="RESTRICT"),
