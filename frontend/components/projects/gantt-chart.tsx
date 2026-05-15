@@ -33,6 +33,25 @@ const STATUS_COLORS: Record<string, string> = {
   blocked: "#ef4444",
 };
 
+// До 2026-05-15 поле статуса было свободным текстом — встречаются русские
+// значения в существующих проектах. Маппим к каноническим ключам, чтобы
+// Gantt раскрашивал корректно до того, как пользователь пересохранит задачу.
+const STATUS_LEGACY_MAP: Record<string, string> = {
+  "запланировано": "planned",
+  "план": "planned",
+  "в работе": "in_progress",
+  "в процессе": "in_progress",
+  "готово": "done",
+  "выполнено": "done",
+  "заблокировано": "blocked",
+  "блок": "blocked",
+};
+function statusColor(raw: string): string {
+  if (STATUS_COLORS[raw]) return STATUS_COLORS[raw];
+  const legacy = STATUS_LEGACY_MAP[raw.trim().toLowerCase()];
+  return STATUS_COLORS[legacy ?? "planned"];
+}
+
 function daysBetween(a: string, b: string): number {
   const msPerDay = 86400000;
   return Math.max(
@@ -129,10 +148,7 @@ export function GanttChart({ tasks, projectStartDate }: GanttChartProps) {
             {/* Visible duration bar */}
             <Bar dataKey="duration" stackId="a" radius={[0, 4, 4, 0]}>
               {chartData.map((entry, i) => (
-                <Cell
-                  key={i}
-                  fill={STATUS_COLORS[entry.status] ?? STATUS_COLORS.planned}
-                />
+                <Cell key={i} fill={statusColor(entry.status)} />
               ))}
             </Bar>
           </BarChart>

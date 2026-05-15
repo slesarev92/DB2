@@ -61,6 +61,34 @@ const FUNCTION_STATUS_LABELS: Record<FunctionReadinessStatus, string> = {
   red: "Красный",
 };
 
+const ROADMAP_STATUS_OPTIONS = ["planned", "in_progress", "done", "blocked"] as const;
+type RoadmapStatusKey = (typeof ROADMAP_STATUS_OPTIONS)[number];
+const ROADMAP_STATUS_LABELS: Record<RoadmapStatusKey, string> = {
+  planned: "Запланировано",
+  in_progress: "В работе",
+  done: "Готово",
+  blocked: "Заблокировано",
+};
+// Совместимость со старыми проектами, где статус сохранён по-русски (свободный
+// ввод до 2026-05-15). Приводим к каноническому ключу при первой записи.
+const ROADMAP_STATUS_LEGACY_MAP: Record<string, RoadmapStatusKey> = {
+  "запланировано": "planned",
+  "план": "planned",
+  "в работе": "in_progress",
+  "в процессе": "in_progress",
+  "готово": "done",
+  "выполнено": "done",
+  "заблокировано": "blocked",
+  "блок": "blocked",
+};
+function normalizeRoadmapStatus(s: string | undefined): RoadmapStatusKey | "" {
+  if (!s) return "";
+  if ((ROADMAP_STATUS_OPTIONS as readonly string[]).includes(s)) {
+    return s as RoadmapStatusKey;
+  }
+  return ROADMAP_STATUS_LEGACY_MAP[s.trim().toLowerCase()] ?? "";
+}
+
 const VALIDATION_SUBTESTS: Array<{
   key: keyof ValidationTests;
   label: string;
@@ -839,16 +867,27 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
                 </div>
                 <div>
                   <Label>Статус</Label>
-                  <Input
-                    value={task.status ?? ""}
-                    placeholder="в работе / готово / ..."
-                    onChange={(e) => {
-                      const status = e.target.value;
+                  <Select
+                    value={normalizeRoadmapStatus(task.status)}
+                    onValueChange={(v) => {
+                      const status = v as RoadmapStatusKey;
                       setRoadmapTasks((prev) =>
                         prev.map((t, i) => (i === idx ? { ...t, status } : t)),
                       );
                     }}
-                  />
+                    items={ROADMAP_STATUS_LABELS}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="—" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ROADMAP_STATUS_OPTIONS.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {ROADMAP_STATUS_LABELS[s]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div>
