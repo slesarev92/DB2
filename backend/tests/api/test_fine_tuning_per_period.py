@@ -147,3 +147,44 @@ async def test_get_sku_overrides_not_found(
         f"/api/projects/{project.id}/fine-tuning/per-period/sku/999999",
     )
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_channel_overrides_cross_project_returns_404(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    sample_project_with_channel,
+) -> None:
+    """IDOR fix: ANALYST не-owner запрашивает channel чужого проекта → 404
+    (одинаковый response с 'channel does not exist', нет timing-side-channel
+    утечки о существовании id в чужом проекте).
+    """
+    from app.core.security import create_access_token, hash_password
+    from app.models import User, UserRole
+
+    project = sample_project_with_channel
+    psk = await db_session.scalar(
+        select(ProjectSKU).where(ProjectSKU.project_id == project.id)
+    )
+    assert psk is not None
+    psc = await db_session.scalar(
+        select(ProjectSKUChannel).where(ProjectSKUChannel.project_sku_id == psk.id)
+    )
+    assert psc is not None
+
+    intruder = User(
+        email="intruder-c14@example.com",
+        hashed_password=hash_password("pass"),
+        role=UserRole.ANALYST,
+    )
+    db_session.add(intruder)
+    await db_session.flush()
+
+    headers = {"Authorization": f"Bearer {create_access_token(intruder.id)}"}
+    resp = await client.get(
+        f"/api/projects/{project.id}/fine-tuning/per-period/channel/{psc.id}",
+        headers=headers,
+    )
+    # 404 — IDOR fix: project gate ловит сначала, channel id никогда не
+    # доходит до проверки в endpoint'е.
+    assert resp.status_code == 404

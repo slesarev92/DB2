@@ -15,9 +15,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_owned_project
+from app.api.deps import require_owned_project
 from app.db import get_db
-from app.models import Project, User
+from app.models import Project
+from app.models.entities import ProjectSKU, ProjectSKUChannel
 from app.schemas.fine_tuning import (
     ChannelOverridesPayload,
     ChannelOverridesResponse,
@@ -29,6 +30,30 @@ from app.services import fine_tuning_period_service
 router = APIRouter(tags=["fine-tuning"])
 
 _BASE = "/api/projects/{project_id}/fine-tuning/per-period"
+
+
+async def _resolve_owned_channel(
+    session: AsyncSession,
+    project_id: int,
+    psk_channel_id: int,
+) -> ProjectSKUChannel:
+    """Найти channel и убедиться что он принадлежит project_id через SKU.
+
+    Защита от IDOR timing-side-channel: возврат 404 если channel не найден
+    ИЛИ принадлежит другому проекту (одинаковый response, нет утечки
+    о существовании id в чужом проекте).
+    """
+    ch = await session.get(ProjectSKUChannel, psk_channel_id)
+    if ch is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Channel not found"
+        )
+    sku = await session.get(ProjectSKU, ch.project_sku_id)
+    if sku is None or sku.project_id != project_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Channel not found"
+        )
+    return ch
 
 
 @router.get(f"{_BASE}/sku/{{sku_id}}", response_model=SkuOverridesResponse)
@@ -88,13 +113,7 @@ async def get_channel_overrides(
 
     Поля = None если override не задан.
     """
-    from app.models.entities import ProjectSKUChannel
-
-    ch = await session.get(ProjectSKUChannel, psk_channel_id)
-    if ch is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Channel not found"
-        )
+    ch = await _resolve_owned_channel(session, project_id, psk_channel_id)
     try:
         return await fine_tuning_period_service.list_overrides_by_channel(
             session, project_id, ch.project_sku_id, psk_channel_id
@@ -118,13 +137,7 @@ async def put_channel_overrides(
 
     Передать поле=None — удалить override для этого поля.
     """
-    from app.models.entities import ProjectSKUChannel
-
-    ch = await session.get(ProjectSKUChannel, psk_channel_id)
-    if ch is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Channel not found"
-        )
+    ch = await _resolve_owned_channel(session, project_id, psk_channel_id)
     try:
         await fine_tuning_period_service.replace_channel_overrides(
             session,
