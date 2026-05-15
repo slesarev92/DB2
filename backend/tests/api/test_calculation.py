@@ -126,8 +126,6 @@ async def _seed_minimal_project(
         project_id=project.id,
         sku_id=sku.id,
         production_cost_rate=Decimal("0.10"),
-        ca_m_rate=Decimal("0.16"),
-        marketing_rate=Decimal("0.02"),
     )
     db_session.add(psk)
     await db_session.flush()
@@ -158,6 +156,9 @@ async def _seed_minimal_project(
             promo_share=Decimal("1.0"),
             shelf_price_reg=Decimal(str(shelf_price)),
             logistics_cost_per_kg=Decimal("8.0"),
+            # Q6 (2026-05-15): CA&M/Marketing per-channel.
+            ca_m_rate=Decimal("0.16"),
+            marketing_rate=Decimal("0.02"),
             nd_ramp_months=12,
         ),
         # auto_fill_predict=True (default) — predict_service автоматически
@@ -200,7 +201,7 @@ class TestBuildLineInputs:
         # D-20: channel_margin теперь tuple per-period
         assert all(v == pytest.approx(0.4) for v in inp.channel_margin)
         assert len(inp.channel_margin) == 43
-        assert inp.vat_rate == pytest.approx(0.20)  # default Project
+        assert inp.vat_rate == pytest.approx(0.22)  # default Project (Q7, 2026-05-15)
         assert inp.wacc == pytest.approx(0.19)
         assert inp.wc_rate == pytest.approx(0.12)
         # bom_unit_cost теперь tuple длины 43 (per-period для инфляции).

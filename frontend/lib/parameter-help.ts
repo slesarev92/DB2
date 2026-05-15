@@ -166,28 +166,32 @@ export const PARAMETER_HELP: Record<string, ParameterHelp> = {
     defaultValue: "0 (если own)",
   },
 
-  "project_sku.ca_m_rate": {
-    title: "CA&M — Customer Activation & Marketing (% от NR)",
+  // Q6 (2026-05-15): CA&M и Marketing переехали с ProjectSKU на канал
+  // (psc.*). Ключи с префиксом project_sku.* удалены — справка для них
+  // больше не показывается, так как поля исчезли из bom-panel UI.
+
+  "psc.ca_m_rate": {
+    title: "CA&M на канале — Customer Activation & Marketing (% от NR)",
     description:
-      "Маркетинговые активности направленные на ритейлера и полку (trade marketing, listing fees, POS materials). Процент от Net Revenue.",
+      "Маркетинговые активности направленные на ритейлера и полку (trade marketing, listing fees, POS materials). Процент от Net Revenue. С 2026-05-15 настраивается per канал (HM/SM/TT отличаются).",
     impact: "Contribution через CA&M cost в s06_ebitda.",
     formula: "CA&M = NET_REVENUE × CA_M_RATE",
     units: "доля от NR",
     range: "0.02 .. 0.15",
-    defaultValue: "0.05 (5%)",
-    excelRef: "OPEX, CA&M row",
+    defaultValue: "0 (заполнить per канал)",
+    excelRef: "OPEX, CA&M row (per channel)",
   },
 
-  "project_sku.marketing_rate": {
-    title: "Marketing — бренд-маркетинг (% от NR)",
+  "psc.marketing_rate": {
+    title: "Marketing на канале — бренд-маркетинг (% от NR)",
     description:
-      "Бренд-маркетинг: ТВ, цифра, PR, креатив. В отличие от CA&M направлен на потребителя, не на ритейл. Процент от Net Revenue.",
+      "Бренд-маркетинг: ТВ, цифра, PR, креатив. В отличие от CA&M направлен на потребителя, не на ритейл. Процент от Net Revenue. С 2026-05-15 настраивается per канал.",
     impact: "EBITDA через Marketing cost в s06_ebitda.",
     formula: "MARKETING = NET_REVENUE × MARKETING_RATE",
     units: "доля от NR",
     range: "0.03 .. 0.20",
-    defaultValue: "0.08 (8%)",
-    excelRef: "OPEX, Marketing row",
+    defaultValue: "0 (заполнить per канал)",
+    excelRef: "OPEX, Marketing row (per channel)",
   },
 
   // ============================================================

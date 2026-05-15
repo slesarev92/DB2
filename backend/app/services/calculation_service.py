@@ -479,8 +479,9 @@ async def _build_line_input(
         production_mode=psk.production_mode or "own",
         logistics_cost_per_kg=tuple(log_arr),
         sku_volume_l=float(psk.sku.volume_l) if psk.sku.volume_l else 0.0,
-        ca_m_rate=float(psk.ca_m_rate),
-        marketing_rate=float(psk.marketing_rate),
+        # Q6 (2026-05-15): CA&M и Marketing per-channel — берём с PSC.
+        ca_m_rate=float(psc.ca_m_rate),
+        marketing_rate=float(psc.marketing_rate),
         wc_rate=float(project.wc_rate),
         tax_rate=float(project.tax_rate),
         wacc=float(project.wacc),

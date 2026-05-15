@@ -62,8 +62,6 @@ async def _seed_project_with_psc(
         project_id=project.id,
         sku_id=sku.id,
         production_cost_rate=Decimal("0.10"),
-        ca_m_rate=Decimal("0.16"),
-        marketing_rate=Decimal("0.02"),
     )
     db_session.add(psk)
     await db_session.flush()
@@ -96,6 +94,9 @@ async def _seed_project_with_psc(
             promo_share=Decimal("1.0"),
             shelf_price_reg=shelf_price,
             logistics_cost_per_kg=Decimal("8.0"),
+            # Q6 (2026-05-15): CA&M/Marketing per-channel.
+            ca_m_rate=Decimal("0.16"),
+            marketing_rate=Decimal("0.02"),
             nd_ramp_months=12,
         ),
     )

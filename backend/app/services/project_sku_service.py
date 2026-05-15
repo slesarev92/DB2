@@ -1,8 +1,9 @@
 """ProjectSKU CRUD + COGS preview расчёт.
 
 ProjectSKU — это включение SKU в конкретный проект с проектными rates
-(production_cost_rate, ca_m_rate, marketing_rate). При delete каскадно
-удаляются связанные BOMItem (FK ON DELETE CASCADE в схеме).
+(production_cost_rate; ca_m_rate и marketing_rate с 2026-05-15 живут на
+ProjectSKUChannel — см. Q6 в CLIENT_FEEDBACK_v2_DECISIONS.md). При delete
+каскадно удаляются связанные BOMItem (FK ON DELETE CASCADE в схеме).
 """
 from decimal import Decimal
 

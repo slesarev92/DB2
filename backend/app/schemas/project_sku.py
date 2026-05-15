@@ -13,8 +13,6 @@ class ProjectSKUBase(BaseModel):
     production_mode: str = Field(default="own", pattern="^(own|copacking)$")
     copacking_rate: Decimal = Field(default=Decimal("0"), ge=0)
     production_cost_rate: Decimal = Field(default=Decimal("0"), ge=0, le=1)
-    ca_m_rate: Decimal = Field(default=Decimal("0"), ge=0, le=1)
-    marketing_rate: Decimal = Field(default=Decimal("0"), ge=0, le=1)
     package_image_id: int | None = None
 
 
@@ -29,8 +27,6 @@ class ProjectSKUUpdate(BaseModel):
     production_mode: str | None = Field(default=None, pattern="^(own|copacking)$")
     copacking_rate: Decimal | None = Field(default=None, ge=0)
     production_cost_rate: Decimal | None = Field(default=None, ge=0, le=1)
-    ca_m_rate: Decimal | None = Field(default=None, ge=0, le=1)
-    marketing_rate: Decimal | None = Field(default=None, ge=0, le=1)
     package_image_id: int | None = None
 
 
@@ -47,8 +43,6 @@ class ProjectSKURead(BaseModel):
     production_mode: str
     copacking_rate: Decimal
     production_cost_rate: Decimal
-    ca_m_rate: Decimal
-    marketing_rate: Decimal
     package_image_id: int | None = None
     created_at: datetime
 

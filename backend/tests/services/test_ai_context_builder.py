@@ -118,8 +118,6 @@ async def project_with_skus(
             sku_id=sku.id,
             include=(brand != "EXCLUDED"),
             production_cost_rate=Decimal("0.35"),
-            ca_m_rate=Decimal("0.08"),
-            marketing_rate=Decimal("0.05"),
         )
         db_session.add(project_sku)
     await db_session.flush()

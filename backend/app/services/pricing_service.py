@@ -144,8 +144,6 @@ async def build_value_chain(
 
         volume_l = psk.sku.volume_l or ZERO
         prod_rate = psk.production_cost_rate
-        ca_m_rate = psk.ca_m_rate
-        mkt_rate = psk.marketing_rate
 
         psc_stmt = (
             select(ProjectSKUChannel)
@@ -169,8 +167,9 @@ async def build_value_chain(
             gross_profit = ex_factory - cogs_total
             logistics = psc.logistics_cost_per_kg * volume_l * DENSITY
             contribution = gross_profit - logistics
-            ca_m = ex_factory * ca_m_rate
-            marketing = ex_factory * mkt_rate
+            # Q6 (2026-05-15): CA&M и Marketing per-channel
+            ca_m = ex_factory * psc.ca_m_rate
+            marketing = ex_factory * psc.marketing_rate
             ebitda = contribution - ca_m - marketing
 
             if ex_factory > ZERO:

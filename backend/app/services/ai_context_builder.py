@@ -618,7 +618,8 @@ def _serialize_project_sku(project_sku: ProjectSKU) -> dict[str, Any]:
         "format": sku.format,
         "volume_l": _decimal_or_none(sku.volume_l),
         "segment": sku.segment,
+        # Q6 (2026-05-15): ca_m_rate и marketing_rate теперь на канал
+        # (ProjectSKUChannel). Если нужны для AI-контекста — добавлять
+        # на уровне сериализации канала.
         "production_cost_rate": float(project_sku.production_cost_rate),
-        "ca_m_rate": float(project_sku.ca_m_rate),
-        "marketing_rate": float(project_sku.marketing_rate),
     }

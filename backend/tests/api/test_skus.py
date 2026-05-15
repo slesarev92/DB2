@@ -225,6 +225,10 @@ async def test_list_project_skus_with_nested(auth_client: AsyncClient) -> None:
 
 
 async def test_patch_project_sku_rates(auth_client: AsyncClient) -> None:
+    """Q6 (2026-05-15): ca_m_rate и marketing_rate переехали на PSC,
+    на ProjectSKU остались только production_cost_rate, copacking_rate,
+    production_mode.
+    """
     project_id = await _create_project(auth_client)
     sku_id = await _create_sku(auth_client)
     add_resp = await auth_client.post(
@@ -234,14 +238,15 @@ async def test_patch_project_sku_rates(auth_client: AsyncClient) -> None:
 
     resp = await auth_client.patch(
         f"/api/project-skus/{psk_id}",
-        json={"production_cost_rate": "0.07", "marketing_rate": "0.03"},
+        json={"production_cost_rate": "0.07", "copacking_rate": "1.50"},
     )
 
     assert resp.status_code == 200
     data = resp.json()
     assert Decimal(data["production_cost_rate"]) == Decimal("0.07")
-    assert Decimal(data["marketing_rate"]) == Decimal("0.03")
-    assert Decimal(data["ca_m_rate"]) == Decimal("0")  # не трогали
+    assert Decimal(data["copacking_rate"]) == Decimal("1.50")
+    assert "ca_m_rate" not in data  # Q6: переехали на PSC
+    assert "marketing_rate" not in data
 
 
 # ============================================================

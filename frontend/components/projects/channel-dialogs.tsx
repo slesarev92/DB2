@@ -148,6 +148,8 @@ function pscToFormState(psc: ProjectSKUChannelRead): ChannelFormState {
     promo_share: psc.promo_share,
     shelf_price_reg: psc.shelf_price_reg,
     logistics_cost_per_kg: psc.logistics_cost_per_kg,
+    ca_m_rate: psc.ca_m_rate,
+    marketing_rate: psc.marketing_rate,
     seasonality_profile_id:
       psc.seasonality_profile_id === null
         ? ""

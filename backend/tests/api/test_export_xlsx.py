@@ -89,7 +89,9 @@ class TestGenerateProjectXlsx:
         # SKU name из minimal_project = "Calc test SKU"
         assert ws.cell(row=first_sku_row, column=1).value == "Calc test SKU"
         # BOM total = 10.0 × 1 × (1+0) = 10
-        assert ws.cell(row=first_sku_row, column=7).value == pytest.approx(
+        # Q6 (2026-05-15): убрали CA&M/Marketing колонки с SKU-листа,
+        # BOM total теперь column 5 (раньше column 7).
+        assert ws.cell(row=first_sku_row, column=5).value == pytest.approx(
             10.0
         )
 

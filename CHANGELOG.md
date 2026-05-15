@@ -9,6 +9,34 @@
 
 ## [Unreleased]
 
+Фаза B (MEMO v2.1 — архитектурные изменения). В работе.
+
+### Changed (Phase B)
+
+- **B.7 CA&M и Marketing → per-channel (Q6, 2026-05-15).** Поля
+  `ca_m_rate` и `marketing_rate` перенесены с `ProjectSKU` на
+  `ProjectSKUChannel` — в HM/SM/TT/E-COM маркетинг разный,
+  унификация per-SKU искажала экономику каналов.
+  - Миграция `b2c3d4e5f6a7`: ADD на PSC + COPY значений с PS + DROP с PS.
+  - Engine: `calculation_service._build_line_input` берёт ставки
+    с PSC; `pricing_service.build_value_chain` per-канал.
+  - UI: убрано из `bom-panel.tsx`, добавлено в `channel-form.tsx`
+    (дилог редактирования канала).
+  - Excel-экспорт: CA&M/Marketing колонки переехали из листа SKU
+    в лист "КАНАЛЫ × SKU".
+  - GORJI acceptance 4/4 passed — числовые результаты идентичны
+    (миграция копирует значения с PS на каждую дочернюю PSC).
+- **B.10 VAT dropdown + дефолт 22% (Q7, 2026-05-15).** Новые проекты
+  создаются с `vat_rate=0.22` (РФ с 01.01.2026). Существующие проекты
+  не трогаем (миграция `a1b2c3d4e5f6` меняет только `server_default`).
+  UI new-проекта: Select с пресетами 22% / 20% / 10% / 0% + custom.
+  Tooltip уточнён: НДС применяется только для пересчёта shelf→ex_factory,
+  на BOM не влияет (см. Q8).
+
+---
+
+## Phase A 
+
 Фаза A (MEMO v2.1 — регрессии и блокеры). 6 пунктов, все закрыты.
 Источник решений — `docs/CLIENT_FEEDBACK_v2_DECISIONS.md` (10 ответов
 заказчика на блокирующие вопросы от 2026-05-12, зафиксированы

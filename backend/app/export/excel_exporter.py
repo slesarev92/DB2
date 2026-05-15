@@ -207,13 +207,14 @@ def _build_inputs_sheet(
     # === SKU table ===
     skus_start = len(params) + 4  # пустая строка + section header
     _set_section(ws, skus_start, 1, "SKU И BOM")
+    # Q6 (2026-05-15): CA&M и Marketing переехали на ProjectSKUChannel
+    # — в этом листе оставляем только SKU-уровневые поля, ставки
+    # выводятся в листе "КАНАЛЫ × SKU" ниже.
     headers = [
         "SKU",
         "Бренд",
         "Объём, л",
         "Production rate",
-        "CA&M rate",
-        "Marketing rate",
         "BOM total ₽/unit",
     ]
     _set_header(ws, skus_start + 1, headers)
@@ -231,9 +232,7 @@ def _build_inputs_sheet(
             value=float(psk.sku.volume_l) if psk.sku.volume_l else None,
         )
         ws.cell(row=row, column=4, value=float(psk.production_cost_rate))
-        ws.cell(row=row, column=5, value=float(psk.ca_m_rate))
-        ws.cell(row=row, column=6, value=float(psk.marketing_rate))
-        ws.cell(row=row, column=7, value=round(bom_total, 4))
+        ws.cell(row=row, column=5, value=round(bom_total, 4))
         row += 1
 
     # === Channels table ===
@@ -250,6 +249,8 @@ def _build_inputs_sheet(
         "Promo share",
         "Shelf price M1",
         "Logistics ₽/кг M1",
+        "CA&M rate",       # Q6 (2026-05-15)
+        "Marketing rate",  # Q6 (2026-05-15)
     ]
     _set_header(ws, chan_start + 1, headers)
     row = chan_start + 2
@@ -266,6 +267,8 @@ def _build_inputs_sheet(
         ws.cell(row=row, column=8, value=float(psc.promo_share))
         ws.cell(row=row, column=9, value=float(psc.shelf_price_reg))
         ws.cell(row=row, column=10, value=float(psc.logistics_cost_per_kg))
+        ws.cell(row=row, column=11, value=float(psc.ca_m_rate))
+        ws.cell(row=row, column=12, value=float(psc.marketing_rate))
         row += 1
 
     # === Financial plan table (CAPEX/OPEX) ===

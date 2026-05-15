@@ -29,6 +29,10 @@ class ProjectSKUChannelBase(BaseModel):
     shelf_price_reg: Decimal = Field(default=Decimal("0"), ge=0)
     logistics_cost_per_kg: Decimal = Field(default=Decimal("0"), ge=0)
 
+    # Q6 (CLIENT_FEEDBACK_v2_DECISIONS.md, 2026-05-15): CA&M и Marketing per-channel.
+    ca_m_rate: Decimal = Field(default=Decimal("0"), ge=0, le=1)
+    marketing_rate: Decimal = Field(default=Decimal("0"), ge=0, le=1)
+
     seasonality_profile_id: int | None = None
 
 
@@ -49,6 +53,8 @@ class ProjectSKUChannelUpdate(BaseModel):
     promo_share: Decimal | None = Field(default=None, ge=0, le=1)
     shelf_price_reg: Decimal | None = Field(default=None, ge=0)
     logistics_cost_per_kg: Decimal | None = Field(default=None, ge=0)
+    ca_m_rate: Decimal | None = Field(default=None, ge=0, le=1)
+    marketing_rate: Decimal | None = Field(default=None, ge=0, le=1)
     seasonality_profile_id: int | None = None
 
 
@@ -73,5 +79,7 @@ class ProjectSKUChannelRead(BaseModel):
     promo_share: Decimal
     shelf_price_reg: Decimal
     logistics_cost_per_kg: Decimal
+    ca_m_rate: Decimal
+    marketing_rate: Decimal
     seasonality_profile_id: int | None
     created_at: datetime

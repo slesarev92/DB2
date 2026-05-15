@@ -442,13 +442,9 @@ class ProjectSKU(Base, TimestampMixin):
     )
 
     # Rate-параметры SKU как % от выручки (D-04 в TZ_VS_EXCEL_DISCREPANCIES).
+    # CA&M и Marketing с 2026-05-15 (Q6) живут на ProjectSKUChannel — в HM/SM
+    # маркетинг отличается от TT, унификация per-SKU искажала экономику.
     production_cost_rate: Mapped[Decimal] = mapped_column(
-        Numeric(8, 6), nullable=False, default=Decimal("0")
-    )
-    ca_m_rate: Mapped[Decimal] = mapped_column(
-        Numeric(8, 6), nullable=False, default=Decimal("0")
-    )
-    marketing_rate: Mapped[Decimal] = mapped_column(
         Numeric(8, 6), nullable=False, default=Decimal("0")
     )
 
@@ -524,6 +520,16 @@ class ProjectSKUChannel(Base, TimestampMixin):
     )
     logistics_cost_per_kg: Mapped[Decimal] = mapped_column(
         Numeric(15, 4), nullable=False, default=Decimal("0")
+    )
+
+    # Q6 (CLIENT_FEEDBACK_v2_DECISIONS.md, 2026-05-15): CA&M и Marketing
+    # перенесены с ProjectSKU на канал. % от Net Revenue, применяется в
+    # s06_ebitda. Маркетинг разный в HM/SM/TT/E-COM.
+    ca_m_rate: Mapped[Decimal] = mapped_column(
+        Numeric(8, 6), nullable=False, default=Decimal("0"), server_default="0",
+    )
+    marketing_rate: Mapped[Decimal] = mapped_column(
+        Numeric(8, 6), nullable=False, default=Decimal("0"), server_default="0",
     )
 
     seasonality_profile_id: Mapped[int | None] = mapped_column(

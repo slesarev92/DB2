@@ -43,6 +43,9 @@ export interface ChannelFormState {
   promo_share: string;
   shelf_price_reg: string;
   logistics_cost_per_kg: string;
+  // Q6 (2026-05-15): CA&M и Marketing per-channel.
+  ca_m_rate: string;
+  marketing_rate: string;
   seasonality_profile_id: string; // "" или число как строка
 }
 
@@ -58,6 +61,8 @@ export const EMPTY_CHANNEL_FORM: ChannelFormState = {
   promo_share: "1.0",
   shelf_price_reg: "100",
   logistics_cost_per_kg: "8",
+  ca_m_rate: "0",
+  marketing_rate: "0",
   seasonality_profile_id: "",
 };
 
@@ -77,6 +82,8 @@ export function toPscPayload(
     promo_share: state.promo_share,
     shelf_price_reg: state.shelf_price_reg,
     logistics_cost_per_kg: state.logistics_cost_per_kg,
+    ca_m_rate: state.ca_m_rate,
+    marketing_rate: state.marketing_rate,
     seasonality_profile_id:
       state.seasonality_profile_id === ""
         ? null
@@ -98,6 +105,8 @@ const CHANNEL_FORM_RULES: ValidationRules<FormField> = {
   promo_discount: { required: true, numeric: true, min: 0, max: 1 },
   promo_share: { required: true, numeric: true, min: 0, max: 1 },
   logistics_cost_per_kg: { required: true, numeric: true, min: 0 },
+  ca_m_rate: { required: true, numeric: true, min: 0, max: 1 },
+  marketing_rate: { required: true, numeric: true, min: 0, max: 1 },
 };
 
 interface ChannelFormProps {
@@ -375,6 +384,48 @@ export function ChannelForm({
             disabled={disabled}
           />
           <FieldError error={errors.promo_share} />
+        </div>
+      </div>
+
+      {/* Q6 (2026-05-15): CA&M и Marketing per-channel. */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label htmlFor="ca_m_rate" className="flex items-center gap-1.5">
+            КАиУР, % от выручки
+            <HelpButton help="psc.ca_m_rate" />
+          </Label>
+          <Input
+            id="ca_m_rate"
+            type="number"
+            step="0.001"
+            min="0"
+            max="1"
+            value={state.ca_m_rate}
+            onChange={(e) => update("ca_m_rate", e.target.value)}
+            onBlur={() => validateOne("ca_m_rate", state.ca_m_rate)}
+            aria-invalid={!!errors.ca_m_rate}
+            disabled={disabled}
+          />
+          <FieldError error={errors.ca_m_rate} />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="marketing_rate" className="flex items-center gap-1.5">
+            Маркетинг, % от выручки
+            <HelpButton help="psc.marketing_rate" />
+          </Label>
+          <Input
+            id="marketing_rate"
+            type="number"
+            step="0.001"
+            min="0"
+            max="1"
+            value={state.marketing_rate}
+            onChange={(e) => update("marketing_rate", e.target.value)}
+            onBlur={() => validateOne("marketing_rate", state.marketing_rate)}
+            aria-invalid={!!errors.marketing_rate}
+            disabled={disabled}
+          />
+          <FieldError error={errors.marketing_rate} />
         </div>
       </div>
 

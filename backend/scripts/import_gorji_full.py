@@ -661,12 +661,11 @@ async def import_to_db(
         await session.flush()
 
         # ProjectSKU с rates
+        # Q6 (2026-05-15): ca_m_rate/marketing_rate переехали на PSC ниже.
         psk = ProjectSKU(
             project_id=project.id,
             sku_id=sku.id,
             production_cost_rate=rates["production_cost_rate"],
-            ca_m_rate=rates["ca_m_rate"],
-            marketing_rate=rates["marketing_rate"],
         )
         session.add(psk)
         await session.flush()
@@ -739,6 +738,12 @@ async def import_to_db(
                     promo_share=ch_data["promo_share"],
                     shelf_price_reg=ch_data["shelf_price_m1"],
                     logistics_cost_per_kg=ch_data["logistics_m1"],
+                    # Q6 (2026-05-15): CA&M/Marketing per-channel.
+                    # В GORJI rates были per-SKU; дублируем то же значение
+                    # на каждом канале SKU — поведение pipeline не меняется
+                    # для эталона.
+                    ca_m_rate=rates["ca_m_rate"],
+                    marketing_rate=rates["marketing_rate"],
                     seasonality_profile_id=wtr_seasonality_id,  # WTR (Category из DASH)
                 ),
                 auto_fill_predict=False,  # сами пишем PREDICT ниже

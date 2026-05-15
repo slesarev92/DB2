@@ -116,7 +116,8 @@ function computeCogsPreview(items: BOMItemRead[]): number {
  * Панель BOM для выбранного ProjectSKU.
  *
  * Содержит:
- *  - Editor для production_cost_rate / ca_m_rate / marketing_rate (PATCH PSK)
+ *  - Editor для production_cost_rate / copacking_rate / production_mode
+ *    (PATCH PSK). CA&M и Marketing переехали в Каналы (Q6, 2026-05-15).
  *  - Таблица BOM позиций (read-only display, удаление inline)
  *  - Inline форма добавления нового ингредиента
  *  - Live COGS_PER_UNIT preview (Σ qty × price × (1+loss))
@@ -172,11 +173,10 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
   }, [bom]);
 
   // Локальные значения rates для редактирования (PATCH on blur)
+  // Q6 (2026-05-15): ca_m_rate и marketing_rate переехали в Каналы.
   const [productionMode, setProductionMode] = useState("own");
   const [copackingRate, setCopackingRate] = useState("");
   const [productionCostRate, setProductionCostRate] = useState("");
-  const [caMRate, setCaMRate] = useState("");
-  const [marketingRate, setMarketingRate] = useState("");
 
   // Загрузка ProjectSKU + BOM при смене pskId или reload
   useEffect(() => {
@@ -193,8 +193,6 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
         setProductionMode(pskData.production_mode ?? "own");
         setCopackingRate(pskData.copacking_rate ?? "0");
         setProductionCostRate(pskData.production_cost_rate);
-        setCaMRate(pskData.ca_m_rate);
-        setMarketingRate(pskData.marketing_rate);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -310,8 +308,6 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
         production_mode: productionMode,
         copacking_rate: copackingRate,
         production_cost_rate: productionCostRate,
-        ca_m_rate: caMRate,
-        marketing_rate: marketingRate,
       });
       toast.success("Параметры SKU сохранены");
       reload();
@@ -429,40 +425,10 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
                 />
               </div>
             )}
-            <div className="space-y-2">
-              <Label htmlFor="ca_m_rate" className="flex items-center gap-1.5">
-                КАиУР, % от выручки
-                <HelpButton help="project_sku.ca_m_rate" />
-              </Label>
-              <Input
-                id="ca_m_rate"
-                type="number"
-                step="0.001"
-                min="0"
-                max="1"
-                value={caMRate}
-                onChange={(e) => setCaMRate(e.target.value)}
-                onBlur={saveRates}
-                disabled={savingRates}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="marketing_rate" className="flex items-center gap-1.5">
-                Маркетинг, % от выручки
-                <HelpButton help="project_sku.marketing_rate" />
-              </Label>
-              <Input
-                id="marketing_rate"
-                type="number"
-                step="0.001"
-                min="0"
-                max="1"
-                value={marketingRate}
-                onChange={(e) => setMarketingRate(e.target.value)}
-                onBlur={saveRates}
-                disabled={savingRates}
-              />
-            </div>
+            <p className="col-span-full text-xs text-muted-foreground">
+              КАиУР и Маркетинг настраиваются по каналам в разделе
+              «Дистрибуция → Каналы» (Q6, 2026-05-15).
+            </p>
           </div>
 
           {/* Фаза 4.5.3: изображение упаковки SKU */}

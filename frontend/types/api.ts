@@ -234,14 +234,15 @@ export interface SKURead extends SKUBase {
 // ProjectSKU (включение SKU в проект)
 // ============================================================
 
+// Q6 (2026-05-15): ca_m_rate и marketing_rate переехали с ProjectSKU
+// на ProjectSKUChannel — см. ProjectSKUChannelRead ниже.
+
 export interface ProjectSKUCreate {
   sku_id: number;
   include?: boolean;
   production_mode?: string;
   copacking_rate?: string;
   production_cost_rate?: string;
-  ca_m_rate?: string;
-  marketing_rate?: string;
   package_image_id?: number | null;
 }
 
@@ -250,8 +251,6 @@ export interface ProjectSKUUpdate {
   production_mode?: string;
   copacking_rate?: string;
   production_cost_rate?: string;
-  ca_m_rate?: string;
-  marketing_rate?: string;
   package_image_id?: number | null;
 }
 
@@ -264,8 +263,6 @@ export interface ProjectSKURead {
   production_mode: string;
   copacking_rate: string;
   production_cost_rate: string;
-  ca_m_rate: string;
-  marketing_rate: string;
   package_image_id: number | null;
   created_at: string;
 }
@@ -341,6 +338,10 @@ export interface ProjectSKUChannelCreate {
   promo_share?: string;
   shelf_price_reg?: string;
   logistics_cost_per_kg?: string;
+  /** Q6 (2026-05-15): CA&M per-channel (% от Net Revenue этого канала). */
+  ca_m_rate?: string;
+  /** Q6 (2026-05-15): Marketing per-channel (% от Net Revenue этого канала). */
+  marketing_rate?: string;
   seasonality_profile_id?: number | null;
 }
 
@@ -355,6 +356,8 @@ export interface ProjectSKUChannelUpdate {
   promo_share?: string;
   shelf_price_reg?: string;
   logistics_cost_per_kg?: string;
+  ca_m_rate?: string;
+  marketing_rate?: string;
   seasonality_profile_id?: number | null;
 }
 
@@ -373,6 +376,8 @@ export interface ProjectSKUChannelRead {
   promo_share: string;
   shelf_price_reg: string;
   logistics_cost_per_kg: string;
+  ca_m_rate: string;
+  marketing_rate: string;
   seasonality_profile_id: number | null;
   created_at: string;
 }
