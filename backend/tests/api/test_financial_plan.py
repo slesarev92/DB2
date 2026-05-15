@@ -1,8 +1,7 @@
 """Тесты GET/PUT /api/projects/{id}/financial-plan.
 
-CAPEX/OPEX по годам проекта для pipeline. UI работает per-year,
-backend хранит per-period — сервис делает маппинг.
-B-19: добавлены тесты для opex_items breakdown.
+B.9b (2026-05-15): per-period контракт. 43 элемента (1..43):
+period 1..36 = monthly Y1-Y3, period 37..43 = yearly Y4-Y10.
 """
 from decimal import Decimal
 
@@ -36,20 +35,76 @@ async def _create_project(auth_client: AsyncClient) -> int:
 
 
 # ============================================================
-# GET — по умолчанию 10 строк нулей
+# Schema contract
 # ============================================================
 
 
-async def test_get_plan_returns_10_years_zeros_by_default(
+def test_financial_plan_item_accepts_period_number() -> None:
+    assert (
+        FinancialPlanItem(period_number=1, capex="100", opex="0").period_number == 1
+    )
+    assert (
+        FinancialPlanItem(period_number=43, capex="0", opex="0").period_number == 43
+    )
+
+
+def test_financial_plan_item_rejects_period_number_out_of_range() -> None:
+    with pytest.raises(ValidationError):
+        FinancialPlanItem(period_number=0, capex="0", opex="0")
+    with pytest.raises(ValidationError):
+        FinancialPlanItem(period_number=44, capex="0", opex="0")
+
+
+def test_financial_plan_item_no_year_field() -> None:
+    item = FinancialPlanItem(period_number=1, year=1, capex="0", opex="0")
+    assert not hasattr(item, "year")
+
+
+def test_financial_plan_request_rejects_duplicate_period_number() -> None:
+    with pytest.raises(ValidationError):
+        FinancialPlanRequest(items=[
+            FinancialPlanItem(period_number=1, capex="100", opex="0"),
+            FinancialPlanItem(period_number=1, capex="200", opex="0"),
+        ])
+
+
+# ============================================================
+# Service: list_plan_by_period
+# ============================================================
+
+
+async def test_list_plan_by_period_returns_43_elements(
+    auth_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    project_id = await _create_project(auth_client)
+    plan = await financial_plan_service.list_plan_by_period(
+        db_session, project_id
+    )
+    assert len(plan) == 43
+    period_numbers = [item.period_number for item in plan]
+    assert period_numbers == list(range(1, 44))
+    for item in plan:
+        assert item.capex == Decimal("0")
+        assert item.opex == Decimal("0")
+        assert item.opex_items == []
+        assert item.capex_items == []
+
+
+# ============================================================
+# GET — empty project returns 43 zeros
+# ============================================================
+
+
+async def test_get_plan_returns_43_periods_zeros_by_default(
     auth_client: AsyncClient,
 ) -> None:
     project_id = await _create_project(auth_client)
     resp = await auth_client.get(f"/api/projects/{project_id}/financial-plan")
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data) == 10
-    years = [item["year"] for item in data]
-    assert years == list(range(1, 11))
+    assert len(data) == 43
+    period_numbers = [item["period_number"] for item in data]
+    assert period_numbers == list(range(1, 44))
     for item in data:
         assert Decimal(item["capex"]) == Decimal("0")
         assert Decimal(item["opex"]) == Decimal("0")
@@ -66,19 +121,19 @@ async def test_get_plan_unauthorized(client: AsyncClient) -> None:
 
 
 # ============================================================
-# PUT — batch replace
+# PUT — basic record creation
 # ============================================================
 
 
-async def test_put_plan_creates_records(
+async def test_put_plan_creates_records_at_specific_periods(
     auth_client: AsyncClient, db_session: AsyncSession
 ) -> None:
     project_id = await _create_project(auth_client)
     body = {
         "items": [
-            {"year": 1, "capex": "6602348", "opex": "0"},
-            {"year": 2, "capex": "5440000", "opex": "320000"},
-            {"year": 5, "capex": "0", "opex": "1500000"},
+            {"period_number": 3,  "capex": "15000000", "opex": "0"},
+            {"period_number": 13, "capex": "5440000",  "opex": "320000"},
+            {"period_number": 37, "capex": "0",        "opex": "1500000"},
         ]
     }
     resp = await auth_client.put(
@@ -86,22 +141,20 @@ async def test_put_plan_creates_records(
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data) == 10
+    assert len(data) == 43
 
-    y1 = next(i for i in data if i["year"] == 1)
-    assert Decimal(y1["capex"]) == Decimal("6602348")
-    y2 = next(i for i in data if i["year"] == 2)
-    assert Decimal(y2["capex"]) == Decimal("5440000")
-    assert Decimal(y2["opex"]) == Decimal("320000")
-    y5 = next(i for i in data if i["year"] == 5)
-    assert Decimal(y5["opex"]) == Decimal("1500000")
+    p3 = next(i for i in data if i["period_number"] == 3)
+    assert Decimal(p3["capex"]) == Decimal("15000000")
+    p13 = next(i for i in data if i["period_number"] == 13)
+    assert Decimal(p13["capex"]) == Decimal("5440000")
+    assert Decimal(p13["opex"]) == Decimal("320000")
+    p37 = next(i for i in data if i["period_number"] == 37)
+    assert Decimal(p37["opex"]) == Decimal("1500000")
 
-    # Годы которых нет в items → нули
-    y3 = next(i for i in data if i["year"] == 3)
-    assert Decimal(y3["capex"]) == Decimal("0")
-    assert Decimal(y3["opex"]) == Decimal("0")
+    p1 = next(i for i in data if i["period_number"] == 1)
+    assert Decimal(p1["capex"]) == Decimal("0")
+    assert Decimal(p1["opex"]) == Decimal("0")
 
-    # В БД должны быть 3 реальные записи
     rows = (
         await db_session.scalars(
             select(ProjectFinancialPlan).where(
@@ -115,26 +168,21 @@ async def test_put_plan_creates_records(
 async def test_put_plan_replaces_existing(
     auth_client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """Повторный PUT полностью заменяет — старые записи удаляются."""
     project_id = await _create_project(auth_client)
-
-    first = {"items": [{"year": 1, "capex": "1000", "opex": "0"}]}
+    first = {"items": [{"period_number": 1, "capex": "1000", "opex": "0"}]}
     await auth_client.put(
         f"/api/projects/{project_id}/financial-plan", json=first
     )
-
-    second = {"items": [{"year": 2, "capex": "2000", "opex": "0"}]}
+    second = {"items": [{"period_number": 5, "capex": "2000", "opex": "0"}]}
     resp = await auth_client.put(
         f"/api/projects/{project_id}/financial-plan", json=second
     )
     data = resp.json()
+    p1 = next(i for i in data if i["period_number"] == 1)
+    assert Decimal(p1["capex"]) == Decimal("0")
+    p5 = next(i for i in data if i["period_number"] == 5)
+    assert Decimal(p5["capex"]) == Decimal("2000")
 
-    y1 = next(i for i in data if i["year"] == 1)
-    assert Decimal(y1["capex"]) == Decimal("0")  # старое удалено
-    y2 = next(i for i in data if i["year"] == 2)
-    assert Decimal(y2["capex"]) == Decimal("2000")  # новое вставлено
-
-    # В БД ровно одна запись
     rows = (
         await db_session.scalars(
             select(ProjectFinancialPlan).where(
@@ -148,11 +196,10 @@ async def test_put_plan_replaces_existing(
 async def test_put_plan_empty_items_clears(
     auth_client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """PUT с items=[] полностью очищает план."""
     project_id = await _create_project(auth_client)
     await auth_client.put(
         f"/api/projects/{project_id}/financial-plan",
-        json={"items": [{"year": 1, "capex": "1000", "opex": "0"}]},
+        json={"items": [{"period_number": 1, "capex": "1000", "opex": "0"}]},
     )
     resp = await auth_client.put(
         f"/api/projects/{project_id}/financial-plan", json={"items": []}
@@ -176,16 +223,14 @@ async def test_put_plan_empty_items_clears(
 async def test_put_plan_mapped_to_correct_period(
     auth_client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """Проверка что backend кладёт запись на правильный period_id
-    (первый период model_year). Для Y1 это period_number=1 (M1),
-    для Y4 — period_number=37 (первый yearly)."""
+    """period_number 1 → M1, period_number 37 → первый yearly (Y4)."""
     project_id = await _create_project(auth_client)
     await auth_client.put(
         f"/api/projects/{project_id}/financial-plan",
         json={
             "items": [
-                {"year": 1, "capex": "100", "opex": "0"},
-                {"year": 4, "capex": "400", "opex": "0"},
+                {"period_number": 1,  "capex": "100", "opex": "0"},
+                {"period_number": 37, "capex": "400", "opex": "0"},
             ]
         },
     )
@@ -197,14 +242,27 @@ async def test_put_plan_mapped_to_correct_period(
         )
     ).all()
     assert len(rows) == 2
+    by_pn = {p.period_number: (plan, p) for plan, p in rows}
+    assert by_pn[1][1].model_year == 1
+    assert by_pn[1][0].capex == Decimal("100")
+    assert by_pn[37][1].model_year == 4
+    assert by_pn[37][0].capex == Decimal("400")
 
-    by_year = {p.model_year: (plan, p) for plan, p in rows}
-    # Y1 → M1 (period_number=1)
-    assert by_year[1][1].period_number == 1
-    assert by_year[1][0].capex == Decimal("100")
-    # Y4 → первый yearly period (period_number=37)
-    assert by_year[4][1].period_number == 37
-    assert by_year[4][0].capex == Decimal("400")
+
+async def test_put_plan_rejects_duplicate_period_numbers(
+    auth_client: AsyncClient,
+) -> None:
+    project_id = await _create_project(auth_client)
+    resp = await auth_client.put(
+        f"/api/projects/{project_id}/financial-plan",
+        json={
+            "items": [
+                {"period_number": 1, "capex": "100", "opex": "0"},
+                {"period_number": 1, "capex": "200", "opex": "0"},
+            ]
+        },
+    )
+    assert resp.status_code == 422
 
 
 async def test_put_plan_unauthorized(client: AsyncClient) -> None:
@@ -215,35 +273,34 @@ async def test_put_plan_unauthorized(client: AsyncClient) -> None:
 
 
 # ============================================================
-# B-19: OPEX breakdown (opex_items)
+# OPEX/CAPEX items breakdown
 # ============================================================
 
 
-async def test_get_plan_returns_empty_opex_items_by_default(
+async def test_get_plan_returns_empty_items_by_default(
     auth_client: AsyncClient,
 ) -> None:
-    """По умолчанию opex_items = [] для каждого года."""
     project_id = await _create_project(auth_client)
     resp = await auth_client.get(f"/api/projects/{project_id}/financial-plan")
     assert resp.status_code == 200
     for item in resp.json():
         assert item["opex_items"] == []
+        assert item["capex_items"] == []
 
 
 async def test_put_plan_with_opex_items_auto_sums(
     auth_client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """PUT с opex_items → opex = sum(items), items сохраняются в БД."""
     project_id = await _create_project(auth_client)
     body = {
         "items": [
             {
-                "year": 1,
+                "period_number": 1,
                 "capex": "100000",
-                "opex": "999",  # должен быть игнорирован (items есть)
+                "opex": "999",
                 "opex_items": [
-                    {"name": "Листинги", "amount": "500000"},
-                    {"name": "Запускной маркетинг", "amount": "320000"},
+                    {"name": "Аренда", "amount": "200000"},
+                    {"name": "ЗП", "amount": "500000"},
                 ],
             },
         ]
@@ -253,57 +310,52 @@ async def test_put_plan_with_opex_items_auto_sums(
     )
     assert resp.status_code == 200
     data = resp.json()
+    p1 = next(i for i in data if i["period_number"] == 1)
+    assert Decimal(p1["opex"]) == Decimal("700000")
+    assert len(p1["opex_items"]) == 2
 
-    y1 = next(i for i in data if i["year"] == 1)
-    # opex = sum of items, not the explicit 999
-    assert Decimal(y1["opex"]) == Decimal("820000")
-    assert len(y1["opex_items"]) == 2
-    names = {oi["name"] for oi in y1["opex_items"]}
-    assert names == {"Листинги", "Запускной маркетинг"}
-
-    # Проверяем что в БД реально 2 OpexItem записи
-    opex_rows = (
-        await db_session.scalars(select(OpexItem))
-    ).all()
+    opex_rows = (await db_session.scalars(select(OpexItem))).all()
     assert len(list(opex_rows)) == 2
 
 
-async def test_put_plan_without_opex_items_backward_compat(
+async def test_put_plan_with_capex_items_auto_sums(
     auth_client: AsyncClient,
 ) -> None:
-    """PUT без opex_items → opex = явное число (обратная совместимость)."""
     project_id = await _create_project(auth_client)
     body = {
         "items": [
-            {"year": 2, "capex": "0", "opex": "750000"},
+            {
+                "period_number": 3,
+                "capex": "999",
+                "opex": "0",
+                "capex_items": [
+                    {"category": "molds", "name": "Молды партия 1", "amount": "10000000"},
+                    {"category": "line",  "name": "Линия розлива",   "amount": "5000000"},
+                ],
+            },
         ]
     }
     resp = await auth_client.put(
         f"/api/projects/{project_id}/financial-plan", json=body
     )
     assert resp.status_code == 200
-    data = resp.json()
-
-    y2 = next(i for i in data if i["year"] == 2)
-    assert Decimal(y2["opex"]) == Decimal("750000")
-    assert y2["opex_items"] == []
+    p3 = next(i for i in resp.json() if i["period_number"] == 3)
+    assert Decimal(p3["capex"]) == Decimal("15000000")
+    assert len(p3["capex_items"]) == 2
 
 
-async def test_put_plan_replace_clears_old_opex_items(
+async def test_put_plan_replace_clears_old_items(
     auth_client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """Повторный PUT удаляет старые opex_items (CASCADE)."""
     project_id = await _create_project(auth_client)
-
-    # Первый PUT с items
     first = {
         "items": [
             {
-                "year": 1,
+                "period_number": 1,
                 "capex": "0",
                 "opex_items": [
-                    {"name": "Листинги", "amount": "100000"},
-                    {"name": "Промо", "amount": "200000"},
+                    {"name": "Аренда", "amount": "100000"},
+                    {"name": "ЗП", "amount": "200000"},
                 ],
             },
         ]
@@ -311,15 +363,13 @@ async def test_put_plan_replace_clears_old_opex_items(
     await auth_client.put(
         f"/api/projects/{project_id}/financial-plan", json=first
     )
-
-    # Второй PUT — другие items
     second = {
         "items": [
             {
-                "year": 1,
+                "period_number": 1,
                 "capex": "0",
                 "opex_items": [
-                    {"name": "Новая статья", "amount": "50000"},
+                    {"name": "Новая", "amount": "50000"},
                 ],
             },
         ]
@@ -327,108 +377,9 @@ async def test_put_plan_replace_clears_old_opex_items(
     resp = await auth_client.put(
         f"/api/projects/{project_id}/financial-plan", json=second
     )
-    data = resp.json()
-    y1 = next(i for i in data if i["year"] == 1)
-    assert Decimal(y1["opex"]) == Decimal("50000")
-    assert len(y1["opex_items"]) == 1
-    assert y1["opex_items"][0]["name"] == "Новая статья"
+    p1 = next(i for i in resp.json() if i["period_number"] == 1)
+    assert Decimal(p1["opex"]) == Decimal("50000")
+    assert len(p1["opex_items"]) == 1
 
-    # В БД должна быть ровно 1 OpexItem (старые удалены CASCADE)
-    opex_rows = (
-        await db_session.scalars(select(OpexItem))
-    ).all()
+    opex_rows = (await db_session.scalars(select(OpexItem))).all()
     assert len(list(opex_rows)) == 1
-
-
-async def test_put_plan_mixed_years_with_and_without_items(
-    auth_client: AsyncClient,
-) -> None:
-    """Один год с opex_items, другой без — оба работают корректно."""
-    project_id = await _create_project(auth_client)
-    body = {
-        "items": [
-            {
-                "year": 1,
-                "capex": "0",
-                "opex": "0",
-                "opex_items": [
-                    {"name": "Листинги", "amount": "400000"},
-                ],
-            },
-            {
-                "year": 2,
-                "capex": "0",
-                "opex": "600000",
-                # no opex_items → manual opex
-            },
-        ]
-    }
-    resp = await auth_client.put(
-        f"/api/projects/{project_id}/financial-plan", json=body
-    )
-    data = resp.json()
-
-    y1 = next(i for i in data if i["year"] == 1)
-    assert Decimal(y1["opex"]) == Decimal("400000")
-    assert len(y1["opex_items"]) == 1
-
-    y2 = next(i for i in data if i["year"] == 2)
-    assert Decimal(y2["opex"]) == Decimal("600000")
-    assert y2["opex_items"] == []
-
-
-# ============================================================
-# B.9b: schema contract tests for period_number
-# ============================================================
-
-
-def test_financial_plan_item_accepts_period_number() -> None:
-    assert (
-        FinancialPlanItem(period_number=1, capex="100", opex="0").period_number == 1
-    )
-    assert (
-        FinancialPlanItem(period_number=43, capex="0", opex="0").period_number == 43
-    )
-
-
-def test_financial_plan_item_rejects_period_number_out_of_range() -> None:
-    with pytest.raises(ValidationError):
-        FinancialPlanItem(period_number=0, capex="0", opex="0")
-    with pytest.raises(ValidationError):
-        FinancialPlanItem(period_number=44, capex="0", opex="0")
-
-
-def test_financial_plan_item_no_year_field() -> None:
-    # year field is gone; passing it should be ignored (Pydantic v2 default extra="ignore").
-    item = FinancialPlanItem(period_number=1, year=1, capex="0", opex="0")
-    assert not hasattr(item, "year")
-
-
-def test_financial_plan_request_rejects_duplicate_period_number() -> None:
-    with pytest.raises(ValidationError):
-        FinancialPlanRequest(items=[
-            FinancialPlanItem(period_number=1, capex="100", opex="0"),
-            FinancialPlanItem(period_number=1, capex="200", opex="0"),
-        ])
-
-
-# ============================================================
-# B.9b: list_plan_by_period returns 43 elements
-# ============================================================
-
-
-async def test_list_plan_by_period_returns_43_elements(
-    auth_client: AsyncClient, db_session: AsyncSession
-) -> None:
-    project_id = await _create_project(auth_client)
-    plan = await financial_plan_service.list_plan_by_period(
-        db_session, project_id
-    )
-    assert len(plan) == 43
-    period_numbers = [item.period_number for item in plan]
-    assert period_numbers == list(range(1, 44))
-    for item in plan:
-        assert item.capex == Decimal("0")
-        assert item.opex == Decimal("0")
-        assert item.opex_items == []
-        assert item.capex_items == []
