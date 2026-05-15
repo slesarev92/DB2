@@ -15,6 +15,7 @@
 """
 from __future__ import annotations
 
+import logging
 from decimal import Decimal
 
 from sqlalchemy import delete as sql_delete
@@ -24,6 +25,8 @@ from sqlalchemy.orm import selectinload
 
 from app.models import OpexItem, Period, ProjectFinancialPlan
 from app.schemas.financial_plan import FinancialPlanItem, OpexItemSchema
+
+logger = logging.getLogger(__name__)
 
 
 async def _get_first_period_by_year(
@@ -110,6 +113,23 @@ async def replace_plan(
     указание "ничего не тратим в этом году" и отличается от "не
     заполнено" (которое будет 0 по умолчанию в list_plan_by_year).
     """
+    # Диагностический лог payload — поможет ловить D-2 (intermittent
+    # save error) и D-3 (CAPEX=0 crash). Безопасно: только числовые
+    # поля + структура, без PII.
+    logger.info(
+        "replace_plan project_id=%s items=%s",
+        project_id,
+        [
+            (
+                item.year,
+                str(item.capex),
+                str(item.opex),
+                len(item.opex_items or []),
+            )
+            for item in items
+        ],
+    )
+
     # 1. DELETE старые (CASCADE → opex_items тоже удаляются)
     await session.execute(
         sql_delete(ProjectFinancialPlan).where(

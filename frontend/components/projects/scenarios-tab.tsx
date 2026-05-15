@@ -196,29 +196,51 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
     onStatus: (status: string) => void,
   ): Promise<{ ok: boolean; error?: string }> {
     const POLL_INTERVAL = 1000;
-    const TIMEOUT_MS = 60_000;
+    const TIMEOUT_MS = 180_000;
+    const MAX_CONSECUTIVE_NETWORK_ERRORS = 5;
     const start = Date.now();
+    let networkErrors = 0;
     while (Date.now() - start < TIMEOUT_MS) {
-      const resp = await getTaskStatus(taskId);
-      onStatus(resp.status);
-      if (resp.status === "SUCCESS") {
-        // Celery SUCCESS, но task мог вернуть логическую ошибку в result.error
-        // (ProjectNotFound / NoLines / 4.3 LineValidationError).
-        const r = resp.result as { error?: string; message?: string } | undefined;
-        if (r && typeof r === "object" && r.error) {
-          return { ok: false, error: r.message ?? r.error };
+      try {
+        const resp = await getTaskStatus(taskId);
+        networkErrors = 0;
+        onStatus(resp.status);
+        if (resp.status === "SUCCESS") {
+          // Celery SUCCESS, но task мог вернуть логическую ошибку в result.error
+          // (ProjectNotFound / NoLines / 4.3 LineValidationError).
+          const r = resp.result as { error?: string; message?: string } | undefined;
+          if (r && typeof r === "object" && r.error) {
+            return { ok: false, error: r.message ?? r.error };
+          }
+          return { ok: true };
         }
-        return { ok: true };
-      }
-      if (resp.status === "FAILURE") {
-        return {
-          ok: false,
-          error: resp.error ?? "Расчёт упал без указания причины",
-        };
+        if (resp.status === "FAILURE") {
+          console.error("[scenarios] task FAILURE", { taskId, error: resp.error });
+          return {
+            ok: false,
+            error: resp.error ?? "Расчёт упал без указания причины",
+          };
+        }
+      } catch (err) {
+        // Транзитный сбой сети / 502 от nginx / Celery worker overloaded.
+        // Не валим polling сразу — даём шанс перезапросить.
+        networkErrors += 1;
+        console.warn(
+          `[scenarios] getTaskStatus glitch ${networkErrors}/${MAX_CONSECUTIVE_NETWORK_ERRORS}`,
+          { taskId, err },
+        );
+        if (networkErrors >= MAX_CONSECUTIVE_NETWORK_ERRORS) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return {
+            ok: false,
+            error: `Сеть: не удалось получить статус расчёта (${msg})`,
+          };
+        }
       }
       await new Promise((r) => setTimeout(r, POLL_INTERVAL));
     }
-    return { ok: false, error: "Timeout: расчёт не завершился за 60 секунд" };
+    console.error("[scenarios] polling timeout", { taskId });
+    return { ok: false, error: "Timeout: расчёт не завершился за 3 минуты" };
   }
 
   /** Применяет drafts → PATCH дельт → recalculate → poll → reload. */

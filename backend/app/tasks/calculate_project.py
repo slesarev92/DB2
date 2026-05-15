@@ -22,6 +22,7 @@ psycopg2 (теряем async). NullPool простое и надёжное.
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
 from sqlalchemy.ext.asyncio import (
@@ -39,6 +40,8 @@ from app.services.calculation_service import (
     calculate_all_scenarios,
 )
 from app.worker import celery_app
+
+logger = logging.getLogger(__name__)
 
 
 async def _calculate_project_async(project_id: int) -> dict[str, Any]:
@@ -89,8 +92,20 @@ def calculate_project_task(self, project_id: int) -> dict[str, Any]:
     в человекочитаемые ошибки в task result, остальные исключения
     пробрасывает (Celery пометит task FAILED).
     """
+    logger.info(
+        "calculate_project_task START project_id=%s task_id=%s",
+        project_id,
+        self.request.id,
+    )
     try:
-        return asyncio.run(_calculate_project_async(project_id))
+        result = asyncio.run(_calculate_project_async(project_id))
+        logger.info(
+            "calculate_project_task OK project_id=%s task_id=%s result=%s",
+            project_id,
+            self.request.id,
+            result,
+        )
+        return result
     except (ProjectNotFoundError, NoLinesError, LineValidationError) as exc:
         # Эти ошибки — bad request, не баг. Возвращаем как failed result
         # с понятным сообщением. Celery state будет SUCCESS (task не упал),
@@ -98,8 +113,24 @@ def calculate_project_task(self, project_id: int) -> dict[str, Any]:
         # LineValidationError (4.3) — пользователь ввёл невозможные параметры
         # (channel_margin ≥ 1.0, shelf_price < 0). Frontend показывает
         # message в recalcError / toast.
+        logger.warning(
+            "calculate_project_task bad_request project_id=%s task_id=%s exc=%s msg=%s",
+            project_id,
+            self.request.id,
+            type(exc).__name__,
+            exc,
+        )
         return {
             "project_id": project_id,
             "error": type(exc).__name__,
             "message": str(exc) or type(exc).__name__,
         }
+    except Exception:
+        # Любое другое исключение — реальный баг / падение pipeline.
+        # Логируем со stack trace и пробрасываем (Celery state FAILURE).
+        logger.exception(
+            "calculate_project_task FAILED project_id=%s task_id=%s",
+            project_id,
+            self.request.id,
+        )
+        raise
