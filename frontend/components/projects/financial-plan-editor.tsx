@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { HelpButton } from "@/components/ui/help-button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -20,20 +19,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { ApiError } from "@/lib/api";
 import {
   getFinancialPlan,
   putFinancialPlan,
 } from "@/lib/financial-plan";
-import { formatMoney } from "@/lib/format";
+import {
+  isLegacyData,
+  periodLabel,
+} from "@/lib/financial-plan-utils";
 
 import {
   CAPEX_CATEGORIES,
@@ -45,185 +39,220 @@ import {
   type OpexItem,
 } from "@/types/api";
 
-interface FinancialPlanEditorProps {
+import {
+  FinancialPlanBulkFill,
+  type BulkFillTarget,
+} from "./financial-plan-bulk-fill";
+
+interface Props {
   projectId: number;
 }
 
-/** Годы, для которых раскрыта разбивка OPEX. */
-type ExpandedSet = Set<number>;
+type ItemKind = "capex" | "opex";
 
 /**
- * Редактор CAPEX/OPEX по годам проекта.
+ * Редактор финансового плана с per-period гранулярностью (B.9b).
  *
- * UI: таблица из 10 строк Y1..Y10 × колонки (Год, CAPEX ₽, OPEX ₽).
- * Кнопка «Разбить» раскрывает вложенные строки статей OPEX (B-19).
- * Backend маппит year → period_id автоматически.
+ * 43 колонки (M1..M36 + Y4..Y10), sticky left = имена строк.
+ * Группирующие заголовки Y1/Y2/Y3 над месяцами.
+ * Каждая статья CAPEX/OPEX = строка таблицы с 43 ячейками.
  */
-export function FinancialPlanEditor({ projectId }: FinancialPlanEditorProps) {
+export function FinancialPlanEditor({ projectId }: Props) {
   const [items, setItems] = useState<FinancialPlanItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
-  const [expanded, setExpanded] = useState<ExpandedSet>(new Set());
+  const [collapsed, setCollapsed] = useState<{ capex: boolean; opex: boolean }>(
+    { capex: false, opex: false },
+  );
 
   useEffect(() => {
     let cancelled = false;
     getFinancialPlan(projectId)
       .then((data) => {
-        if (!cancelled) {
-          setItems(data);
-          // Авто-раскрываем годы у которых уже есть статьи (OPEX или CAPEX)
-          const autoExpand = new Set<number>();
-          for (const d of data) {
-            if (d.opex_items.length > 0 || d.capex_items.length > 0) {
-              autoExpand.add(d.year);
-            }
-          }
-          if (autoExpand.size > 0) setExpanded(autoExpand);
-        }
+        if (!cancelled) setItems(data);
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(
-          err instanceof ApiError ? err.detail ?? err.message : "Ошибка",
-        );
+        setError(err instanceof ApiError ? err.detail ?? err.message : "Ошибка");
       });
     return () => {
       cancelled = true;
     };
   }, [projectId]);
 
-  // --- Мутации state ---
+  const showLegacyBanner = useMemo(
+    () => (items !== null ? isLegacyData(items) : false),
+    [items],
+  );
 
-  function updateItem(year: number, field: "capex" | "opex", value: string) {
+  const capexArticleKeys = useMemo(
+    () => collectArticleKeys(items, "capex"),
+    [items],
+  );
+  const opexArticleKeys = useMemo(
+    () => collectArticleKeys(items, "opex"),
+    [items],
+  );
+
+  function updatePeriodTotal(
+    periodNumber: number,
+    field: "capex" | "opex",
+    value: string,
+  ) {
+    setItems((prev) =>
+      prev === null
+        ? prev
+        : prev.map((p) =>
+            p.period_number === periodNumber ? { ...p, [field]: value } : p,
+          ),
+    );
+  }
+
+  function updateArticleAmount(
+    periodNumber: number,
+    kind: ItemKind,
+    category: string,
+    name: string,
+    amount: string,
+  ) {
     setItems((prev) => {
       if (prev === null) return prev;
-      return prev.map((item) =>
-        item.year === year ? { ...item, [field]: value } : item,
-      );
+      return prev.map((p) => {
+        if (p.period_number !== periodNumber) return p;
+        if (kind === "capex") {
+          const list = p.capex_items;
+          const idx = list.findIndex(
+            (it) => it.category === category && it.name === name,
+          );
+          let newList: CapexItem[];
+          if (idx === -1) {
+            newList = [...list, { category, name, amount }];
+          } else {
+            newList = list.map((it, i) => (i === idx ? { ...it, amount } : it));
+          }
+          if (amount === "" || Number(amount) === 0) {
+            newList = newList.filter(
+              (it) => !(it.category === category && it.name === name),
+            );
+          }
+          const newTotal = newList.reduce(
+            (s, it) => s + Number(it.amount || 0),
+            0,
+          );
+          return { ...p, capex_items: newList, capex: String(newTotal) };
+        } else {
+          const list = p.opex_items;
+          const idx = list.findIndex(
+            (it) => it.category === category && it.name === name,
+          );
+          let newList: OpexItem[];
+          if (idx === -1) {
+            newList = [...list, { category, name, amount }];
+          } else {
+            newList = list.map((it, i) => (i === idx ? { ...it, amount } : it));
+          }
+          if (amount === "" || Number(amount) === 0) {
+            newList = newList.filter(
+              (it) => !(it.category === category && it.name === name),
+            );
+          }
+          const newTotal = newList.reduce(
+            (s, it) => s + Number(it.amount || 0),
+            0,
+          );
+          return { ...p, opex_items: newList, opex: String(newTotal) };
+        }
+      });
     });
   }
 
-  function toggleExpand(year: number) {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(year)) {
-        next.delete(year);
-      } else {
-        next.add(year);
+  function addArticle(kind: ItemKind, category: string, name: string) {
+    setItems((prev) => {
+      if (prev === null) return prev;
+      return prev.map((p) => {
+        if (p.period_number !== 1) return p;
+        if (kind === "capex") {
+          if (
+            p.capex_items.some(
+              (it) => it.category === category && it.name === name,
+            )
+          ) {
+            return p;
+          }
+          const next: CapexItem[] = [
+            ...p.capex_items,
+            { category, name, amount: "0" },
+          ];
+          return { ...p, capex_items: next };
+        } else {
+          if (
+            p.opex_items.some(
+              (it) => it.category === category && it.name === name,
+            )
+          ) {
+            return p;
+          }
+          const next: OpexItem[] = [
+            ...p.opex_items,
+            { category, name, amount: "0" },
+          ];
+          return { ...p, opex_items: next };
+        }
+      });
+    });
+  }
+
+  function removeArticle(kind: ItemKind, category: string, name: string) {
+    setItems((prev) => {
+      if (prev === null) return prev;
+      return prev.map((p) => {
+        if (kind === "capex") {
+          const newList = p.capex_items.filter(
+            (it) => !(it.category === category && it.name === name),
+          );
+          if (newList.length === p.capex_items.length) return p;
+          const newTotal = newList.reduce(
+            (s, it) => s + Number(it.amount || 0),
+            0,
+          );
+          return { ...p, capex_items: newList, capex: String(newTotal) };
+        } else {
+          const newList = p.opex_items.filter(
+            (it) => !(it.category === category && it.name === name),
+          );
+          if (newList.length === p.opex_items.length) return p;
+          const newTotal = newList.reduce(
+            (s, it) => s + Number(it.amount || 0),
+            0,
+          );
+          return { ...p, opex_items: newList, opex: String(newTotal) };
+        }
+      });
+    });
+  }
+
+  function applyBulkFill(
+    rowKey: string,
+    updates: Array<[number, string]>,
+  ): void {
+    const dotIdx = rowKey.indexOf(".");
+    if (dotIdx === -1) return;
+    const kind = rowKey.slice(0, dotIdx) as ItemKind;
+    const tail = rowKey.slice(dotIdx + 1);
+    if (tail === "total") {
+      for (const [pn, val] of updates) {
+        updatePeriodTotal(pn, kind, val);
       }
-      return next;
-    });
-  }
-
-  function addOpexItem(year: number) {
-    setItems((prev) => {
-      if (prev === null) return prev;
-      return prev.map((item) => {
-        if (item.year !== year) return item;
-        const newItem: OpexItem = { category: "other", name: "", amount: "0" };
-        const newItems = [...item.opex_items, newItem];
-        return {
-          ...item,
-          opex_items: newItems,
-          opex: sumOpexItems(newItems),
-        };
-      });
-    });
-    // Авто-раскрываем
-    setExpanded((prev) => new Set(prev).add(year));
-  }
-
-  function removeOpexItem(year: number, idx: number) {
-    setItems((prev) => {
-      if (prev === null) return prev;
-      return prev.map((item) => {
-        if (item.year !== year) return item;
-        const newItems = item.opex_items.filter((_, i) => i !== idx);
-        return {
-          ...item,
-          opex_items: newItems,
-          opex: newItems.length > 0 ? sumOpexItems(newItems) : item.opex,
-        };
-      });
-    });
-  }
-
-  function updateOpexItem(
-    year: number,
-    idx: number,
-    field: "category" | "name" | "amount",
-    value: string,
-  ) {
-    setItems((prev) => {
-      if (prev === null) return prev;
-      return prev.map((item) => {
-        if (item.year !== year) return item;
-        const newItems = item.opex_items.map((oi, i) =>
-          i === idx ? { ...oi, [field]: value } : oi,
-        );
-        return {
-          ...item,
-          opex_items: newItems,
-          opex: sumOpexItems(newItems),
-        };
-      });
-    });
-  }
-
-  // B.9 (2026-05-15): аналогичные мутаторы для capex_items.
-  function addCapexItem(year: number) {
-    setItems((prev) => {
-      if (prev === null) return prev;
-      return prev.map((item) => {
-        if (item.year !== year) return item;
-        const newItem: CapexItem = { category: "other", name: "", amount: "0" };
-        const newItems = [...item.capex_items, newItem];
-        return {
-          ...item,
-          capex_items: newItems,
-          capex: sumCapexItems(newItems),
-        };
-      });
-    });
-    setExpanded((prev) => new Set(prev).add(year));
-  }
-
-  function removeCapexItem(year: number, idx: number) {
-    setItems((prev) => {
-      if (prev === null) return prev;
-      return prev.map((item) => {
-        if (item.year !== year) return item;
-        const newItems = item.capex_items.filter((_, i) => i !== idx);
-        return {
-          ...item,
-          capex_items: newItems,
-          capex: newItems.length > 0 ? sumCapexItems(newItems) : item.capex,
-        };
-      });
-    });
-  }
-
-  function updateCapexItem(
-    year: number,
-    idx: number,
-    field: "category" | "name" | "amount",
-    value: string,
-  ) {
-    setItems((prev) => {
-      if (prev === null) return prev;
-      return prev.map((item) => {
-        if (item.year !== year) return item;
-        const newItems = item.capex_items.map((ci, i) =>
-          i === idx ? { ...ci, [field]: value } : ci,
-        );
-        return {
-          ...item,
-          capex_items: newItems,
-          capex: sumCapexItems(newItems),
-        };
-      });
-    });
+    } else {
+      const pipeIdx = tail.indexOf("|");
+      if (pipeIdx === -1) return;
+      const category = tail.slice(0, pipeIdx);
+      const name = tail.slice(pipeIdx + 1);
+      for (const [pn, val] of updates) {
+        updateArticleAmount(pn, kind, category, name, val);
+      }
+    }
   }
 
   async function handleSave() {
@@ -231,16 +260,15 @@ export function FinancialPlanEditor({ projectId }: FinancialPlanEditorProps) {
     setSaving(true);
     setError(null);
     try {
-      // Sanitize: пустые строки → "0" чтобы backend Pydantic не падал на Decimal("")
-      const sanitized = items.map((item) => ({
-        ...item,
-        capex: item.capex === "" ? "0" : item.capex,
-        opex: item.opex === "" ? "0" : item.opex,
-        opex_items: item.opex_items.map((oi) => ({
+      const sanitized = items.map((p) => ({
+        ...p,
+        capex: p.capex === "" ? "0" : p.capex,
+        opex: p.opex === "" ? "0" : p.opex,
+        opex_items: p.opex_items.map((oi) => ({
           ...oi,
           amount: oi.amount === "" ? "0" : oi.amount,
         })),
-        capex_items: item.capex_items.map((ci) => ({
+        capex_items: p.capex_items.map((ci) => ({
           ...ci,
           amount: ci.amount === "" ? "0" : ci.amount,
         })),
@@ -251,9 +279,7 @@ export function FinancialPlanEditor({ projectId }: FinancialPlanEditorProps) {
       toast.success("Финансовый план сохранён");
     } catch (err) {
       const msg =
-        err instanceof ApiError
-          ? err.detail ?? err.message
-          : "Ошибка сохранения";
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка сохранения";
       setError(msg);
       toast.error(`Не удалось сохранить: ${msg}`);
     } finally {
@@ -261,11 +287,32 @@ export function FinancialPlanEditor({ projectId }: FinancialPlanEditorProps) {
     }
   }
 
-  // Итоги
-  const totalCapex =
-    items?.reduce((sum, i) => sum + Number(i.capex || 0), 0) ?? 0;
-  const totalOpex =
-    items?.reduce((sum, i) => sum + Number(i.opex || 0), 0) ?? 0;
+  const periods = useMemo(
+    () => Array.from({ length: 43 }, (_, i) => i + 1),
+    [],
+  );
+
+  const bulkRows: BulkFillTarget[] = useMemo(() => {
+    const rows: BulkFillTarget[] = [
+      { rowKey: "capex.total", label: "CAPEX итог (без статей)" },
+      ...capexArticleKeys.map((k) => ({
+        rowKey: `capex.${k.category}|${k.name}`,
+        label: `CAPEX • ${
+          (CAPEX_CATEGORY_LABELS as Record<string, string>)[k.category] ??
+          k.category
+        } • ${k.name}`,
+      })),
+      { rowKey: "opex.total", label: "OPEX итог (без статей)" },
+      ...opexArticleKeys.map((k) => ({
+        rowKey: `opex.${k.category}|${k.name}`,
+        label: `OPEX • ${
+          (OPEX_CATEGORY_LABELS as Record<string, string>)[k.category] ??
+          k.category
+        } • ${k.name}`,
+      })),
+    ];
+    return rows;
+  }, [capexArticleKeys, opexArticleKeys]);
 
   return (
     <Card>
@@ -273,16 +320,20 @@ export function FinancialPlanEditor({ projectId }: FinancialPlanEditorProps) {
         <div className="flex items-start justify-between gap-4">
           <div>
             <CardTitle className="text-base">
-              Инвестиции и project OPEX по годам
+              Финансовый план (помесячно Y1-Y3, годами Y4-Y10)
             </CardTitle>
             <CardDescription>
-              CAPEX (инвестиции) и периодические OPEX (листинги, запускной
-              маркетинг и т.п.) на уровне всего проекта. Нажмите «Разбить»
-              чтобы детализировать OPEX по статьям. После сохранения нажмите
-              «Пересчитать» в табе «Результаты».
+              CAPEX и project OPEX по месяцам первых 3 лет и годам Y4-Y10.
+              Используйте <b>Bulk-fill</b> чтобы распределить годовую сумму или
+              залить значение на диапазон.
             </CardDescription>
           </div>
           <div className="flex items-center gap-3">
+            <FinancialPlanBulkFill
+              rows={bulkRows}
+              onApply={applyBulkFill}
+              disabled={saving || items === null}
+            />
             {savedAt !== null && !saving && error === null && (
               <span className="text-xs text-muted-foreground">
                 Сохранено {savedAt.toLocaleTimeString("ru-RU")}
@@ -302,66 +353,178 @@ export function FinancialPlanEditor({ projectId }: FinancialPlanEditorProps) {
         {items === null && error === null && (
           <p className="text-sm text-muted-foreground">Загрузка...</p>
         )}
-
         {error !== null && (
           <p className="mb-3 text-sm text-destructive" role="alert">
             {error}
           </p>
         )}
+        {showLegacyBanner && (
+          <div className="mb-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            <b>Финплан сохранён годовыми точками.</b> Все значения сейчас
+            видны в первом месяце года (M1, M13, M25). Используйте Bulk-fill →
+            «Распределить год» чтобы разнести их по месяцам.
+          </div>
+        )}
 
         {items !== null && (
-          <div className="overflow-x-auto">
-            <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-24">Год</TableHead>
-                <TableHead>
-                  <span className="inline-flex items-center gap-1.5">
-                    CAPEX, ₽
-                    <HelpButton help="financial_plan.capex" />
-                  </span>
-                </TableHead>
-                <TableHead>
-                  <span className="inline-flex items-center gap-1.5">
-                    Project OPEX, ₽
-                    <HelpButton help="financial_plan.opex" />
-                  </span>
-                </TableHead>
-                <TableHead className="w-28" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((item) => {
-                const isExpanded = expanded.has(item.year);
-                return (
-                  <PlanYearRow
-                    key={item.year}
-                    item={item}
-                    isExpanded={isExpanded}
-                    saving={saving}
-                    onUpdateItem={updateItem}
-                    onToggleExpand={toggleExpand}
-                    onAddOpexItem={addOpexItem}
-                    onRemoveOpexItem={removeOpexItem}
-                    onUpdateOpexItem={updateOpexItem}
-                    onAddCapexItem={addCapexItem}
-                    onRemoveCapexItem={removeCapexItem}
-                    onUpdateCapexItem={updateCapexItem}
+          <div className="overflow-x-auto border rounded">
+            <table className="min-w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-muted">
+                  <th
+                    className="sticky left-0 bg-muted px-2 py-1 text-left border-r"
+                    style={{ minWidth: 220 }}
+                  >
+                    Статья / Период
+                  </th>
+                  <th colSpan={12} className="text-center border-r">
+                    Y1 (M1-M12)
+                  </th>
+                  <th colSpan={12} className="text-center border-r">
+                    Y2 (M13-M24)
+                  </th>
+                  <th colSpan={12} className="text-center border-r">
+                    Y3 (M25-M36)
+                  </th>
+                  <th colSpan={7} className="text-center">
+                    Y4-Y10
+                  </th>
+                </tr>
+                <tr className="bg-muted/50">
+                  <th className="sticky left-0 bg-muted/50 border-r" />
+                  {periods.map((pn) => (
+                    <th
+                      key={pn}
+                      className="px-1 py-0.5 text-center border-r font-mono"
+                      style={{ minWidth: 70 }}
+                    >
+                      {periodLabel(pn)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="bg-blue-50 font-semibold">
+                  <td
+                    className="sticky left-0 bg-blue-50 px-2 py-1 border-r cursor-pointer"
+                    onClick={() =>
+                      setCollapsed((c) => ({ ...c, capex: !c.capex }))
+                    }
+                  >
+                    {collapsed.capex ? "▶" : "▼"} CAPEX итог
+                  </td>
+                  {periods.map((pn) => {
+                    const it = items.find((x) => x.period_number === pn);
+                    return (
+                      <td key={pn} className="border-r text-center">
+                        {it && it.capex_items.length === 0 ? (
+                          <Input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={it.capex}
+                            onChange={(e) =>
+                              updatePeriodTotal(pn, "capex", e.target.value)
+                            }
+                            disabled={saving}
+                            className="h-7 text-right text-xs"
+                          />
+                        ) : (
+                          <span className="text-muted-foreground">
+                            {Number(it?.capex || 0).toLocaleString("ru-RU")}
+                          </span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+
+                {!collapsed.capex &&
+                  capexArticleKeys.map((k) => (
+                    <ArticleRow
+                      key={`capex-${k.category}-${k.name}`}
+                      items={items}
+                      kind="capex"
+                      category={k.category}
+                      name={k.name}
+                      saving={saving}
+                      onUpdate={(pn, val) =>
+                        updateArticleAmount(pn, "capex", k.category, k.name, val)
+                      }
+                      onRemove={() =>
+                        removeArticle("capex", k.category, k.name)
+                      }
+                    />
+                  ))}
+                {!collapsed.capex && (
+                  <AddArticleRow
+                    kind="capex"
+                    onAdd={(cat, name) => addArticle("capex", cat, name)}
+                    disabled={saving}
                   />
-                );
-              })}
-              <TableRow className="border-t-2 font-semibold">
-                <TableCell>Итого</TableCell>
-                <TableCell className="pl-3">
-                  {formatMoney(String(totalCapex))}
-                </TableCell>
-                <TableCell className="pl-3">
-                  {formatMoney(String(totalOpex))}
-                </TableCell>
-                <TableCell />
-              </TableRow>
-            </TableBody>
-          </Table>
+                )}
+
+                <tr className="bg-green-50 font-semibold">
+                  <td
+                    className="sticky left-0 bg-green-50 px-2 py-1 border-r cursor-pointer"
+                    onClick={() =>
+                      setCollapsed((c) => ({ ...c, opex: !c.opex }))
+                    }
+                  >
+                    {collapsed.opex ? "▶" : "▼"} OPEX итог
+                  </td>
+                  {periods.map((pn) => {
+                    const it = items.find((x) => x.period_number === pn);
+                    return (
+                      <td key={pn} className="border-r text-center">
+                        {it && it.opex_items.length === 0 ? (
+                          <Input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={it.opex}
+                            onChange={(e) =>
+                              updatePeriodTotal(pn, "opex", e.target.value)
+                            }
+                            disabled={saving}
+                            className="h-7 text-right text-xs"
+                          />
+                        ) : (
+                          <span className="text-muted-foreground">
+                            {Number(it?.opex || 0).toLocaleString("ru-RU")}
+                          </span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+
+                {!collapsed.opex &&
+                  opexArticleKeys.map((k) => (
+                    <ArticleRow
+                      key={`opex-${k.category}-${k.name}`}
+                      items={items}
+                      kind="opex"
+                      category={k.category}
+                      name={k.name}
+                      saving={saving}
+                      onUpdate={(pn, val) =>
+                        updateArticleAmount(pn, "opex", k.category, k.name, val)
+                      }
+                      onRemove={() =>
+                        removeArticle("opex", k.category, k.name)
+                      }
+                    />
+                  ))}
+                {!collapsed.opex && (
+                  <AddArticleRow
+                    kind="opex"
+                    onAdd={(cat, name) => addArticle("opex", cat, name)}
+                    disabled={saving}
+                  />
+                )}
+              </tbody>
+            </table>
           </div>
         )}
       </CardContent>
@@ -369,295 +532,150 @@ export function FinancialPlanEditor({ projectId }: FinancialPlanEditorProps) {
   );
 }
 
-// --- Helpers ---
+// ============================================================
+// Helpers
+// ============================================================
 
-function sumOpexItems(items: OpexItem[]): string {
-  const total = items.reduce((s, oi) => s + Number(oi.amount || 0), 0);
-  return String(total);
+function collectArticleKeys(
+  items: FinancialPlanItem[] | null,
+  kind: ItemKind,
+): Array<{ category: string; name: string }> {
+  if (items === null) return [];
+  const seen = new Map<string, { category: string; name: string }>();
+  for (const p of items) {
+    const list = kind === "capex" ? p.capex_items : p.opex_items;
+    for (const it of list) {
+      const key = `${it.category}|${it.name}`;
+      if (!seen.has(key)) {
+        seen.set(key, { category: it.category, name: it.name });
+      }
+    }
+  }
+  return Array.from(seen.values());
 }
 
-function sumCapexItems(items: CapexItem[]): string {
-  const total = items.reduce((s, ci) => s + Number(ci.amount || 0), 0);
-  return String(total);
-}
+// --- Sub-components ---
 
-// --- Sub-component: year row + expandable OPEX и CAPEX статей ---
-
-interface PlanYearRowProps {
-  item: FinancialPlanItem;
-  isExpanded: boolean;
+interface ArticleRowProps {
+  items: FinancialPlanItem[];
+  kind: ItemKind;
+  category: string;
+  name: string;
   saving: boolean;
-  onUpdateItem: (year: number, field: "capex" | "opex", value: string) => void;
-  onToggleExpand: (year: number) => void;
-  onAddOpexItem: (year: number) => void;
-  onRemoveOpexItem: (year: number, idx: number) => void;
-  onUpdateOpexItem: (
-    year: number,
-    idx: number,
-    field: "category" | "name" | "amount",
-    value: string,
-  ) => void;
-  onAddCapexItem: (year: number) => void;
-  onRemoveCapexItem: (year: number, idx: number) => void;
-  onUpdateCapexItem: (
-    year: number,
-    idx: number,
-    field: "category" | "name" | "amount",
-    value: string,
-  ) => void;
+  onUpdate: (periodNumber: number, value: string) => void;
+  onRemove: () => void;
 }
 
-function PlanYearRow({
-  item,
-  isExpanded,
+function ArticleRow({
+  items,
+  kind,
+  category,
+  name,
   saving,
-  onUpdateItem,
-  onToggleExpand,
-  onAddOpexItem,
-  onRemoveOpexItem,
-  onUpdateOpexItem,
-  onAddCapexItem,
-  onRemoveCapexItem,
-  onUpdateCapexItem,
-}: PlanYearRowProps) {
-  const hasOpexItems = item.opex_items.length > 0;
-  const hasCapexItems = item.capex_items.length > 0;
-  const hasAnyItems = hasOpexItems || hasCapexItems;
+  onUpdate,
+  onRemove,
+}: ArticleRowProps) {
+  const labels =
+    kind === "capex" ? CAPEX_CATEGORY_LABELS : OPEX_CATEGORY_LABELS;
+  const catLabel = (labels as Record<string, string>)[category] ?? category;
   return (
-    <>
-      <TableRow>
-        <TableCell className="font-medium">Y{item.year}</TableCell>
-        <TableCell>
-          {hasCapexItems ? (
-            <span className="text-sm text-muted-foreground pl-3">
-              {formatMoney(item.capex)}
-            </span>
-          ) : (
-            <Input
-              type="number"
-              step="1"
-              min="0"
-              value={item.capex}
-              onChange={(e) =>
-                onUpdateItem(item.year, "capex", e.target.value)
-              }
-              disabled={saving}
-              className="max-w-xs"
-            />
-          )}
-        </TableCell>
-        <TableCell>
-          {hasOpexItems ? (
-            <span className="text-sm text-muted-foreground pl-3">
-              {formatMoney(item.opex)}
-            </span>
-          ) : (
-            <Input
-              type="number"
-              step="1"
-              min="0"
-              value={item.opex}
-              onChange={(e) =>
-                onUpdateItem(item.year, "opex", e.target.value)
-              }
-              disabled={saving}
-              className="max-w-xs"
-            />
-          )}
-        </TableCell>
-        <TableCell>
+    <tr>
+      <td className="sticky left-0 bg-background px-2 py-1 border-r">
+        <div className="flex items-center justify-between gap-2">
+          <span>
+            <span className="text-muted-foreground">{catLabel}</span> · {name}
+          </span>
           <Button
-            variant={isExpanded ? "secondary" : "outline"}
+            variant="ghost"
             size="sm"
-            onClick={() => {
-              if (!isExpanded && !hasAnyItems) {
-                onAddOpexItem(item.year);
-              } else {
-                onToggleExpand(item.year);
-              }
-            }}
+            onClick={onRemove}
             disabled={saving}
-            className="text-xs"
+            className="h-5 px-1 text-destructive"
+            title="Удалить статью"
           >
-            {isExpanded ? "Свернуть" : "Разбить"}
+            ×
           </Button>
-        </TableCell>
-      </TableRow>
-      {isExpanded && (
-        <>
-          {/* CAPEX статьи (B.9 / MEMO 2.1) */}
-          {item.capex_items.map((ci, idx) => (
-            <TableRow
-              key={`${item.year}-ci-${idx}`}
-              className="bg-muted/30"
-            >
-              <TableCell />
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={ci.category || "other"}
-                    onValueChange={(v) =>
-                      onUpdateCapexItem(item.year, idx, "category", v ?? "other")
-                    }
-                    disabled={saving}
-                    items={CAPEX_CATEGORY_LABELS}
-                  >
-                    <SelectTrigger className="h-8 w-[160px] text-xs">
-                      <SelectValue placeholder="Категория" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CAPEX_CATEGORIES.map((c) => (
-                        <SelectItem key={c} value={c} className="text-xs">
-                          {CAPEX_CATEGORY_LABELS[c]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    placeholder="Статья CAPEX"
-                    value={ci.name}
-                    onChange={(e) =>
-                      onUpdateCapexItem(item.year, idx, "name", e.target.value)
-                    }
-                    disabled={saving}
-                    className="max-w-[180px] text-sm"
-                  />
-                  <Input
-                    type="number"
-                    step="1"
-                    min="0"
-                    value={ci.amount}
-                    onChange={(e) =>
-                      onUpdateCapexItem(
-                        item.year,
-                        idx,
-                        "amount",
-                        e.target.value,
-                      )
-                    }
-                    disabled={saving}
-                    className="max-w-[120px] text-sm"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onRemoveCapexItem(item.year, idx)}
-                    disabled={saving}
-                    className="text-destructive hover:text-destructive px-2"
-                    title="Удалить статью"
-                  >
-                    &times;
-                  </Button>
-                </div>
-              </TableCell>
-              <TableCell />
-              <TableCell />
-            </TableRow>
-          ))}
-          <TableRow className="bg-muted/30">
-            <TableCell />
-            <TableCell>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onAddCapexItem(item.year)}
-                disabled={saving}
-                className="text-xs text-primary"
-              >
-                + Статья CAPEX
-              </Button>
-            </TableCell>
-            <TableCell />
-            <TableCell />
-          </TableRow>
+        </div>
+      </td>
+      {items.map((p) => {
+        const article = (
+          kind === "capex" ? p.capex_items : p.opex_items
+        ).find((it) => it.category === category && it.name === name);
+        return (
+          <td key={p.period_number} className="border-r">
+            <Input
+              type="number"
+              min="0"
+              step="1"
+              value={article?.amount ?? "0"}
+              onChange={(e) => onUpdate(p.period_number, e.target.value)}
+              disabled={saving}
+              className="h-7 text-right text-xs"
+            />
+          </td>
+        );
+      })}
+    </tr>
+  );
+}
 
-          {/* OPEX статьи (B-19) */}
-          {item.opex_items.map((oi, idx) => (
-            <TableRow
-              key={`${item.year}-oi-${idx}`}
-              className="bg-muted/30"
-            >
-              <TableCell />
-              <TableCell />
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={oi.category || "other"}
-                    onValueChange={(v) =>
-                      onUpdateOpexItem(item.year, idx, "category", v ?? "other")
-                    }
-                    disabled={saving}
-                    items={OPEX_CATEGORY_LABELS}
-                  >
-                    <SelectTrigger className="h-8 w-[130px] text-xs">
-                      <SelectValue placeholder="Категория" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {OPEX_CATEGORIES.map((c) => (
-                        <SelectItem key={c} value={c} className="text-xs">
-                          {OPEX_CATEGORY_LABELS[c]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    placeholder="Статья OPEX"
-                    value={oi.name}
-                    onChange={(e) =>
-                      onUpdateOpexItem(item.year, idx, "name", e.target.value)
-                    }
-                    disabled={saving}
-                    className="max-w-[180px] text-sm"
-                  />
-                  <Input
-                    type="number"
-                    step="1"
-                    min="0"
-                    value={oi.amount}
-                    onChange={(e) =>
-                      onUpdateOpexItem(
-                        item.year,
-                        idx,
-                        "amount",
-                        e.target.value,
-                      )
-                    }
-                    disabled={saving}
-                    className="max-w-[120px] text-sm"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onRemoveOpexItem(item.year, idx)}
-                    disabled={saving}
-                    className="text-destructive hover:text-destructive px-2"
-                    title="Удалить статью"
-                  >
-                    &times;
-                  </Button>
-                </div>
-              </TableCell>
-              <TableCell />
-            </TableRow>
-          ))}
-          <TableRow className="bg-muted/30">
-            <TableCell />
-            <TableCell />
-            <TableCell>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onAddOpexItem(item.year)}
-                disabled={saving}
-                className="text-xs text-primary"
-              >
-                + Статья OPEX
-              </Button>
-            </TableCell>
-            <TableCell />
-          </TableRow>
-        </>
-      )}
-    </>
+interface AddArticleRowProps {
+  kind: ItemKind;
+  onAdd: (category: string, name: string) => void;
+  disabled: boolean;
+}
+
+function AddArticleRow({ kind, onAdd, disabled }: AddArticleRowProps) {
+  const [category, setCategory] = useState<string>("other");
+  const [name, setName] = useState<string>("");
+  const categories = kind === "capex" ? CAPEX_CATEGORIES : OPEX_CATEGORIES;
+  const labels =
+    kind === "capex" ? CAPEX_CATEGORY_LABELS : OPEX_CATEGORY_LABELS;
+
+  function handle() {
+    if (name.trim() === "") return;
+    onAdd(category, name.trim());
+    setName("");
+  }
+
+  return (
+    <tr className="bg-muted/20">
+      <td className="sticky left-0 bg-muted/20 px-2 py-1 border-r" colSpan={44}>
+        <div className="flex items-center gap-2">
+          <Select
+            value={category}
+            onValueChange={(v) => v && setCategory(v)}
+            items={labels as Record<string, string>}
+          >
+            <SelectTrigger className="h-7 w-[180px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {categories.map((c) => (
+                <SelectItem key={c} value={c} className="text-xs">
+                  {(labels as Record<string, string>)[c] ?? c}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            placeholder={`Название статьи ${kind === "capex" ? "CAPEX" : "OPEX"}`}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            disabled={disabled}
+            className="h-7 text-xs max-w-xs"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handle}
+            disabled={disabled || name.trim() === ""}
+            className="h-7 text-xs text-primary"
+          >
+            + Добавить статью
+          </Button>
+        </div>
+      </td>
+    </tr>
   );
 }
