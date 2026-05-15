@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import OpexItem, Period, ProjectFinancialPlan
 from app.schemas.financial_plan import FinancialPlanItem, FinancialPlanRequest
+from app.services import financial_plan_service
 
 
 VALID_PROJECT = {
@@ -409,3 +410,25 @@ def test_financial_plan_request_rejects_duplicate_period_number() -> None:
             FinancialPlanItem(period_number=1, capex="100", opex="0"),
             FinancialPlanItem(period_number=1, capex="200", opex="0"),
         ])
+
+
+# ============================================================
+# B.9b: list_plan_by_period returns 43 elements
+# ============================================================
+
+
+async def test_list_plan_by_period_returns_43_elements(
+    auth_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    project_id = await _create_project(auth_client)
+    plan = await financial_plan_service.list_plan_by_period(
+        db_session, project_id
+    )
+    assert len(plan) == 43
+    period_numbers = [item.period_number for item in plan]
+    assert period_numbers == list(range(1, 44))
+    for item in plan:
+        assert item.capex == Decimal("0")
+        assert item.opex == Decimal("0")
+        assert item.opex_items == []
+        assert item.capex_items == []

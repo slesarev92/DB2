@@ -1,17 +1,12 @@
 """Service слой для ProjectFinancialPlan.
 
-Два метода:
-- `list_plan_by_year(session, project_id)` — возвращает всегда 10 строк
-  Y1..Y10 (заполняя отсутствующие нулями) для удобства UI.
-- `replace_plan(session, project_id, items)` — полная замена плана
-  проекта. DELETE все существующие записи + INSERT новые по списку.
+B.9b (2026-05-15): per-period вместо per-year. list_plan_by_period
+возвращает 43 элемента (1 на каждый период справочника). replace_plan
+сохраняет по period_number.
 
-Маппинг year → period_id:
-- Для **первого периода каждого model_year** берём запись из
-  справочника `periods`. Для Y1 это M1 (period_number=1), Y2 — M13,
-  Y3 — M25. Для Y4-Y10 — непосредственно Y4..Y10 period (period_number
-  37..43). Pipeline аннуализирует по model_year в s10, поэтому
-  конкретный period_id внутри года не важен для KPI.
+Маппинг period_number → period_id через справочник `periods`:
+period_number 1..36 = monthly Y1-Y3 (M1..M36, model_year 1..3),
+period_number 37..43 = yearly Y4..Y10 (model_year 4..10).
 """
 from __future__ import annotations
 
@@ -33,36 +28,25 @@ from app.schemas.financial_plan import (
 logger = logging.getLogger(__name__)
 
 
-async def _get_first_period_by_year(
+async def _get_period_id_by_number(
     session: AsyncSession,
 ) -> dict[int, int]:
-    """Возвращает {model_year → period_id первого периода года}.
-
-    Для model_year 1-3 (monthly) — первый monthly период года (M1/M13/M25).
-    Для model_year 4-10 (yearly) — тот единственный yearly period.
-    """
-    periods = (
+    """Возвращает {period_number → period_id} для всех 43 периодов справочника."""
+    rows = (
         await session.scalars(select(Period).order_by(Period.period_number))
     ).all()
-    by_year: dict[int, int] = {}
-    for p in periods:
-        if p.model_year not in by_year:
-            by_year[p.model_year] = p.id
-    return by_year
+    return {p.period_number: p.id for p in rows}
 
 
-async def list_plan_by_year(
+async def list_plan_by_period(
     session: AsyncSession,
     project_id: int,
 ) -> list[FinancialPlanItem]:
-    """Всегда 10 строк Y1..Y10. Отсутствующие заполняются нулями.
+    """Всегда 43 строки (period_number 1..43). Отсутствующие — нули.
 
-    Суммирует capex/opex по всем записям `project_financial_plans`
-    данного года — если несколько period_id принадлежат одному
-    model_year, их значения складываются. opex_items загружаются
-    через selectinload и включаются в ответ (B-19).
+    Загружает все ProjectFinancialPlan записи проекта + Period (для
+    маппинга на period_number) + opex_items/capex_items через selectinload.
     """
-    # Загружаем все plan записи с данными о периоде + opex_items + capex_items
     rows = (
         await session.execute(
             select(ProjectFinancialPlan, Period)
@@ -75,49 +59,48 @@ async def list_plan_by_year(
         )
     ).all()
 
-    # Агрегация по model_year. Tuple элементы: capex_sum, opex_sum,
-    # opex_items, capex_items.
-    agg: dict[
-        int,
-        tuple[Decimal, Decimal, list[OpexItemSchema], list[CapexItemSchema]],
-    ] = {
-        year: (Decimal("0"), Decimal("0"), [], []) for year in range(1, 11)
+    by_period: dict[int, tuple[ProjectFinancialPlan, Period]] = {
+        period.period_number: (plan, period) for plan, period in rows
     }
-    for plan, period in rows:
-        year = period.model_year
-        if year in agg:
-            capex_sum, opex_sum, opex_items, capex_items = agg[year]
-            agg[year] = (
-                capex_sum + plan.capex,
-                opex_sum + plan.opex,
-                opex_items + [
-                    OpexItemSchema(
-                        category=item.category,
-                        name=item.name,
-                        amount=item.amount,
-                    )
-                    for item in plan.opex_items
-                ],
-                capex_items + [
-                    CapexItemSchema(
-                        category=item.category,
-                        name=item.name,
-                        amount=item.amount,
-                    )
-                    for item in plan.capex_items
-                ],
-            )
 
-    return [
-        FinancialPlanItem(
-            year=year,
-            capex=capex,
-            opex=opex,
-            opex_items=opex_items,
-            capex_items=capex_items,
-        )
-        for year, (capex, opex, opex_items, capex_items) in sorted(agg.items())
-    ]
+    result: list[FinancialPlanItem] = []
+    for pn in range(1, 44):
+        if pn in by_period:
+            plan, _ = by_period[pn]
+            result.append(
+                FinancialPlanItem(
+                    period_number=pn,
+                    capex=plan.capex,
+                    opex=plan.opex,
+                    opex_items=[
+                        OpexItemSchema(
+                            category=item.category,
+                            name=item.name,
+                            amount=item.amount,
+                        )
+                        for item in plan.opex_items
+                    ],
+                    capex_items=[
+                        CapexItemSchema(
+                            category=item.category,
+                            name=item.name,
+                            amount=item.amount,
+                        )
+                        for item in plan.capex_items
+                    ],
+                )
+            )
+        else:
+            result.append(
+                FinancialPlanItem(
+                    period_number=pn,
+                    capex=Decimal("0"),
+                    opex=Decimal("0"),
+                    opex_items=[],
+                    capex_items=[],
+                )
+            )
+    return result
 
 
 async def replace_plan(
@@ -127,26 +110,20 @@ async def replace_plan(
 ) -> list[FinancialPlanItem]:
     """Полная замена плана проекта.
 
-    1. DELETE все существующие ProjectFinancialPlan для project_id
-       (CASCADE удаляет связанные opex_items)
-    2. INSERT новые записи (маппинг year → первый period_id года)
-    3. Если opex_items не пустой → opex = sum(items), INSERT OpexItem'ы
-    4. Возвращает `list_plan_by_year` после flush
+    1. DELETE все ProjectFinancialPlan для project_id
+       (CASCADE удаляет opex_items и capex_items).
+    2. INSERT новые записи по period_number → period_id.
+    3. INSERT OpexItem и CapexItem (если есть).
+    4. Возвращает `list_plan_by_period` (43 элемента).
 
-    Items с year которых нет в переданном списке → 0/0 в результате.
-    Items с capex=0 и opex=0 всё равно сохраняются — это явное
-    указание "ничего не тратим в этом году" и отличается от "не
-    заполнено" (которое будет 0 по умолчанию в list_plan_by_year).
+    period_number'ы которых нет в items → 0/0 в результате.
     """
-    # Диагностический лог payload — поможет ловить D-2 (intermittent
-    # save error) и D-3 (CAPEX=0 crash). Безопасно: только числовые
-    # поля + структура, без PII.
     logger.info(
         "replace_plan project_id=%s items=%s",
         project_id,
         [
             (
-                item.year,
+                item.period_number,
                 str(item.capex),
                 str(item.opex),
                 len(item.opex_items or []),
@@ -156,29 +133,24 @@ async def replace_plan(
         ],
     )
 
-    # 1. DELETE старые (CASCADE → opex_items тоже удаляются)
     await session.execute(
         sql_delete(ProjectFinancialPlan).where(
             ProjectFinancialPlan.project_id == project_id
         )
     )
 
-    # 2. Маппинг year → period_id
-    year_to_period = await _get_first_period_by_year(session)
+    period_map = await _get_period_id_by_number(session)
 
-    # 3. INSERT новые
     for item in items:
-        period_id = year_to_period.get(item.year)
+        period_id = period_map.get(item.period_number)
         if period_id is None:
-            continue  # невалидный year — игнорируем (валидация в схеме)
+            continue
 
-        # Если есть opex_items — opex = sum(amounts)
         effective_opex = item.opex
         if item.opex_items:
             effective_opex = sum(
                 (oi.amount for oi in item.opex_items), Decimal("0")
             )
-        # Аналогично для CAPEX: если есть capex_items — capex = sum(amounts).
         effective_capex = item.capex
         if item.capex_items:
             effective_capex = sum(
@@ -193,9 +165,8 @@ async def replace_plan(
         )
         session.add(plan)
 
-        # INSERT OpexItem / CapexItem если есть
         if item.opex_items or item.capex_items:
-            await session.flush()  # получаем plan.id
+            await session.flush()
             for oi in item.opex_items:
                 session.add(
                     OpexItem(
@@ -216,6 +187,4 @@ async def replace_plan(
                 )
 
     await session.flush()
-
-    # 4. Возвращаем актуальное состояние
-    return await list_plan_by_year(session, project_id)
+    return await list_plan_by_period(session, project_id)
