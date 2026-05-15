@@ -774,11 +774,13 @@ export const AI_ENDPOINT_LABELS: Record<string, string> = {
 };
 
 export interface FinancialPlanItem {
-  year: number; // 1..10
+  /** B.9b (2026-05-15): период 1..43.
+   *  1..36 = monthly Y1-Y3 (M1..M36), 37..43 = yearly Y4-Y10. */
+  period_number: number;
   capex: string; // Decimal as string
   opex: string;
   opex_items: OpexItem[];
-  /** B.9 / MEMO 2.1 (2026-05-15): статьи CAPEX. */
+  /** B.9 / MEMO 2.1: статьи CAPEX. */
   capex_items: CapexItem[];
 }
 

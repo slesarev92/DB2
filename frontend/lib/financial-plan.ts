@@ -1,8 +1,9 @@
 /**
- * API обёртки для ProjectFinancialPlan — CAPEX/OPEX по годам.
+ * API обёртки для ProjectFinancialPlan — CAPEX/OPEX per-period.
  *
+ * B.9b (2026-05-15): per-period контракт.
  * Backend endpoints:
- *   GET /api/projects/{id}/financial-plan → всегда 10 строк Y1..Y10
+ *   GET /api/projects/{id}/financial-plan → всегда 43 строки (period_number 1..43)
  *   PUT /api/projects/{id}/financial-plan — полная замена
  */
 
