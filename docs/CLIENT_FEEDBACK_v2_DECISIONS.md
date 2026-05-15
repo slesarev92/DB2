@@ -219,8 +219,12 @@ EX_FACTORY = SHELF_PRICE / (1 + VAT_RATE) × (1 − CHANNEL_MARGIN)
 ## Фаза C — фичи и UX
 
 13. **Q4:** перенос OBPPC таб в "Содержание"
-14. Fine Tuning расширение: copacking_rate, logistics_per_l, CA&M,
+14. ✅ Fine Tuning расширение: copacking_rate, logistics_per_l, CA&M,
     marketing per-period (помесячно для Y1-Y3, годами Y4-Y10)
+    **Статус:** ✅ Closed 2026-05-16 (commit ветки feat/c14-fine-tuning-per-period; см. `git log --grep=c14`)
+    **Реализация:** JSONB-on-table, scope copacking = per-SKU, остальные 3 = per-channel.
+    Spec: `docs/superpowers/specs/2026-05-15-c14-fine-tuning-per-period-design.md`.
+    Plan: `docs/superpowers/plans/2026-05-15-c14-fine-tuning-per-period.md`.
 15. P&L фильтры + pivot Excel экспорт
 16. Каналы: группы (HM/SM/MM/TT/E-COM) + source_type (Nielsen/ЦРПТ/
     2GIS/Infoline/custom)

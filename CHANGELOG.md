@@ -108,6 +108,14 @@
 
 ---
 
+## Phase C
+
+### Added
+
+- **C #14 Fine Tuning per-period:** override 4 финансовых полей (copacking_rate, logistics_cost_per_kg, ca_m_rate, marketing_rate) на per-period (43 точки = M1..M36 + Y4..Y10). Реализовано через JSONB-массивы на ProjectSKU / ProjectSKUChannel. Pipeline получает tuple-43 в шагах s03/s05/s06. Frontend: новый Fine Tuning tab с 4 секциями, reuse PeriodGrid и PeriodBulkFill из shared. NULL override = fallback на скаляр (backward-compat). Logistics override применяется ДО scenario delta (Option B — stress тест применяется поверх override).
+
+---
+
 ## Phase A 
 
 Фаза A (MEMO v2.1 — регрессии и блокеры). 6 пунктов, все закрыты.
