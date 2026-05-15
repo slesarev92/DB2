@@ -176,7 +176,7 @@ EX_FACTORY = SHELF_PRICE / (1 + VAT_RATE) × (1 − CHANNEL_MARGIN)
 | Фаза | Закрыто | Осталось |
 |---|---|---|
 | A — регрессии | 6/6 ✅ | — |
-| B — архитектура | 4.5/5 ⏳ | B.9b (помесячный Y1-Y3) |
+| B — архитектура | 5/5 ✅ | — (B.9b закрыт 2026-05-15) |
 | C — фичи и UX | 0/19 | 19 пунктов |
 
 ## Фаза A — регрессии и блокеры данных ✅
@@ -191,30 +191,33 @@ EX_FACTORY = SHELF_PRICE / (1 + VAT_RATE) × (1 − CHANNEL_MARGIN)
 5. ✅ A.5 D-12 docstring + ROADMAP sync ("5 лет финально") (`498486c`)
 6. ✅ A.6 Сценарии intermittent — diagnostic logging (`ea262e1`)
 
-## Фаза B — архитектурные изменения ⏳ (4.5/5)
+## Фаза B — архитектурные изменения ✅ (5/5)
 
 7. ✅ **B.7 Q6 CA&M / Marketing → per-channel** (`53e4629`) — миграция
    `b2c3d4e5f6a7`, engine + UI, GORJI acceptance 4/4 без сдвига
 8. ✅ **B.8 Q1 production_mode_by_year** (`f1ec2eb`) — JSONB на
    ProjectSKU, PipelineInput per-period, UI YearOverrideEditor
-9. 🟡 **B.9 CAPEX/OPEX + статьи CAPEX (MEMO 2.1)** — часть 1 закрыта
+9. ✅ **B.9 CAPEX/OPEX + статьи CAPEX (MEMO 2.1)** — часть 1 закрыта
    (`9df4617`): таблица `capex_items` + UI "+ Статья CAPEX".
-   **Часть 2 (B.9b) — выделена в начало Фазы C, см. ниже.**
+   Часть 2 — см. B.9b ниже.
 10. ✅ **B.10 Q7 НДС dropdown + дефолт 22%** (`60d5edb`)
 11. ✅ **B.11 Q5 MEMO 5.2 — 3 уровня BOM** (`0875eb8`) — `cost_level`
     на BOMItem + JSONB override per год; generic `YearOverrideEditor`
+- **B.9b — Помесячная гранулярность Y1-Y3 + UI 43 колонки. ✓ Закрыто 2026-05-15.**
+  См. `docs/superpowers/specs/2026-05-15-b9b-monthly-financial-plan-design.md` и
+  `docs/superpowers/plans/2026-05-15-b9b-monthly-financial-plan.md`.
+  - API `FinancialPlanItem.year` → `period_number` (1..43); GET всегда
+    отдаёт 43 элемента; PUT валидирует уникальность period_number.
+  - Service: `_get_first_period_by_year` → `_get_period_id_by_number`;
+    `list_plan_by_year` → `list_plan_by_period`.
+  - UI: переписан `financial-plan-editor.tsx` на матрицу 43 ячейки
+    с bulk-fill «Распределить год» (Y/12) и «Залить диапазон».
+  - Engine не трогали — уже принимал tuple длины 43; acceptance GORJI
+    стабилен (drift < 0.03%).
+  - Backend 477 passed, frontend tsc 0 errors.
 
 ## Фаза C — фичи и UX
 
-12. ⏳ **B.9b Помесячная гранулярность Y1-Y3 + UI матрицы 43 колонки.**
-    *Поднято наверх как самое impactful из C-задач.*
-    - Service переход с `_get_first_period_by_year` → сохранение
-      во **все** 43 период'а (M1..M36 + Y4..Y10) с UNIQUE гарантией
-    - Engine `aggregator.project_opex/project_capex` уже принимает
-      tuple длины n — backend infrastructure готова
-    - UI: переписать `financial-plan-editor.tsx` на матрицу
-      43 ячейки/scrollable с раскрытием статей; toggle "yearly view"
-      для обратной совместимости
 13. **Q4:** перенос OBPPC таб в "Содержание"
 14. Fine Tuning расширение: copacking_rate, logistics_per_l, CA&M,
     marketing per-period (помесячно для Y1-Y3, годами Y4-Y10)

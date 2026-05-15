@@ -13,6 +13,24 @@
 
 ### Changed (Phase B)
 
+- **B.9b Помесячный финплан Y1-Y3 (MEMO 2.1, финал, 2026-05-15).** Завершает
+  B.9: переход с 10 годовых ячеек на **43 точки** = 36 monthly (M1..M36)
+  + 7 yearly (Y4..Y10). Каждая статья CAPEX/OPEX = строка таблицы с 43
+  ячейками; bulk-fill «Распределить год» (Y/12) и «Залить диапазон»
+  (одно значение на period from..to).
+  - API: `FinancialPlanItem.year` → `period_number` (1..43). GET всегда
+    отдаёт 43 элемента. PUT валидирует уникальность period_number.
+  - Service: `_get_first_period_by_year` → `_get_period_id_by_number`;
+    `list_plan_by_year` → `list_plan_by_period`.
+  - Engine не трогали — `_load_project_financial_plan` (calculation_service)
+    уже строил tuple длины 43, `s10_discount` аннуализирует через
+    `period_model_year`. Acceptance GORJI стабилен (drift < 0.03%).
+  - Существующие проекты: lazy expand, БД не мигрируется. UI-banner
+    подсказывает использовать «Распределить год».
+  - Тесты: backend pytest зелёный (~477), frontend tsc 0 ошибок.
+  - Spec: `docs/superpowers/specs/2026-05-15-b9b-monthly-financial-plan-design.md`.
+  - Plan: `docs/superpowers/plans/2026-05-15-b9b-monthly-financial-plan.md`.
+
 - **B.9 Статьи CAPEX (MEMO 2.1, 2026-05-15).** Капитальные затраты теперь
   разбиваются на статьи (Молды и оснастка, Линия розлива, Оборудование,
   IT, R&D, Запускной маркетинг, Other) — аналог уже существующих
