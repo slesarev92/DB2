@@ -32,6 +32,11 @@ import {
   getChannelOverrides,
   putChannelOverrides,
 } from "@/lib/fine-tuning";
+import {
+  cellClasses,
+  normalizeInput,
+  sameOverride,
+} from "@/lib/fine-tuning-utils";
 import { listProjectSkus } from "@/lib/skus";
 
 import type {
@@ -51,6 +56,17 @@ const FIELD_TO_KEY: Record<ChannelField, keyof ChannelOverridesResponse> = {
   logistics_cost_per_kg: "logistics_cost_per_kg_by_period",
   ca_m_rate: "ca_m_rate_by_period",
   marketing_rate: "marketing_rate_by_period",
+};
+
+/** ChannelField → имя scalar-поля на ProjectSKUChannelRead для placeholder.
+ *  Explicit lookup чтобы избежать `as keyof` cast — типобезопасно. */
+const FIELD_TO_SCALAR_KEY: Record<
+  ChannelField,
+  "logistics_cost_per_kg" | "ca_m_rate" | "marketing_rate"
+> = {
+  logistics_cost_per_kg: "logistics_cost_per_kg",
+  ca_m_rate: "ca_m_rate",
+  marketing_rate: "marketing_rate",
 };
 
 interface Props {
@@ -222,7 +238,7 @@ export function ChannelSection({ projectId, field, label }: Props) {
     [rows],
   );
 
-  const scalarKey = field as keyof ProjectSKUChannelRead;
+  const scalarKey = FIELD_TO_SCALAR_KEY[field];
 
   return (
     <Card>
@@ -313,34 +329,10 @@ export function ChannelSection({ projectId, field, label }: Props) {
 }
 
 // ============================================================
-// Helpers
+// Local helpers (shared helpers in @/lib/fine-tuning-utils)
 // ============================================================
 
 function rowLabel(psk: ProjectSKURead, ch: ProjectSKUChannelRead): string {
   const sku = psk.sku;
   return `${sku.brand} ${sku.name} · ${ch.channel.code}`;
-}
-
-function normalizeInput(raw: string | null): string | null {
-  if (raw === null) return null;
-  const trimmed = raw.trim();
-  if (trimmed === "") return null;
-  return trimmed;
-}
-
-function sameOverride(a: string | null, b: string | null): boolean {
-  if (a === null && b === null) return true;
-  if (a === null || b === null) return false;
-  return Number(a) === Number(b);
-}
-
-function cellClasses(isOverride: boolean, isDirty: boolean): string {
-  const base = "h-7 w-full bg-transparent text-right text-xs px-1";
-  if (isDirty) {
-    return `${base} ring-2 ring-amber-400 rounded`;
-  }
-  if (isOverride) {
-    return `${base} ring-1 ring-blue-400 rounded`;
-  }
-  return base;
 }

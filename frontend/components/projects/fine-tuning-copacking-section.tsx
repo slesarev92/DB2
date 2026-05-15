@@ -27,6 +27,11 @@ import { PeriodBulkFill, type BulkFillTarget } from "@/components/shared/period-
 import { PeriodGrid, type PeriodGridRow } from "@/components/shared/period-grid";
 import { ApiError } from "@/lib/api";
 import { getSkuOverrides, putSkuOverrides } from "@/lib/fine-tuning";
+import {
+  cellClasses,
+  normalizeInput,
+  sameOverride,
+} from "@/lib/fine-tuning-utils";
 import { listProjectSkus } from "@/lib/skus";
 
 import type { ProjectSKURead } from "@/types/api";
@@ -127,13 +132,15 @@ export function CopackingSection({ projectId }: Props) {
       const dirtyRows = rows.filter((r) =>
         r.values.some((v, i) => !sameOverride(v, r.initial[i])),
       );
-      for (const r of dirtyRows) {
-        // Если все значения null → шлём null целиком (убрать override).
-        const allNull = r.values.every((v) => v === null);
-        await putSkuOverrides(projectId, r.psk.id, {
-          copacking_rate_by_period: allNull ? null : r.values,
-        });
-      }
+      // Параллельный PUT — payloads независимы (разные SKU).
+      await Promise.all(
+        dirtyRows.map((r) => {
+          const allNull = r.values.every((v) => v === null);
+          return putSkuOverrides(projectId, r.psk.id, {
+            copacking_rate_by_period: allNull ? null : r.values,
+          });
+        }),
+      );
       // Refresh initial = current.
       setRows((prev) =>
         prev === null
@@ -258,40 +265,11 @@ export function CopackingSection({ projectId }: Props) {
 }
 
 // ============================================================
-// Helpers
+// Local helpers (shared helpers in @/lib/fine-tuning-utils)
 // ============================================================
 
 function skuLabel(psk: ProjectSKURead): string {
   const sku = psk.sku;
   const fmt = sku.format ? ` · ${sku.format}` : "";
   return `${sku.brand} ${sku.name}${fmt}`;
-}
-
-/** Пустой input → null override; иначе trim. */
-function normalizeInput(raw: string | null): string | null {
-  if (raw === null) return null;
-  const trimmed = raw.trim();
-  if (trimmed === "") return null;
-  return trimmed;
-}
-
-/**
- * Сравнение override-значений по числу, не по string-equality. JSONB
- * round-trip может изменить precision ("99.5" → "99.50000000000001").
- */
-function sameOverride(a: string | null, b: string | null): boolean {
-  if (a === null && b === null) return true;
-  if (a === null || b === null) return false;
-  return Number(a) === Number(b);
-}
-
-function cellClasses(isOverride: boolean, isDirty: boolean): string {
-  const base = "h-7 w-full bg-transparent text-right text-xs px-1";
-  if (isDirty) {
-    return `${base} ring-2 ring-amber-400 rounded`;
-  }
-  if (isOverride) {
-    return `${base} ring-1 ring-blue-400 rounded`;
-  }
-  return base;
 }
