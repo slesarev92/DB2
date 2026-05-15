@@ -23,8 +23,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models import OpexItem, Period, ProjectFinancialPlan
-from app.schemas.financial_plan import FinancialPlanItem, OpexItemSchema
+from app.models import CapexItem, OpexItem, Period, ProjectFinancialPlan
+from app.schemas.financial_plan import (
+    CapexItemSchema,
+    FinancialPlanItem,
+    OpexItemSchema,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,28 +62,35 @@ async def list_plan_by_year(
     model_year, их значения складываются. opex_items загружаются
     через selectinload и включаются в ответ (B-19).
     """
-    # Загружаем все plan записи с данными о периоде + opex_items
+    # Загружаем все plan записи с данными о периоде + opex_items + capex_items
     rows = (
         await session.execute(
             select(ProjectFinancialPlan, Period)
             .join(Period, Period.id == ProjectFinancialPlan.period_id)
             .where(ProjectFinancialPlan.project_id == project_id)
-            .options(selectinload(ProjectFinancialPlan.opex_items))
+            .options(
+                selectinload(ProjectFinancialPlan.opex_items),
+                selectinload(ProjectFinancialPlan.capex_items),
+            )
         )
     ).all()
 
-    # Агрегация по model_year
-    agg: dict[int, tuple[Decimal, Decimal, list[OpexItemSchema]]] = {
-        year: (Decimal("0"), Decimal("0"), []) for year in range(1, 11)
+    # Агрегация по model_year. Tuple элементы: capex_sum, opex_sum,
+    # opex_items, capex_items.
+    agg: dict[
+        int,
+        tuple[Decimal, Decimal, list[OpexItemSchema], list[CapexItemSchema]],
+    ] = {
+        year: (Decimal("0"), Decimal("0"), [], []) for year in range(1, 11)
     }
     for plan, period in rows:
         year = period.model_year
         if year in agg:
-            capex_sum, opex_sum, items = agg[year]
+            capex_sum, opex_sum, opex_items, capex_items = agg[year]
             agg[year] = (
                 capex_sum + plan.capex,
                 opex_sum + plan.opex,
-                items + [
+                opex_items + [
                     OpexItemSchema(
                         category=item.category,
                         name=item.name,
@@ -87,11 +98,25 @@ async def list_plan_by_year(
                     )
                     for item in plan.opex_items
                 ],
+                capex_items + [
+                    CapexItemSchema(
+                        category=item.category,
+                        name=item.name,
+                        amount=item.amount,
+                    )
+                    for item in plan.capex_items
+                ],
             )
 
     return [
-        FinancialPlanItem(year=year, capex=capex, opex=opex, opex_items=items)
-        for year, (capex, opex, items) in sorted(agg.items())
+        FinancialPlanItem(
+            year=year,
+            capex=capex,
+            opex=opex,
+            opex_items=opex_items,
+            capex_items=capex_items,
+        )
+        for year, (capex, opex, opex_items, capex_items) in sorted(agg.items())
     ]
 
 
@@ -125,6 +150,7 @@ async def replace_plan(
                 str(item.capex),
                 str(item.opex),
                 len(item.opex_items or []),
+                len(item.capex_items or []),
             )
             for item in items
         ],
@@ -152,17 +178,23 @@ async def replace_plan(
             effective_opex = sum(
                 (oi.amount for oi in item.opex_items), Decimal("0")
             )
+        # Аналогично для CAPEX: если есть capex_items — capex = sum(amounts).
+        effective_capex = item.capex
+        if item.capex_items:
+            effective_capex = sum(
+                (ci.amount for ci in item.capex_items), Decimal("0")
+            )
 
         plan = ProjectFinancialPlan(
             project_id=project_id,
             period_id=period_id,
-            capex=item.capex,
+            capex=effective_capex,
             opex=effective_opex,
         )
         session.add(plan)
 
-        # INSERT OpexItem'ы если есть
-        if item.opex_items:
+        # INSERT OpexItem / CapexItem если есть
+        if item.opex_items or item.capex_items:
             await session.flush()  # получаем plan.id
             for oi in item.opex_items:
                 session.add(
@@ -171,6 +203,15 @@ async def replace_plan(
                         category=oi.category,
                         name=oi.name,
                         amount=oi.amount,
+                    )
+                )
+            for ci in item.capex_items:
+                session.add(
+                    CapexItem(
+                        financial_plan_id=plan.id,
+                        category=ci.category,
+                        name=ci.name,
+                        amount=ci.amount,
                     )
                 )
 

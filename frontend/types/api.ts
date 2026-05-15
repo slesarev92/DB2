@@ -670,6 +670,35 @@ export const OPEX_CATEGORY_LABELS: Record<OpexCategory, string> = {
   other: "Другое",
 };
 
+/** Статья CAPEX в разбивке (B.9 / MEMO 2.1). */
+export interface CapexItem {
+  category: string;
+  name: string;
+  amount: string;
+}
+
+/** B.9 / MEMO 2.1: категории CAPEX. */
+export const CAPEX_CATEGORIES = [
+  "molds",
+  "line",
+  "equipment",
+  "it",
+  "rd",
+  "marketing",
+  "other",
+] as const;
+export type CapexCategory = (typeof CAPEX_CATEGORIES)[number];
+
+export const CAPEX_CATEGORY_LABELS: Record<CapexCategory, string> = {
+  molds: "Молды и оснастка",
+  line: "Линия розлива",
+  equipment: "Оборудование",
+  it: "IT (системы, лицензии)",
+  rd: "R&D (рецептуры)",
+  marketing: "Запускной маркетинг",
+  other: "Другое",
+};
+
 // ============================================================
 // Единые русские переводы enum-значений (L-01..L-06 из аудита 2026-04-14).
 // Импортировать отсюда во всех компонентах — не объявлять локальные дубли.
@@ -749,6 +778,8 @@ export interface FinancialPlanItem {
   capex: string; // Decimal as string
   opex: string;
   opex_items: OpexItem[];
+  /** B.9 / MEMO 2.1 (2026-05-15): статьи CAPEX. */
+  capex_items: CapexItem[];
 }
 
 export interface FinancialPlanRequest {

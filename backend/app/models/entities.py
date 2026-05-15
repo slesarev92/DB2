@@ -788,6 +788,14 @@ class ProjectFinancialPlan(Base, TimestampMixin):
         cascade="all, delete-orphan",
         lazy="raise_on_sql",
     )
+    # B.9 / MEMO 2.1 (2026-05-15): статьи CAPEX (Молды, Линия розлива,
+    # Оборудование, …) как разбивка ProjectFinancialPlan.capex.
+    capex_items: Mapped[list["CapexItem"]] = relationship(
+        "CapexItem",
+        back_populates="financial_plan",
+        cascade="all, delete-orphan",
+        lazy="raise_on_sql",
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -836,6 +844,46 @@ class OpexItem(Base, TimestampMixin):
         UniqueConstraint(
             "financial_plan_id", "category", "name",
             name="uq_opex_items_plan_category_name",
+        ),
+    )
+
+
+class CapexItem(Base, TimestampMixin):
+    """Статья CAPEX в разбивке ProjectFinancialPlan (B.9 / MEMO 2.1).
+
+    Аналог OpexItem для капитальных затрат. Каждая запись — одна статья
+    (Молды и оснастка, Линия розлива, Оборудование, …) для конкретного
+    (проект × период). Сумма всех items = ProjectFinancialPlan.capex,
+    backend пересчитывает при наличии items. CASCADE DELETE через FK.
+    """
+
+    __tablename__ = "capex_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    financial_plan_id: Mapped[int] = mapped_column(
+        ForeignKey("project_financial_plans.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Категория CAPEX (molds, line, equipment, it, other). Расширяемый
+    # список; non-null с server_default="other" для безопасных миграций.
+    category: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default="other", default="other"
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(
+        Numeric(20, 2), nullable=False, default=Decimal("0")
+    )
+
+    financial_plan: Mapped["ProjectFinancialPlan"] = relationship(
+        "ProjectFinancialPlan",
+        back_populates="capex_items",
+        lazy="raise_on_sql",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "financial_plan_id", "category", "name",
+            name="uq_capex_items_plan_category_name",
         ),
     )
 

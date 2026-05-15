@@ -34,6 +34,18 @@ OPEX_CATEGORIES: tuple[str, ...] = (
     "other",
 )
 
+# B.9 / MEMO 2.1: стандартные категории CAPEX. Минимально достаточный
+# набор; "other" — default для свободных статей.
+CAPEX_CATEGORIES: tuple[str, ...] = (
+    "molds",       # Молды и оснастка
+    "line",        # Линия розлива / производственная линия
+    "equipment",   # Оборудование (доп.)
+    "it",          # IT (системы, лицензии)
+    "rd",          # R&D / разработка рецептур
+    "marketing",   # Запускной маркетинг (амортизируемый)
+    "other",
+)
+
 
 class OpexItemSchema(BaseModel):
     """Одна статья OPEX в разбивке (B-19 + 8.8 category)."""
@@ -43,13 +55,27 @@ class OpexItemSchema(BaseModel):
     amount: Decimal = Field(default=Decimal("0"), ge=0)
 
 
+class CapexItemSchema(BaseModel):
+    """Одна статья CAPEX в разбивке (B.9 / MEMO 2.1)."""
+
+    category: str = Field(default="other", max_length=50)
+    name: str = Field(..., min_length=1, max_length=200)
+    amount: Decimal = Field(default=Decimal("0"), ge=0)
+
+
 class FinancialPlanItem(BaseModel):
-    """Одна строка плана для одного модельного года."""
+    """Одна строка плана для одного модельного года.
+
+    Логика автосуммирования:
+    - opex_items не пустой → opex = sum(opex_items.amount).
+    - capex_items не пустой → capex = sum(capex_items.amount).
+    """
 
     year: int = Field(..., ge=1, le=10, description="model_year 1..10")
     capex: Decimal = Field(default=Decimal("0"), ge=0)
     opex: Decimal = Field(default=Decimal("0"), ge=0)
     opex_items: list[OpexItemSchema] = Field(default_factory=list)
+    capex_items: list[CapexItemSchema] = Field(default_factory=list)
 
 
 class FinancialPlanRequest(BaseModel):

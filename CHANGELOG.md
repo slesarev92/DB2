@@ -13,6 +13,27 @@
 
 ### Changed (Phase B)
 
+- **B.9 Статьи CAPEX (MEMO 2.1, 2026-05-15).** Капитальные затраты теперь
+  разбиваются на статьи (Молды и оснастка, Линия розлива, Оборудование,
+  IT, R&D, Запускной маркетинг, Other) — аналог уже существующих
+  OpexItem. Сумма по статьям автоматически записывается в
+  `ProjectFinancialPlan.capex`.
+  - Миграция `e5f6a7b8c9d0`: новая таблица `capex_items` с UNIQUE
+    (financial_plan_id, category, name), CASCADE через FK.
+  - Schemas: `CapexItemSchema` + `CAPEX_CATEGORIES` enum-список;
+    `FinancialPlanItem.capex_items` (опциональный, default []).
+  - `replace_plan` сохраняет capex_items; `list_plan_by_year`
+    возвращает их через `selectinload(capex_items)`.
+  - UI `financial-plan-editor.tsx`: одна "Разбить" разворачивает обе
+    разбивки (CAPEX и OPEX). Кнопки "+ Статья CAPEX" / "+ Статья OPEX"
+    рядом. Когда есть статьи — суммарная ячейка переключается на
+    text-режим (как у OPEX).
+  - **Осталось из B.9 на отдельный sprint:** помесячная гранулярность
+    Y1-Y3 (36 точек) + Y4-Y10 yearly (7 точек). Требует pull-up в схеме
+    `ProjectFinancialPlan.period_id` (используется по всем 43 периодам,
+    не только по первому-в-году) + переделанный UI таблицы.
+  - Тесты: 472/472 passed.
+
 - **B.11 3 уровня себестоимости BOM (Q5 MEMO 5.2, 2026-05-15).** Каждый
   ингредиент BOM хранится в трёх уровнях: `max` (старт, малые объёмы),
   `normal` (дефолт), `optimal` (зрелые объёмы, лучший копакер).

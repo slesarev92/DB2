@@ -36,8 +36,11 @@ import {
 import { formatMoney } from "@/lib/format";
 
 import {
+  CAPEX_CATEGORIES,
+  CAPEX_CATEGORY_LABELS,
   OPEX_CATEGORIES,
   OPEX_CATEGORY_LABELS,
+  type CapexItem,
   type FinancialPlanItem,
   type OpexItem,
 } from "@/types/api";
@@ -69,10 +72,12 @@ export function FinancialPlanEditor({ projectId }: FinancialPlanEditorProps) {
       .then((data) => {
         if (!cancelled) {
           setItems(data);
-          // Авто-раскрываем годы у которых уже есть items
+          // Авто-раскрываем годы у которых уже есть статьи (OPEX или CAPEX)
           const autoExpand = new Set<number>();
           for (const d of data) {
-            if (d.opex_items.length > 0) autoExpand.add(d.year);
+            if (d.opex_items.length > 0 || d.capex_items.length > 0) {
+              autoExpand.add(d.year);
+            }
           }
           if (autoExpand.size > 0) setExpanded(autoExpand);
         }
@@ -166,6 +171,61 @@ export function FinancialPlanEditor({ projectId }: FinancialPlanEditorProps) {
     });
   }
 
+  // B.9 (2026-05-15): аналогичные мутаторы для capex_items.
+  function addCapexItem(year: number) {
+    setItems((prev) => {
+      if (prev === null) return prev;
+      return prev.map((item) => {
+        if (item.year !== year) return item;
+        const newItem: CapexItem = { category: "other", name: "", amount: "0" };
+        const newItems = [...item.capex_items, newItem];
+        return {
+          ...item,
+          capex_items: newItems,
+          capex: sumCapexItems(newItems),
+        };
+      });
+    });
+    setExpanded((prev) => new Set(prev).add(year));
+  }
+
+  function removeCapexItem(year: number, idx: number) {
+    setItems((prev) => {
+      if (prev === null) return prev;
+      return prev.map((item) => {
+        if (item.year !== year) return item;
+        const newItems = item.capex_items.filter((_, i) => i !== idx);
+        return {
+          ...item,
+          capex_items: newItems,
+          capex: newItems.length > 0 ? sumCapexItems(newItems) : item.capex,
+        };
+      });
+    });
+  }
+
+  function updateCapexItem(
+    year: number,
+    idx: number,
+    field: "category" | "name" | "amount",
+    value: string,
+  ) {
+    setItems((prev) => {
+      if (prev === null) return prev;
+      return prev.map((item) => {
+        if (item.year !== year) return item;
+        const newItems = item.capex_items.map((ci, i) =>
+          i === idx ? { ...ci, [field]: value } : ci,
+        );
+        return {
+          ...item,
+          capex_items: newItems,
+          capex: sumCapexItems(newItems),
+        };
+      });
+    });
+  }
+
   async function handleSave() {
     if (items === null) return;
     setSaving(true);
@@ -179,6 +239,10 @@ export function FinancialPlanEditor({ projectId }: FinancialPlanEditorProps) {
         opex_items: item.opex_items.map((oi) => ({
           ...oi,
           amount: oi.amount === "" ? "0" : oi.amount,
+        })),
+        capex_items: item.capex_items.map((ci) => ({
+          ...ci,
+          amount: ci.amount === "" ? "0" : ci.amount,
         })),
       }));
       const saved = await putFinancialPlan(projectId, { items: sanitized });
@@ -269,19 +333,20 @@ export function FinancialPlanEditor({ projectId }: FinancialPlanEditorProps) {
             <TableBody>
               {items.map((item) => {
                 const isExpanded = expanded.has(item.year);
-                const hasItems = item.opex_items.length > 0;
                 return (
-                  <OpexYearRow
+                  <PlanYearRow
                     key={item.year}
                     item={item}
                     isExpanded={isExpanded}
-                    hasItems={hasItems}
                     saving={saving}
                     onUpdateItem={updateItem}
                     onToggleExpand={toggleExpand}
                     onAddOpexItem={addOpexItem}
                     onRemoveOpexItem={removeOpexItem}
                     onUpdateOpexItem={updateOpexItem}
+                    onAddCapexItem={addCapexItem}
+                    onRemoveCapexItem={removeCapexItem}
+                    onUpdateCapexItem={updateCapexItem}
                   />
                 );
               })}
@@ -311,12 +376,16 @@ function sumOpexItems(items: OpexItem[]): string {
   return String(total);
 }
 
-// --- Sub-component: year row + expandable opex items ---
+function sumCapexItems(items: CapexItem[]): string {
+  const total = items.reduce((s, ci) => s + Number(ci.amount || 0), 0);
+  return String(total);
+}
 
-interface OpexYearRowProps {
+// --- Sub-component: year row + expandable OPEX и CAPEX статей ---
+
+interface PlanYearRowProps {
   item: FinancialPlanItem;
   isExpanded: boolean;
-  hasItems: boolean;
   saving: boolean;
   onUpdateItem: (year: number, field: "capex" | "opex", value: string) => void;
   onToggleExpand: (year: number) => void;
@@ -328,38 +397,57 @@ interface OpexYearRowProps {
     field: "category" | "name" | "amount",
     value: string,
   ) => void;
+  onAddCapexItem: (year: number) => void;
+  onRemoveCapexItem: (year: number, idx: number) => void;
+  onUpdateCapexItem: (
+    year: number,
+    idx: number,
+    field: "category" | "name" | "amount",
+    value: string,
+  ) => void;
 }
 
-function OpexYearRow({
+function PlanYearRow({
   item,
   isExpanded,
-  hasItems,
   saving,
   onUpdateItem,
   onToggleExpand,
   onAddOpexItem,
   onRemoveOpexItem,
   onUpdateOpexItem,
-}: OpexYearRowProps) {
+  onAddCapexItem,
+  onRemoveCapexItem,
+  onUpdateCapexItem,
+}: PlanYearRowProps) {
+  const hasOpexItems = item.opex_items.length > 0;
+  const hasCapexItems = item.capex_items.length > 0;
+  const hasAnyItems = hasOpexItems || hasCapexItems;
   return (
     <>
       <TableRow>
         <TableCell className="font-medium">Y{item.year}</TableCell>
         <TableCell>
-          <Input
-            type="number"
-            step="1"
-            min="0"
-            value={item.capex}
-            onChange={(e) =>
-              onUpdateItem(item.year, "capex", e.target.value)
-            }
-            disabled={saving}
-            className="max-w-xs"
-          />
+          {hasCapexItems ? (
+            <span className="text-sm text-muted-foreground pl-3">
+              {formatMoney(item.capex)}
+            </span>
+          ) : (
+            <Input
+              type="number"
+              step="1"
+              min="0"
+              value={item.capex}
+              onChange={(e) =>
+                onUpdateItem(item.year, "capex", e.target.value)
+              }
+              disabled={saving}
+              className="max-w-xs"
+            />
+          )}
         </TableCell>
         <TableCell>
-          {hasItems ? (
+          {hasOpexItems ? (
             <span className="text-sm text-muted-foreground pl-3">
               {formatMoney(item.opex)}
             </span>
@@ -382,7 +470,7 @@ function OpexYearRow({
             variant={isExpanded ? "secondary" : "outline"}
             size="sm"
             onClick={() => {
-              if (!isExpanded && !hasItems) {
+              if (!isExpanded && !hasAnyItems) {
                 onAddOpexItem(item.year);
               } else {
                 onToggleExpand(item.year);
@@ -397,6 +485,93 @@ function OpexYearRow({
       </TableRow>
       {isExpanded && (
         <>
+          {/* CAPEX статьи (B.9 / MEMO 2.1) */}
+          {item.capex_items.map((ci, idx) => (
+            <TableRow
+              key={`${item.year}-ci-${idx}`}
+              className="bg-muted/30"
+            >
+              <TableCell />
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={ci.category || "other"}
+                    onValueChange={(v) =>
+                      onUpdateCapexItem(item.year, idx, "category", v ?? "other")
+                    }
+                    disabled={saving}
+                    items={CAPEX_CATEGORY_LABELS}
+                  >
+                    <SelectTrigger className="h-8 w-[160px] text-xs">
+                      <SelectValue placeholder="Категория" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CAPEX_CATEGORIES.map((c) => (
+                        <SelectItem key={c} value={c} className="text-xs">
+                          {CAPEX_CATEGORY_LABELS[c]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    placeholder="Статья CAPEX"
+                    value={ci.name}
+                    onChange={(e) =>
+                      onUpdateCapexItem(item.year, idx, "name", e.target.value)
+                    }
+                    disabled={saving}
+                    className="max-w-[180px] text-sm"
+                  />
+                  <Input
+                    type="number"
+                    step="1"
+                    min="0"
+                    value={ci.amount}
+                    onChange={(e) =>
+                      onUpdateCapexItem(
+                        item.year,
+                        idx,
+                        "amount",
+                        e.target.value,
+                      )
+                    }
+                    disabled={saving}
+                    className="max-w-[120px] text-sm"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onRemoveCapexItem(item.year, idx)}
+                    disabled={saving}
+                    className="text-destructive hover:text-destructive px-2"
+                    title="Удалить статью"
+                  >
+                    &times;
+                  </Button>
+                </div>
+              </TableCell>
+              <TableCell />
+              <TableCell />
+            </TableRow>
+          ))}
+          <TableRow className="bg-muted/30">
+            <TableCell />
+            <TableCell>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onAddCapexItem(item.year)}
+                disabled={saving}
+                className="text-xs text-primary"
+              >
+                + Статья CAPEX
+              </Button>
+            </TableCell>
+            <TableCell />
+            <TableCell />
+          </TableRow>
+
+          {/* OPEX статьи (B-19) */}
           {item.opex_items.map((oi, idx) => (
             <TableRow
               key={`${item.year}-oi-${idx}`}
@@ -426,7 +601,7 @@ function OpexYearRow({
                     </SelectContent>
                   </Select>
                   <Input
-                    placeholder="Статья"
+                    placeholder="Статья OPEX"
                     value={oi.name}
                     onChange={(e) =>
                       onUpdateOpexItem(item.year, idx, "name", e.target.value)
@@ -476,7 +651,7 @@ function OpexYearRow({
                 disabled={saving}
                 className="text-xs text-primary"
               >
-                + Добавить статью
+                + Статья OPEX
               </Button>
             </TableCell>
             <TableCell />
