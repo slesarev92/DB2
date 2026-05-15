@@ -120,6 +120,24 @@ class PipelineInput:
     # горизонту.
     capex: tuple[float, ...] = ()
 
+    # --- C #14: per-period overrides ---
+    # Если непусто — длина = period_count, и pipeline читает arr[t] вместо
+    # соответствующего скаляра/тапл-fallback'а. Empty tuple = "нет override"
+    # → fallback на существующее поведение (scalar / per-period value из
+    # PeriodValue). Эффективное значение строится в
+    # `calculation_service._build_line_input` через `_resolve_period_value`.
+    #
+    # Маппинг на model-поля:
+    # - copacking_rate_arr   ← ProjectSKU.copacking_rate_by_period (fallback на pi.copacking_per_unit)
+    # - logistics_cost_per_kg_arr ← ProjectSKUChannel.logistics_cost_per_kg_by_period
+    #                                (fallback на pi.logistics_cost_per_kg[t])
+    # - ca_m_rate_arr        ← ProjectSKUChannel.ca_m_rate_by_period (fallback на pi.ca_m_rate)
+    # - marketing_rate_arr   ← ProjectSKUChannel.marketing_rate_by_period (fallback на pi.marketing_rate)
+    copacking_rate_arr: tuple[float, ...] = ()
+    logistics_cost_per_kg_arr: tuple[float, ...] = ()
+    ca_m_rate_arr: tuple[float, ...] = ()
+    marketing_rate_arr: tuple[float, ...] = ()
+
     def __post_init__(self) -> None:
         # Валидация длин массивов. Падаем рано и с понятной ошибкой —
         # легче дебажить чем молчаливый IndexError глубоко в шагах.
@@ -164,6 +182,19 @@ class PipelineInput:
                 f"PipelineInput.production_mode_by_period has length "
                 f"{len(self.production_mode_by_period)}, expected {n} or 0"
             )
+
+        # C #14: per-period override-массивы. Empty tuple = no override
+        # (fallback на скаляр/per-period). Для непустых длина обязательна = n.
+        for name, seq in [
+            ("copacking_rate_arr", self.copacking_rate_arr),
+            ("logistics_cost_per_kg_arr", self.logistics_cost_per_kg_arr),
+            ("ca_m_rate_arr", self.ca_m_rate_arr),
+            ("marketing_rate_arr", self.marketing_rate_arr),
+        ]:
+            if seq and len(seq) != n:
+                raise ValueError(
+                    f"PipelineInput.{name} has length {len(seq)}, expected {n} or 0"
+                )
 
 
 @dataclass

@@ -47,7 +47,10 @@ def step(ctx: PipelineContext) -> PipelineContext:
             f"production_mode_by_period length mismatch: got {len(mode_by_period)}, "
             f"expected {n}"
         )
+    # C #14: per-period override copacking rate. Если массив пустой
+    # (no override / unit-тесты), fallback на скаляр copacking_per_unit.
     copack_unit = inp.copacking_per_unit
+    copack_arr = inp.copacking_rate_arr  # tuple длины n или ()
 
     for t in range(n):
         vol = ctx.volume_units[t]
@@ -57,7 +60,8 @@ def step(ctx: PipelineContext) -> PipelineContext:
         if is_copacking_t:
             # Копакинг: production = 0, copacking = rate × volume
             p = 0.0
-            c = copack_unit * vol
+            copack_t = copack_arr[t] if copack_arr else copack_unit
+            c = copack_t * vol
         else:
             # Собственное производство: copacking = 0, production = ex_factory × rate × vol
             # D-19: per-period production_cost_rate (Excel переключает rate

@@ -83,6 +83,31 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
+# C #14 helper — per-period override resolver
+# ============================================================
+
+
+def _resolve_period_value(
+    by_period: list | None,
+    scalar: Decimal,
+    idx: int,
+) -> Decimal:
+    """C #14: эффективное значение per-period override.
+
+    Если override отсутствует целиком (None) или для данного индекса
+    (элемент None), возвращает базовый скаляр. Иначе — Decimal значения
+    из JSONB (asyncpg возвращает float, str(float) сохраняет precision
+    для типичных финансовых значений ≤ 6 знаков после точки).
+    """
+    if by_period is None:
+        return scalar
+    raw = by_period[idx]
+    if raw is None:
+        return scalar
+    return Decimal(str(raw))
+
+
+# ============================================================
 # Period catalog cache (in-memory) — periods неизменны после seed
 # ============================================================
 
@@ -491,6 +516,45 @@ async def _build_line_input(
         mode_by_year.get(str(model_year[t]), default_mode) for t in range(n)
     ]
 
+    # C #14: per-period override-массивы для 4 параметров. Эффективное
+    # значение = override (если есть) → fallback на per-period базу
+    # (текущее поведение). Для logistics база — log_arr[i] (где уже
+    # применён PeriodValue → static fallback). Для copacking/CA&M/Marketing
+    # база — соответствующий скаляр PSC/PSK.
+    #
+    # NULL JSONB → пустой output tuple? Нет: каждый индекс из 43 строится
+    # независимо. Если все индексы fallback'ают на одно и то же значение,
+    # это идентично текущему поведению (drift = 0 by construction).
+    copack_scalar = (
+        Decimal(psk.copacking_rate) if psk.copacking_rate else Decimal("0")
+    )
+    copacking_rate_arr = tuple(
+        float(_resolve_period_value(psk.copacking_rate_by_period, copack_scalar, i))
+        for i in range(n)
+    )
+    logistics_cost_per_kg_arr = tuple(
+        float(
+            _resolve_period_value(
+                psc.logistics_cost_per_kg_by_period,
+                Decimal(str(log_arr[i])),
+                i,
+            )
+        )
+        for i in range(n)
+    )
+    ca_m_scalar = Decimal(psc.ca_m_rate)
+    marketing_scalar = Decimal(psc.marketing_rate)
+    ca_m_rate_arr = tuple(
+        float(_resolve_period_value(psc.ca_m_rate_by_period, ca_m_scalar, i))
+        for i in range(n)
+    )
+    marketing_rate_arr = tuple(
+        float(
+            _resolve_period_value(psc.marketing_rate_by_period, marketing_scalar, i)
+        )
+        for i in range(n)
+    )
+
     return PipelineInput(
         project_sku_channel_id=psc.id,
         scenario_id=scenario.id,
@@ -524,6 +588,12 @@ async def _build_line_input(
         product_density=1.0,
         project_opex=(),
         capex=(),
+        # C #14: per-period overrides. Когда соответствующий JSONB-столбец
+        # NULL — массив идентичен fallback-серии, поэтому drift = 0.
+        copacking_rate_arr=copacking_rate_arr,
+        logistics_cost_per_kg_arr=logistics_cost_per_kg_arr,
+        ca_m_rate_arr=ca_m_rate_arr,
+        marketing_rate_arr=marketing_rate_arr,
     )
 
 

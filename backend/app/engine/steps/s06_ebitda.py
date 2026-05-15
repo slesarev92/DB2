@@ -27,8 +27,12 @@ def step(ctx: PipelineContext) -> PipelineContext:
             "s06_ebitda requires contribution (s05) and net_revenue (s02)"
         )
 
-    ca_m_rate = inp.ca_m_rate
-    mkt_rate = inp.marketing_rate
+    # C #14: per-period override ставок CA&M / Marketing. Если массив
+    # пустой (no override / unit-тесты) — fallback на скаляр.
+    ca_m_scalar = inp.ca_m_rate
+    mkt_scalar = inp.marketing_rate
+    ca_m_arr = inp.ca_m_rate_arr  # tuple длины n или ()
+    mkt_arr = inp.marketing_rate_arr  # tuple длины n или ()
 
     ca_m: list[float] = [0.0] * n
     mkt: list[float] = [0.0] * n
@@ -36,8 +40,10 @@ def step(ctx: PipelineContext) -> PipelineContext:
 
     for t in range(n):
         nr = ctx.net_revenue[t]
-        c = nr * ca_m_rate
-        m = nr * mkt_rate
+        ca_m_t = ca_m_arr[t] if ca_m_arr else ca_m_scalar
+        mkt_t = mkt_arr[t] if mkt_arr else mkt_scalar
+        c = nr * ca_m_t
+        m = nr * mkt_t
         ca_m[t] = c
         mkt[t] = m
         ebitda[t] = ctx.contribution[t] - c - m
