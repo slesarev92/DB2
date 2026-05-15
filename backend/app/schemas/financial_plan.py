@@ -12,7 +12,7 @@ Pipeline аннуализирует все периоды по model_year в s10
 """
 from decimal import Decimal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # Phase 8.8: стандартные категории маркетингового бюджета.
 # Values — нижний регистр для БД, UI отображает labels из OPEX_CATEGORY_LABELS
@@ -64,14 +64,17 @@ class CapexItemSchema(BaseModel):
 
 
 class FinancialPlanItem(BaseModel):
-    """Одна строка плана для одного модельного года.
+    """Одна строка плана для одного периода (M1..M36 + Y4..Y10).
+
+    B.9b (2026-05-15): per-period вместо per-year. period_number — 1..43,
+    маппится на справочник `periods` (1..36 = monthly Y1-Y3, 37..43 = yearly Y4-Y10).
 
     Логика автосуммирования:
     - opex_items не пустой → opex = sum(opex_items.amount).
     - capex_items не пустой → capex = sum(capex_items.amount).
     """
 
-    year: int = Field(..., ge=1, le=10, description="model_year 1..10")
+    period_number: int = Field(..., ge=1, le=43, description="period 1..43")
     capex: Decimal = Field(default=Decimal("0"), ge=0)
     opex: Decimal = Field(default=Decimal("0"), ge=0)
     opex_items: list[OpexItemSchema] = Field(default_factory=list)
@@ -81,15 +84,22 @@ class FinancialPlanItem(BaseModel):
 class FinancialPlanRequest(BaseModel):
     """Тело PUT /api/projects/{id}/financial-plan.
 
-    Полная замена плана проекта: backend удаляет все существующие
-    записи `project_financial_plans` для project_id и вставляет новые
-    по переданному списку. Элементы с year'ами которых нет в списке
-    трактуются как 0/0.
+    Полная замена плана: backend удаляет все существующие записи
+    `project_financial_plans` для project_id и вставляет новые по
+    переданному списку. period_number'ы которых нет в списке → 0/0 в GET.
 
-    Логика opex_items:
-    - Если opex_items не пустой → opex = sum(items.amount),
-      явное значение opex игнорируется.
-    - Если opex_items пустой → opex = явно указанное число.
+    Валидация: period_number уникальны в массиве.
     """
 
     items: list[FinancialPlanItem] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def check_period_uniqueness(self) -> "FinancialPlanRequest":
+        seen: set[int] = set()
+        for item in self.items:
+            if item.period_number in seen:
+                raise ValueError(
+                    f"Duplicate period_number={item.period_number} in items"
+                )
+            seen.add(item.period_number)
+        return self

@@ -371,3 +371,38 @@ async def test_put_plan_mixed_years_with_and_without_items(
     y2 = next(i for i in data if i["year"] == 2)
     assert Decimal(y2["opex"]) == Decimal("600000")
     assert y2["opex_items"] == []
+
+
+# ============================================================
+# B.9b: schema contract tests for period_number
+# ============================================================
+import pytest
+from pydantic import ValidationError
+
+from app.schemas.financial_plan import FinancialPlanItem, FinancialPlanRequest
+
+
+def test_financial_plan_item_accepts_period_number() -> None:
+    item = FinancialPlanItem(period_number=1, capex="100", opex="0")
+    assert item.period_number == 1
+
+
+def test_financial_plan_item_rejects_period_number_out_of_range() -> None:
+    with pytest.raises(ValidationError):
+        FinancialPlanItem(period_number=0, capex="0", opex="0")
+    with pytest.raises(ValidationError):
+        FinancialPlanItem(period_number=44, capex="0", opex="0")
+
+
+def test_financial_plan_item_no_year_field() -> None:
+    # year field is gone; passing it should be ignored (Pydantic v2 default extra="ignore").
+    item = FinancialPlanItem(period_number=1, year=1, capex="0", opex="0")
+    assert not hasattr(item, "year")
+
+
+def test_financial_plan_request_rejects_duplicate_period_number() -> None:
+    with pytest.raises(ValidationError):
+        FinancialPlanRequest(items=[
+            FinancialPlanItem(period_number=1, capex="100", opex="0"),
+            FinancialPlanItem(period_number=1, capex="200", opex="0"),
+        ])
