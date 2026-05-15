@@ -35,7 +35,7 @@ class ProjectBase(BaseModel):
     wacc: Decimal = Field(default=Decimal("0.19"), ge=0, le=1)
     tax_rate: Decimal = Field(default=Decimal("0.20"), ge=0, le=1)
     wc_rate: Decimal = Field(default=Decimal("0.12"), ge=0, le=1)
-    vat_rate: Decimal = Field(default=Decimal("0.20"), ge=0, le=1)
+    vat_rate: Decimal = Field(default=Decimal("0.22"), ge=0, le=1)
 
     # Go/No-Go порог Contribution Margin (настраиваемый per-project).
     cm_threshold: Decimal = Field(default=Decimal("0.25"), ge=0, le=1)

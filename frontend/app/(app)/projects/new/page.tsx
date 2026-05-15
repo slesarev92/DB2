@@ -37,11 +37,22 @@ const DEFAULT_FORM: ProjectCreate = {
   wacc: "0.19",
   tax_rate: "0.20",
   wc_rate: "0.12",
-  vat_rate: "0.20",
+  // НДС с 01.01.2026 в РФ — 22% (Q7). Пресет можно сменить на 20%
+  // (старые проекты) или 10% (льготная) в Select ниже.
+  vat_rate: "0.22",
   tax_loss_carryforward: false,
   currency: "RUB",
   inflation_profile_id: null,
 };
+
+const VAT_PRESETS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: "0.22", label: "22% (с 01.01.2026 РФ)" },
+  { value: "0.20", label: "20% (до 01.01.2026)" },
+  { value: "0.10", label: "10% (льготная)" },
+  { value: "0.00", label: "0% (экспорт / без НДС)" },
+];
+const VAT_PRESET_VALUES = new Set(VAT_PRESETS.map((p) => p.value));
+const VAT_CUSTOM_VALUE = "__custom__";
 
 export default function NewProjectPage() {
   const router = useRouter();
@@ -204,19 +215,51 @@ export default function NewProjectPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="vat_rate" className="flex items-center gap-1.5">
-                  VAT
+                  Ставка НДС
                   <HelpButton help="project.vat_rate" />
                 </Label>
-                <Input
-                  id="vat_rate"
-                  type="number"
-                  step="0.01"
-                  min={0}
-                  max={1}
-                  value={form.vat_rate}
-                  onChange={(e) => update("vat_rate", e.target.value)}
+                <Select
+                  value={
+                    VAT_PRESET_VALUES.has(String(form.vat_rate))
+                      ? String(form.vat_rate)
+                      : VAT_CUSTOM_VALUE
+                  }
+                  onValueChange={(v) => {
+                    if (v === null || v === VAT_CUSTOM_VALUE) return;
+                    update("vat_rate", v);
+                  }}
+                  items={Object.fromEntries(
+                    VAT_PRESETS.map((p) => [p.value, p.label]),
+                  )}
                   disabled={submitting}
-                />
+                >
+                  <SelectTrigger className="w-full" id="vat_rate">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {VAT_PRESETS.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>
+                        {p.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!VAT_PRESET_VALUES.has(String(form.vat_rate)) && (
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    max={1}
+                    value={form.vat_rate}
+                    onChange={(e) => update("vat_rate", e.target.value)}
+                    disabled={submitting}
+                    placeholder="Custom (0–1)"
+                  />
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Применяется для пересчёта цены отгрузки от полочной
+                  (без НДС). На цены сырья не влияет.
+                </p>
               </div>
             </div>
 

@@ -170,8 +170,15 @@ class Project(Base, TimestampMixin):
     wc_rate: Mapped[Decimal] = mapped_column(
         Numeric(8, 6), nullable=False, default=Decimal("0.12")
     )
+    # Q7 (CLIENT_FEEDBACK_v2_DECISIONS.md): применяется только для пересчёта
+    # ex_factory от shelf_price (D-02). Цены сырья — без НДС, BOMItem.vat_rate
+    # больше не используется в движке.
+    # С 01.01.2026 в РФ стандартная ставка 22%, до этой даты — 20%, льготная — 10%.
     vat_rate: Mapped[Decimal] = mapped_column(
-        Numeric(8, 6), nullable=False, default=Decimal("0.20")
+        Numeric(8, 6),
+        nullable=False,
+        default=Decimal("0.22"),
+        server_default="0.220000",
     )
 
     # Go/No-Go порог Contribution Margin (настраиваемый, одобрено заказчиком 2026-04-13).

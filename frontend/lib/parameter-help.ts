@@ -69,14 +69,14 @@ export const PARAMETER_HELP: Record<string, ParameterHelp> = {
   },
 
   "project.vat_rate": {
-    title: "НДС (VAT) — ставка общая",
+    title: "Ставка НДС проекта",
     description:
-      "Ставка НДС применяемая к ex-factory цене (через деление: D-02). Может быть переопределена per-ingredient (BOMItem.vat_rate, LOGIC-07) для категорий с льготной ставкой (продукты 10%, лекарства 0%).",
-    impact: "Ex-factory цена (shipping), Net Revenue.",
+      "Применяется только для пересчёта цены отгрузки (ex-factory) от полочной цены (с НДС). На себестоимость BOM не влияет — цены сырья и упаковки вводятся без НДС (Q7 от 2026-05-15).",
+    impact: "Ex-factory цена → Net Revenue → весь P&L.",
     formula: "EX_FACTORY = SHELF_PRICE / (1 + VAT_RATE) × (1 − CHANNEL_MARGIN)",
     units: "доля (0-1)",
-    range: "0.00, 0.10, 0.20",
-    defaultValue: "0.20 (общий НДС РФ)",
+    range: "0.22 — стандартная с 01.01.2026; 0.20 — до 01.01.2026; 0.10 — льготная; 0.00 — экспорт",
+    defaultValue: "0.22 (РФ с 01.01.2026)",
     excelRef: "DASH, строки 33-35",
   },
 
