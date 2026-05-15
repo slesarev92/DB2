@@ -35,7 +35,7 @@ export interface BulkFillTarget {
   label: string;
 }
 
-interface BulkFillProps {
+export interface PeriodBulkFillProps {
   rows: BulkFillTarget[];
   /** Колбэк применения изменений: список (period_number, value) к выбранной строке. */
   onApply: (rowKey: string, updates: Array<[number, string]>) => void;
@@ -67,7 +67,7 @@ export function PeriodBulkFill({
   rows,
   onApply,
   disabled,
-}: BulkFillProps) {
+}: PeriodBulkFillProps) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("distribute_year");
   const [rowKey, setRowKey] = useState<string>(rows[0]?.rowKey ?? "");

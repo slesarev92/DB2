@@ -39,6 +39,7 @@ export function useProjectProgress(
     akb: false,
     obppc: false,
     periods: false,
+    "fine-tuning": false,
     scenarios: true,
     results: false,
     sensitivity: false,
@@ -64,6 +65,7 @@ export function useProjectProgress(
         akb: false,            // always empty — optional
         obppc: false,          // always empty — optional
         periods: false,        // always empty — deep-nested check too expensive
+        "fine-tuning": false,  // C #14: optional per-period overrides — on-demand
         scenarios: true,       // always filled — auto-created
         results: false,
         sensitivity: false,    // always empty — on-demand

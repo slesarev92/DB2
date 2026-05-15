@@ -15,8 +15,8 @@ export interface PeriodGridRow<T = unknown> {
 
 export interface PeriodGridProps<T = unknown> {
   rows: PeriodGridRow<T>[];
-  onCellChange?: (rowId: PeriodGridRow["id"], periodIdx: number, value: T | null) => void;
-  renderCell?: (value: T | null, rowId: PeriodGridRow["id"], periodIdx: number) => React.ReactNode;
+  onCellChange?: (rowId: PeriodGridRow<T>["id"], periodIdx: number, value: T | null) => void;
+  renderCell?: (value: T | null, rowId: PeriodGridRow<T>["id"], periodIdx: number) => React.ReactNode;
   readOnly?: boolean;
   className?: string;
 }
@@ -28,7 +28,11 @@ export interface PeriodGridProps<T = unknown> {
  * Used as the shared scaffold for per-period editors (B.9b+).
  *
  * Pass `renderCell` for custom cell rendering (e.g. domain-specific inputs).
- * Without `renderCell`, renders a plain number input.
+ * Without `renderCell`, renders a plain `<input type="number">` and emits the
+ * raw string value through `onCellChange` (cast to `T`). The default path
+ * therefore assumes `T` is `string` (e.g. Decimal-as-string from backend).
+ * For non-string `T` (numbers, custom shapes) — provide `renderCell` and
+ * handle parsing yourself.
  */
 export function PeriodGrid<T>({
   rows,

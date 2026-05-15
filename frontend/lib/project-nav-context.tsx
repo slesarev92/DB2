@@ -30,6 +30,7 @@ export const TAB_ORDER = [
   "akb",
   "obppc",
   "periods",
+  "fine-tuning",
   "scenarios",
   "results",
   "sensitivity",
@@ -49,7 +50,8 @@ export const SECTION_LABELS: Record<TabValue, string> = {
   channels: "Каналы",
   akb: "АКБ",
   obppc: "OBPPC",
-  periods: "Fine tuning",
+  periods: "Fine tuning (периоды)",
+  "fine-tuning": "Fine Tuning per-period",
   scenarios: "Сценарии",
   results: "Результаты",
   sensitivity: "Чувствительность",
@@ -69,7 +71,7 @@ export const SECTION_GROUPS: readonly SectionGroup[] = [
   { key: "basics", label: "Основа", number: "①", tabs: ["overview", "content", "financial-plan"] },
   { key: "product", label: "Продукт", number: "②", tabs: ["skus", "ingredients"] },
   { key: "distribution", label: "Дистрибуция", number: "③", tabs: ["channels", "akb", "obppc"] },
-  { key: "modeling", label: "Моделирование", number: "④", tabs: ["periods", "scenarios"] },
+  { key: "modeling", label: "Моделирование", number: "④", tabs: ["periods", "fine-tuning", "scenarios"] },
   { key: "analysis", label: "Анализ", number: "⑤", tabs: ["results", "sensitivity", "pricing", "value-chain", "pnl"] },
 ];
 
