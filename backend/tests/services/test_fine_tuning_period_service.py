@@ -116,7 +116,6 @@ def test_channel_overrides_rejects_negative_rate() -> None:
 # ============================================================
 # C #14: service layer tests
 # ============================================================
-import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -183,8 +182,10 @@ async def test_list_channel_overrides_returns_all_none(
     sample_project_with_channel: Project,
 ) -> None:
     project = sample_project_with_channel
-    ch = (await db_session.scalars(select(ProjectSKUChannel))).first()
     sku = (await db_session.scalars(select(ProjectSKU).where(ProjectSKU.project_id == project.id))).first()
+    ch = (await db_session.scalars(
+        select(ProjectSKUChannel).where(ProjectSKUChannel.project_sku_id == sku.id)
+    )).first()
 
     result = await list_overrides_by_channel(db_session, project.id, sku.id, ch.id)
     assert result.logistics_cost_per_kg_by_period is None
@@ -198,8 +199,10 @@ async def test_replace_channel_overrides_atomic_three_fields(
     sample_project_with_channel: Project,
 ) -> None:
     project = sample_project_with_channel
-    ch = (await db_session.scalars(select(ProjectSKUChannel))).first()
     sku = (await db_session.scalars(select(ProjectSKU).where(ProjectSKU.project_id == project.id))).first()
+    ch = (await db_session.scalars(
+        select(ProjectSKUChannel).where(ProjectSKUChannel.project_sku_id == sku.id)
+    )).first()
     log_arr = [Decimal("10")] * 43
     ca_m_arr = [Decimal("0.05")] * 43
 

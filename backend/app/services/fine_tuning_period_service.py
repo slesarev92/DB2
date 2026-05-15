@@ -3,9 +3,10 @@
 Атомарная замена JSONB-массивов длины 43 (None = убрать override).
 SQLAlchemy mutation требует flag_modified для JSONB-полей.
 
-JSONB storage: значения хранятся как строки (str) для сохранения точности
-Decimal без потерь на float-конверсию. При чтении из БД строки → Decimal
-через SkuOverridesResponse/ChannelOverridesResponse validators.
+JSONB storage: значения хранятся как float (asyncpg не сериализует Decimal
+в JSON). При чтении asyncpg возвращает float; Task 7 engine использует
+`Decimal(str(raw))` в `_resolve_period_value` для безопасной конверсии.
+Acceptable precision для доменных значений (₽/кг, проценты ≤ 6 знаков).
 """
 from decimal import Decimal
 
@@ -30,9 +31,9 @@ def _to_jsonb(arr: list[Decimal | None] | None) -> list[float | None] | None:
     """Конвертирует Decimal-массив в JSON-сериализуемый список float.
 
     None-элементы сохраняются как None. Весь массив None → None (убрать override).
-    float используется для JSON-совместимости; при чтении из JSONB asyncpg
-    возвращает float, который корректно сравнивается с Decimal в Python ==.
-    Для API-уровня точность восстанавливается через Pydantic Decimal validator.
+    float64 имеет 15-17 значащих цифр; для доменных значений
+    (₽/кг, проценты ≤ 6 знаков) precision-loss отсутствует. Engine при
+    чтении использует Decimal(str(raw)) для контролируемой конверсии.
     """
     if arr is None:
         return None
