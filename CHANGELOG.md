@@ -9,7 +9,51 @@
 
 ## [Unreleased]
 
-_No unreleased changes._
+Фаза A (MEMO v2.1 — регрессии и блокеры). 6 пунктов, все закрыты.
+Источник решений — `docs/CLIENT_FEEDBACK_v2_DECISIONS.md` (10 ответов
+заказчика на блокирующие вопросы от 2026-05-12, зафиксированы
+2026-05-15).
+
+### Added
+
+- **A.1 Diagnostic logging для финплана:** `financial_plan_service.replace_plan`
+  пишет `logger.info` с payload (year, capex, opex, len(opex_items))
+  на входе — без изменения behaviour. Поможет ловить интермиттирующие
+  ошибки сохранения CAPEX/OPEX (MEMO 1.1, D-2/D-3).
+- **A.6 Diagnostic logging для recalculate task:** `calculate_project_task`
+  пишет `logger.info` на START/OK, `logger.warning` на bad-request
+  (ProjectNotFound / NoLines / LineValidation), `logger.exception` на
+  любое другое падение pipeline (MEMO 5.3, D-7).
+
+### Changed
+
+- **A.3 Roadmap status → dropdown:** в `content-tab.tsx` поле "Статус"
+  задачи заменено с свободного `<Input>` на `<Select>` с фиксированными
+  ключами `planned/in_progress/done/blocked`. Старые проекты с
+  русскими значениями ("готово", "в работе") нормализуются legacy-map'ом.
+  Закрывает баг "Gantt не перестраивается при смене статуса"
+  (корневая причина — рассинхрон языка ввода и `STATUS_COLORS`) и
+  попутно MEMO 1.2 "Статус проекта = dropdown".
+- **A.6 Scenarios polling resilience:** `pollTaskStatus` в `scenarios-tab.tsx`
+  ретраит при network glitch до 5 раз подряд, TIMEOUT увеличен 60s→180s,
+  console.warn/error на каждом сбое для диагностики.
+- **A.5 D-12 финально: 5 лет (60 мес).** Заказчик повторно подтвердил
+  семантику Y1-Y5 (с начала проекта по конец 5-го года включительно).
+  `SCOPE_BOUNDS["y1y5"] = (5, 5)` остаётся; docstring
+  `s11_kpi.py`, `TZ_VS_EXCEL_DISCREPANCIES.md` D-12 и
+  `ROADMAP.md` синхронизированы. Excel-тайпо ("6 столбцов")
+  окончательно отклонён.
+
+### Docs
+
+- **`docs/CLIENT_FEEDBACK_v2_DECISIONS.md`** — финальные решения по
+  10 вопросам MEMO v2.1 + план Фазы A/B/C (30 пунктов).
+- **`docs/QUESTIONS_FOR_CLIENT_2026-05-12.md`** — исходный вопросник
+  (архивный).
+- **`docs/TO_DIAGNOSE_LATER.md`** — 8 технических диагностик для фазы
+  тестирования (экспорт, finplan save, CAPEX=0, gantt, SKU images,
+  лого, сценарии, SKU cascade). Закрыты A.2 + A.4 — заказчик
+  подтвердил работоспособность.
 
 ---
 
