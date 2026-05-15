@@ -17,6 +17,10 @@ class ProjectSKUBase(BaseModel):
     # model_year ("1".."10"), значения "own"|"copacking". Пустой dict
     # = override нет, используется скаляр production_mode.
     production_mode_by_year: dict[str, str] = Field(default_factory=dict)
+    # Q5 (2026-05-15): уровень себестоимости BOM. Скаляр + годовой override
+    # (ключи "1".."10", значения "max"|"normal"|"optimal").
+    bom_cost_level: str = Field(default="normal", pattern="^(max|normal|optimal)$")
+    bom_cost_level_by_year: dict[str, str] = Field(default_factory=dict)
     package_image_id: int | None = None
 
 
@@ -32,6 +36,10 @@ class ProjectSKUUpdate(BaseModel):
     copacking_rate: Decimal | None = Field(default=None, ge=0)
     production_cost_rate: Decimal | None = Field(default=None, ge=0, le=1)
     production_mode_by_year: dict[str, str] | None = None
+    bom_cost_level: str | None = Field(
+        default=None, pattern="^(max|normal|optimal)$"
+    )
+    bom_cost_level_by_year: dict[str, str] | None = None
     package_image_id: int | None = None
 
 
@@ -49,6 +57,8 @@ class ProjectSKURead(BaseModel):
     copacking_rate: Decimal
     production_cost_rate: Decimal
     production_mode_by_year: dict[str, str] = Field(default_factory=dict)
+    bom_cost_level: str = Field(default="normal")
+    bom_cost_level_by_year: dict[str, str] = Field(default_factory=dict)
     package_image_id: int | None = None
     created_at: datetime
 

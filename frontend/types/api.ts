@@ -245,6 +245,9 @@ export interface ProjectSKUCreate {
   production_cost_rate?: string;
   /** Q1 (2026-05-15): годовой override режима. Ключи "1".."10". */
   production_mode_by_year?: Record<string, string>;
+  /** Q5 (2026-05-15): уровень BOM-себестоимости "max"|"normal"|"optimal". */
+  bom_cost_level?: string;
+  bom_cost_level_by_year?: Record<string, string>;
   package_image_id?: number | null;
 }
 
@@ -254,6 +257,8 @@ export interface ProjectSKUUpdate {
   copacking_rate?: string;
   production_cost_rate?: string;
   production_mode_by_year?: Record<string, string>;
+  bom_cost_level?: string;
+  bom_cost_level_by_year?: Record<string, string>;
   package_image_id?: number | null;
 }
 
@@ -267,6 +272,8 @@ export interface ProjectSKURead {
   copacking_rate: string;
   production_cost_rate: string;
   production_mode_by_year: Record<string, string>;
+  bom_cost_level: string;
+  bom_cost_level_by_year: Record<string, string>;
   package_image_id: number | null;
   created_at: string;
 }
@@ -285,6 +292,8 @@ export interface BOMItemCreate {
   loss_pct?: string;
   price_per_unit?: string;
   vat_rate?: string;
+  /** Q5 (2026-05-15): "max" | "normal" | "optimal". Default "normal". */
+  cost_level?: string;
   /**
    * Привязка к Ingredient из каталога. Если указан — backend автозаполнит
    * ingredient_name и latest price из каталога (B-04 в bom_service).
@@ -298,6 +307,7 @@ export interface BOMItemUpdate {
   loss_pct?: string;
   price_per_unit?: string;
   vat_rate?: string;
+  cost_level?: string;
 }
 
 export interface BOMItemRead {
@@ -308,6 +318,7 @@ export interface BOMItemRead {
   loss_pct: string;
   price_per_unit: string;
   vat_rate: string;
+  cost_level: string;
   ingredient_id?: number | null;
   ingredient_category?: string | null;
   created_at: string;

@@ -452,6 +452,17 @@ class ProjectSKU(Base, TimestampMixin):
         JSONB, nullable=False, default=dict, server_default="{}",
     )
 
+    # Q5 MEMO 5.2 (2026-05-15): уровень себестоимости BOM.
+    # Скаляр-дефолт ("max" | "normal" | "optimal") + годовой JSONB override
+    # (ключи model_year "1".."10"). Engine выбирает уровень per период;
+    # фильтрует BOMItem по этому полю.
+    bom_cost_level: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="normal", server_default="normal",
+    )
+    bom_cost_level_by_year: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default="{}",
+    )
+
     # Rate-параметры SKU как % от выручки (D-04 в TZ_VS_EXCEL_DISCREPANCIES).
     # CA&M и Marketing с 2026-05-15 (Q6) живут на ProjectSKUChannel — в HM/SM
     # маркетинг отличается от TT, унификация per-SKU искажала экономику.
@@ -626,7 +637,16 @@ class IngredientPrice(Base, TimestampMixin):
 
 
 class BOMItem(Base, TimestampMixin):
-    """Bill of Materials — компонент SKU (сырьё, упаковка)."""
+    """Bill of Materials — компонент SKU (сырьё, упаковка).
+
+    Q5 MEMO 5.2 (CLIENT_FEEDBACK_v2_DECISIONS.md, 2026-05-15):
+    каждый ингредиент хранится **в трёх уровнях себестоимости**:
+    - max — малые объёмы / старт
+    - normal — средние объёмы (дефолт)
+    - optimal — высокие объёмы / лучший копакер
+    Engine выбирает уровень per period по ProjectSKU.bom_cost_level
+    + bom_cost_level_by_year override.
+    """
 
     __tablename__ = "bom_items"
 
@@ -649,10 +669,24 @@ class BOMItem(Base, TimestampMixin):
     vat_rate: Mapped[Decimal] = mapped_column(
         Numeric(8, 6), nullable=False, default=Decimal("0.20")
     )
+    # Q5 (2026-05-15): уровень себестоимости. Допустимые значения:
+    # "max" | "normal" | "optimal". Default = "normal". Unique по
+    # (project_sku, ingredient_name, cost_level) — три строки на
+    # ингредиент.
+    cost_level: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="normal", server_default="normal",
+    )
     # B-04: optional link to ingredient catalog for auto-pricing
     ingredient_id: Mapped[int | None] = mapped_column(
         ForeignKey("ingredients.id", ondelete="SET NULL"),
         nullable=True,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "project_sku_id", "ingredient_name", "cost_level",
+            name="uq_bom_items_psk_ingredient_level",
+        ),
     )
 
 

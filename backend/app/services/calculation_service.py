@@ -307,20 +307,41 @@ async def _build_line_input(
             select(BOMItem).where(BOMItem.project_sku_id == psk.id)
         )
     ).all()
-    bom_unit_cost_base = 0.0
+    # Q5 (2026-05-15): группируем BOM позиции по cost_level (max/normal/optimal).
+    # Каждый ингредиент может иметь до 3 строк (UNIQUE по psk+name+level).
+    # Если уровень не задан для существующих строк — сервер_default = "normal".
+    bom_by_level: dict[str, float] = {"max": 0.0, "normal": 0.0, "optimal": 0.0}
     for b in bom_rows:
-        bom_unit_cost_base += float(
+        level = b.cost_level or "normal"
+        bom_by_level[level] = bom_by_level.get(level, 0.0) + float(
             b.quantity_per_unit * b.price_per_unit * (Decimal("1") + b.loss_pct)
         )
+    bom_unit_cost_base = bom_by_level.get("normal", 0.0)
 
     # Инфляционная серия BOM по periods. Excel применяет тот же
     # inflation_profile к row 36/37 DASH что и к shelf_price (D-08).
     # Для consistency используем тот же helper из predict_service.
+    # Считаем 3 ряда — по каждому уровню — чтобы переключение per год
+    # обходилось без пересчёта инфляции.
     from app.services.predict_service import inflate_series
 
     bom_unit_cost_series_default = inflate_series(
         bom_unit_cost_base, sorted_periods, inflation_profile
     )
+    bom_series_by_level: dict[str, list[float]] = {
+        lvl: inflate_series(base, sorted_periods, inflation_profile)
+        for lvl, base in bom_by_level.items()
+    }
+    default_bom_level = psk.bom_cost_level or "normal"
+    bom_level_by_year = psk.bom_cost_level_by_year or {}
+
+    def _pick_bom_level(year: int) -> str:
+        """Year → активный cost_level. Fallback на normal если выбранный
+        уровень не заполнен (base = 0), чтобы UI не ломал расчёт."""
+        chosen = bom_level_by_year.get(str(year), default_bom_level)
+        if bom_by_level.get(chosen, 0.0) == 0.0 and bom_by_level.get("normal", 0.0) > 0.0:
+            return "normal"
+        return chosen
 
     # Channel.universe_outlets
     channel_obj = await session.get(Channel, psc.channel_id)
@@ -360,10 +381,14 @@ async def _build_line_input(
 
         # D-16: bom_unit_cost из effective values если есть, иначе fallback
         # на inflate_series от BOMItem M1 base (стандартное поведение).
+        # Q5 (2026-05-15): per-period cost_level — выбираем из заранее
+        # построенных рядов по уровням.
         if "bom_unit_cost" in vals:
             bom_arr.append(float(vals["bom_unit_cost"]))
         else:
-            bom_arr.append(float(bom_unit_cost_series_default[i]))
+            level = _pick_bom_level(period.model_year)
+            series = bom_series_by_level.get(level) or bom_unit_cost_series_default
+            bom_arr.append(float(series[i]))
 
         # D-18: logistics_cost_per_kg из effective values если есть, иначе
         # static из PSC (текущее поведение для projects без per-period).

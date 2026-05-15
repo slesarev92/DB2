@@ -17,6 +17,13 @@ import { HelpButton } from "@/components/ui/help-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -25,8 +32,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { MockupGallery } from "@/components/projects/mockup-gallery";
-import { ProductionModeByYearEditor } from "@/components/projects/production-mode-by-year-editor";
 import { SkuImageUpload } from "@/components/projects/sku-image-upload";
+import { YearOverrideEditor } from "@/components/projects/year-override-editor";
 import { ApiError } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import { listIngredients } from "@/lib/ingredients";
@@ -183,6 +190,11 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
   const [productionModeByYear, setProductionModeByYear] = useState<
     Record<string, string>
   >({});
+  // Q5 (2026-05-15): уровень себестоимости BOM. Скаляр + годовой override.
+  const [bomCostLevel, setBomCostLevel] = useState("normal");
+  const [bomCostLevelByYear, setBomCostLevelByYear] = useState<
+    Record<string, string>
+  >({});
 
   // Загрузка ProjectSKU + BOM при смене pskId или reload
   useEffect(() => {
@@ -200,6 +212,8 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
         setCopackingRate(pskData.copacking_rate ?? "0");
         setProductionCostRate(pskData.production_cost_rate);
         setProductionModeByYear(pskData.production_mode_by_year ?? {});
+        setBomCostLevel(pskData.bom_cost_level ?? "normal");
+        setBomCostLevelByYear(pskData.bom_cost_level_by_year ?? {});
       })
       .catch((err) => {
         if (cancelled) return;
@@ -318,6 +332,25 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
     void saveRates();
   }, [productionModeByYear]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Q5: auto-save при смене bom_cost_level (scalar Select)
+  const initialBomLevelRef = useRef(bomCostLevel);
+  useEffect(() => {
+    if (psk === null) return;
+    if (initialBomLevelRef.current === bomCostLevel) return;
+    initialBomLevelRef.current = bomCostLevel;
+    void saveRates();
+  }, [bomCostLevel]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Q5: auto-save при смене bom_cost_level_by_year (per-year override)
+  const initialBomLevelByYearRef = useRef(JSON.stringify(bomCostLevelByYear));
+  useEffect(() => {
+    if (psk === null) return;
+    const serialized = JSON.stringify(bomCostLevelByYear);
+    if (initialBomLevelByYearRef.current === serialized) return;
+    initialBomLevelByYearRef.current = serialized;
+    void saveRates();
+  }, [bomCostLevelByYear]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function saveRates() {
     if (psk === null) return;
     setSavingRates(true);
@@ -328,6 +361,8 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
         copacking_rate: copackingRate,
         production_cost_rate: productionCostRate,
         production_mode_by_year: productionModeByYear,
+        bom_cost_level: bomCostLevel,
+        bom_cost_level_by_year: bomCostLevelByYear,
       });
       toast.success("Параметры SKU сохранены");
       reload();
@@ -409,10 +444,57 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
           </div>
 
           {/* Q1 (2026-05-15): годовой override режима производства. */}
-          <ProductionModeByYearEditor
-            scalarMode={productionMode}
+          <YearOverrideEditor
+            title="Переключать режим по годам"
+            hint="(пример: Y1=копак, Y2=своё, Y3+=копак)"
+            scalarValue={productionMode}
             value={productionModeByYear}
+            options={{ own: "Своё", copacking: "Копак." }}
             onChange={setProductionModeByYear}
+            disabled={savingRates}
+          />
+
+          {/* Q5 MEMO 5.2 (2026-05-15): уровень себестоимости BOM. */}
+          <div className="mt-3 flex items-center gap-3">
+            <span className="text-sm font-medium">Активный уровень BOM:</span>
+            <Select
+              value={bomCostLevel}
+              onValueChange={(v) => {
+                if (v === null) return;
+                setBomCostLevel(v);
+              }}
+              disabled={savingRates}
+              items={{
+                max: "Максимальный",
+                normal: "Нормальный",
+                optimal: "Оптимальный",
+              }}
+            >
+              <SelectTrigger className="h-8 w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="max">Максимальный (старт)</SelectItem>
+                <SelectItem value="normal">Нормальный</SelectItem>
+                <SelectItem value="optimal">Оптимальный (объём)</SelectItem>
+              </SelectContent>
+            </Select>
+            <span className="text-xs text-muted-foreground">
+              BOM-позиции хранятся в 3 уровнях. Engine берёт активный
+              уровень из этого поля (можно тюнинговать по годам ниже).
+            </span>
+          </div>
+          <YearOverrideEditor
+            title="Переключать уровень BOM по годам"
+            hint="(пример: Y1=максимальный, Y2+=нормальный)"
+            scalarValue={bomCostLevel}
+            value={bomCostLevelByYear}
+            options={{
+              max: "Макс.",
+              normal: "Норм.",
+              optimal: "Оптим.",
+            }}
+            onChange={setBomCostLevelByYear}
             disabled={savingRates}
           />
 

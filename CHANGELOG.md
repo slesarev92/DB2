@@ -13,6 +13,25 @@
 
 ### Changed (Phase B)
 
+- **B.11 3 уровня себестоимости BOM (Q5 MEMO 5.2, 2026-05-15).** Каждый
+  ингредиент BOM хранится в трёх уровнях: `max` (старт, малые объёмы),
+  `normal` (дефолт), `optimal` (зрелые объёмы, лучший копакер).
+  Уровень выбирается per-период через `ProjectSKU.bom_cost_level` скаляр
+  + `bom_cost_level_by_year` JSONB override (паттерн идентичен Q1).
+  - Миграция `d4e5f6a7b8c9`: ADD `bom_items.cost_level` + UNIQUE
+    (psk, ingredient, level), ADD `project_skus.bom_cost_level`
+    + `.bom_cost_level_by_year`.
+  - Engine: `calculation_service` группирует BOM строки по уровню,
+    строит 3 ряда `inflate_series`, выбирает per-период; fallback на
+    `normal` если выбранный уровень пустой (не сломает расчёт когда
+    `max`/`optimal` ещё не заполнены).
+  - UI: новый generic `YearOverrideEditor` (объединил Q1+Q5 редакторы
+    под одним компонентом, удалил отдельный `production-mode-by-year-editor`).
+    В `bom-panel.tsx` добавлен Select "Активный уровень BOM" + YearOverrideEditor
+    для per-year switch.
+  - Тесты: 472/472 passed (4 acceptance GORJI — числа не сдвинулись,
+    т.к. дефолт = "normal" для всех existing строк).
+
 - **B.8 production_mode по годам (Q1, 2026-05-15).** Режим производства
   (копакинг / своё) теперь переключается **по годам**. Пример: Y1=копак,
   Y2=своё, Y3+=копак. Гранулярность годовая (10 значений). Хранение —
