@@ -216,6 +216,8 @@ def _build_input_for_range(
         bom_unit_cost=bom_per_period,
         production_cost_rate=tuple([GORJI_PROD_RATE] * n),
         copacking_per_unit=0.0,
+        # Q1 (2026-05-15): per-period mode, default "own" для GORJI эталона.
+        production_mode_by_period=tuple(["own"] * n),
         logistics_cost_per_kg=logistic_kg_series,
         sku_volume_l=GORJI_VOLUME_L,
         ca_m_rate=GORJI_CA_M_RATE,

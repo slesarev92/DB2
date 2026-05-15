@@ -25,6 +25,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { MockupGallery } from "@/components/projects/mockup-gallery";
+import { ProductionModeByYearEditor } from "@/components/projects/production-mode-by-year-editor";
 import { SkuImageUpload } from "@/components/projects/sku-image-upload";
 import { ApiError } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
@@ -177,6 +178,11 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
   const [productionMode, setProductionMode] = useState("own");
   const [copackingRate, setCopackingRate] = useState("");
   const [productionCostRate, setProductionCostRate] = useState("");
+  // Q1 (2026-05-15): годовой override режима. Ключи "1".."10".
+  // Пустой объект = override выключен, используется скаляр productionMode.
+  const [productionModeByYear, setProductionModeByYear] = useState<
+    Record<string, string>
+  >({});
 
   // Загрузка ProjectSKU + BOM при смене pskId или reload
   useEffect(() => {
@@ -193,6 +199,7 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
         setProductionMode(pskData.production_mode ?? "own");
         setCopackingRate(pskData.copacking_rate ?? "0");
         setProductionCostRate(pskData.production_cost_rate);
+        setProductionModeByYear(pskData.production_mode_by_year ?? {});
       })
       .catch((err) => {
         if (cancelled) return;
@@ -299,6 +306,18 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
     void saveRates();
   }, [productionMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Q1: auto-save при смене production_mode_by_year (Select по годам).
+  // Сравниваем по сериализованному JSON, чтобы не триггерить save при
+  // одинаковых объектах с разной ссылкой.
+  const initialModeByYearRef = useRef(JSON.stringify(productionModeByYear));
+  useEffect(() => {
+    if (psk === null) return;
+    const serialized = JSON.stringify(productionModeByYear);
+    if (initialModeByYearRef.current === serialized) return;
+    initialModeByYearRef.current = serialized;
+    void saveRates();
+  }, [productionModeByYear]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function saveRates() {
     if (psk === null) return;
     setSavingRates(true);
@@ -308,6 +327,7 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
         production_mode: productionMode,
         copacking_rate: copackingRate,
         production_cost_rate: productionCostRate,
+        production_mode_by_year: productionModeByYear,
       });
       toast.success("Параметры SKU сохранены");
       reload();
@@ -387,6 +407,14 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
               Копакинг
             </label>
           </div>
+
+          {/* Q1 (2026-05-15): годовой override режима производства. */}
+          <ProductionModeByYearEditor
+            scalarMode={productionMode}
+            value={productionModeByYear}
+            onChange={setProductionModeByYear}
+            disabled={savingRates}
+          />
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {productionMode === "own" ? (

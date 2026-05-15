@@ -38,14 +38,23 @@ def step(ctx: PipelineContext) -> PipelineContext:
     copacking: list[float] = [0.0] * n
     total: list[float] = [0.0] * n
 
-    is_copacking = inp.production_mode == "copacking"
+    # Q1 (2026-05-15): production_mode per-period. Длина по контракту = n;
+    # calculation_service строит tuple длины period_count из годового
+    # override + fallback на ProjectSKU.production_mode.
+    mode_by_period = inp.production_mode_by_period
+    if len(mode_by_period) != n:
+        raise RuntimeError(
+            f"production_mode_by_period length mismatch: got {len(mode_by_period)}, "
+            f"expected {n}"
+        )
     copack_unit = inp.copacking_per_unit
 
     for t in range(n):
         vol = ctx.volume_units[t]
         m = inp.bom_unit_cost[t] * vol
+        is_copacking_t = mode_by_period[t] == "copacking"
 
-        if is_copacking:
+        if is_copacking_t:
             # Копакинг: production = 0, copacking = rate × volume
             p = 0.0
             c = copack_unit * vol

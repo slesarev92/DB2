@@ -431,7 +431,9 @@ class ProjectSKU(Base, TimestampMixin):
     include: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     # Режим производства: own (собственное) или copacking (контрактное).
-    # Определяет структуру COGS в pipeline (s03_cogs):
+    # Скаляр — фолбэк дефолт для всего горизонта проекта; per-year override
+    # см. в production_mode_by_year ниже.
+    # Структура COGS в pipeline (s03_cogs):
     # - own: production_cost = ex_factory × production_cost_rate × volume; copacking = 0
     # - copacking: copacking = copacking_rate × volume; production_cost = 0
     production_mode: Mapped[str] = mapped_column(
@@ -439,6 +441,15 @@ class ProjectSKU(Base, TimestampMixin):
     )
     copacking_rate: Mapped[Decimal] = mapped_column(
         Numeric(15, 4), nullable=False, default=Decimal("0")
+    )
+
+    # Q1 (CLIENT_FEEDBACK_v2_DECISIONS.md, 2026-05-15): годовой override
+    # режима производства. Ключи — model_year (1..10) как строки в JSON,
+    # значения — "own" | "copacking". Пример: {"1": "copacking", "2": "own",
+    # "3": "copacking"} означает Y1 копакинг, Y2 своё, Y3+ копакинг.
+    # Если год не указан — fallback на production_mode скаляр.
+    production_mode_by_year: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default="{}",
     )
 
     # Rate-параметры SKU как % от выручки (D-04 в TZ_VS_EXCEL_DISCREPANCIES).

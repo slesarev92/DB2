@@ -243,6 +243,8 @@ export interface ProjectSKUCreate {
   production_mode?: string;
   copacking_rate?: string;
   production_cost_rate?: string;
+  /** Q1 (2026-05-15): годовой override режима. Ключи "1".."10". */
+  production_mode_by_year?: Record<string, string>;
   package_image_id?: number | null;
 }
 
@@ -251,6 +253,7 @@ export interface ProjectSKUUpdate {
   production_mode?: string;
   copacking_rate?: string;
   production_cost_rate?: string;
+  production_mode_by_year?: Record<string, string>;
   package_image_id?: number | null;
 }
 
@@ -263,6 +266,7 @@ export interface ProjectSKURead {
   production_mode: string;
   copacking_rate: string;
   production_cost_rate: string;
+  production_mode_by_year: Record<string, string>;
   package_image_id: number | null;
   created_at: string;
 }

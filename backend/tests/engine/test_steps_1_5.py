@@ -69,6 +69,14 @@ def make_input(**overrides) -> PipelineInput:
     ps_tuple = _to_tuple("promo_share", 0.0)
     prod_rate_tuple = _to_tuple("production_cost_rate", 0.0)
 
+    # Q1: backwards-compat — старые тесты передают production_mode скаляром.
+    # Конвертируем в production_mode_by_period если передан string.
+    if "production_mode" in overrides:
+        mode_value = overrides.pop("production_mode")
+        overrides.setdefault(
+            "production_mode_by_period", tuple([mode_value] * n)
+        )
+
     defaults: dict = {
         "project_sku_channel_id": 1,
         "scenario_id": 1,
@@ -88,6 +96,12 @@ def make_input(**overrides) -> PipelineInput:
         "bom_unit_cost": bom_unit_cost,
         "production_cost_rate": prod_rate_tuple,
         "copacking_per_unit": 0.0,
+        # Q1 (2026-05-15): production_mode per-period (default "own").
+        # Тесты могут переопределить через overrides production_mode_by_period
+        # tuple/list или одно значение для всех периодов.
+        "production_mode_by_period": tuple(
+            ["own"] * n
+        ),
         "logistics_cost_per_kg": log_per_kg,
         "sku_volume_l": 0.5,
         "ca_m_rate": 0.0,

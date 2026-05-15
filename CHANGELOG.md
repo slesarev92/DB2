@@ -13,6 +13,21 @@
 
 ### Changed (Phase B)
 
+- **B.8 production_mode по годам (Q1, 2026-05-15).** Режим производства
+  (копакинг / своё) теперь переключается **по годам**. Пример: Y1=копак,
+  Y2=своё, Y3+=копак. Гранулярность годовая (10 значений). Хранение —
+  JSONB `production_mode_by_year` на `ProjectSKU` (пустой объект = override
+  выключен, используется скаляр).
+  - Миграция `c3d4e5f6a7b8`: ADD COLUMN production_mode_by_year JSONB
+    с default '{}'.
+  - Engine: `PipelineInput.production_mode_by_period: tuple[str, ...]`
+    (per-period). `calculation_service` строит tuple из годового JSONB
+    с fallback на скаляр. `s03_cogs` проверяет per-period и применяет
+    взаимоисключение own/copacking в каждом периоде.
+  - UI: новый компонент `ProductionModeByYearEditor` в `bom-panel.tsx` —
+    чекбокс "Переключать режим по годам" + Select-сетка Y1..Y10.
+  - Тесты: 472/472 passed (including 4 acceptance GORJI — числовые
+    результаты эталона не изменились, default = "own" для всех годов).
 - **B.7 CA&M и Marketing → per-channel (Q6, 2026-05-15).** Поля
   `ca_m_rate` и `marketing_rate` перенесены с `ProjectSKU` на
   `ProjectSKUChannel` — в HM/SM/TT/E-COM маркетинг разный,

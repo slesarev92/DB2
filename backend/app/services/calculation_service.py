@@ -457,6 +457,15 @@ async def _build_line_input(
         bom_unit_cost_base=bom_unit_cost_base,
     )
 
+    # Q1 (2026-05-15): production_mode per-period.
+    # Скаляр psk.production_mode = дефолт для всего горизонта.
+    # JSONB psk.production_mode_by_year = годовой override (ключи "1".."10").
+    default_mode = psk.production_mode or "own"
+    mode_by_year = psk.production_mode_by_year or {}
+    mode_arr = [
+        mode_by_year.get(str(model_year[t]), default_mode) for t in range(n)
+    ]
+
     return PipelineInput(
         project_sku_channel_id=psc.id,
         scenario_id=scenario.id,
@@ -476,7 +485,7 @@ async def _build_line_input(
         bom_unit_cost=tuple(bom_arr),
         production_cost_rate=tuple(prod_rate_arr),
         copacking_per_unit=float(psk.copacking_rate) if psk.copacking_rate else 0.0,
-        production_mode=psk.production_mode or "own",
+        production_mode_by_period=tuple(mode_arr),
         logistics_cost_per_kg=tuple(log_arr),
         sku_volume_l=float(psk.sku.volume_l) if psk.sku.volume_l else 0.0,
         # Q6 (2026-05-15): CA&M и Marketing per-channel — берём с PSC.

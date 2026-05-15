@@ -92,8 +92,13 @@ class PipelineInput:
     product_density: float = 1.0    # кг/л. Для напитков ≈ 1.0 (D-09).
 
     # --- Copacking (LOGIC-01) ---
-    copacking_per_unit: float = 0.0  # ₽/unit. Используется если production_mode="copacking".
-    production_mode: str = "own"    # "own" или "copacking". Определяет COGS в s03.
+    copacking_per_unit: float = 0.0  # ₽/unit. Используется если режим = "copacking".
+    # Q1 (2026-05-15): режим производства per-period. Длина = period_count.
+    # Допустимые значения "own" / "copacking". Заполняется в calculation_service:
+    # годовой override из ProjectSKU.production_mode_by_year, fallback на скаляр
+    # ProjectSKU.production_mode. Взаимоисключение own/copacking сохраняется
+    # в каждом периоде.
+    production_mode_by_period: tuple[str, ...] = ()
 
     # Go/No-Go порог Contribution Margin (настраиваемый per-project, default 0.25).
     cm_threshold: float = 0.25
@@ -147,6 +152,17 @@ class PipelineInput:
             raise ValueError(
                 f"PipelineInput.capex has length {len(self.capex)}, "
                 f"expected {n} or 0 (empty = zeros)"
+            )
+        # Q1: production_mode_by_period может быть пустым для агрегатных
+        # инпутов (aggregator передаёт () — s03 в агрегате не вызывается).
+        # Для per-line инпутов длина обязательна = n.
+        if (
+            self.production_mode_by_period
+            and len(self.production_mode_by_period) != n
+        ):
+            raise ValueError(
+                f"PipelineInput.production_mode_by_period has length "
+                f"{len(self.production_mode_by_period)}, expected {n} or 0"
             )
 
 
