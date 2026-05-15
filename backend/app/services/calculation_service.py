@@ -466,6 +466,24 @@ async def _build_line_input(
         shelf_arr = [v * (1.0 + delta_shelf) for v in shelf_arr]
     if delta_bom != 0.0:
         bom_arr = [v * (1.0 + delta_bom) for v in bom_arr]
+
+    # C #14: per-period override для logistics применяется ПЕРЕД scenario
+    # delta_logistics. Семантика «Option B»: override = новый base тариф,
+    # scenario stress (+delta_log%) применяется поверх. Иначе stress-тест
+    # был бы неинформативен в override-периодах. Для других 3 полей
+    # (copacking/CA&M/Marketing) delta-multipliers нет — там override
+    # применяется в C #14 блоке ниже без перестановки.
+    if psc.logistics_cost_per_kg_by_period:
+        log_arr = [
+            float(
+                _resolve_period_value(
+                    psc.logistics_cost_per_kg_by_period,
+                    Decimal(str(log_arr[i])),
+                    i,
+                )
+            )
+            for i in range(len(log_arr))
+        ]
     if delta_log != 0.0:
         log_arr = [v * (1.0 + delta_log) for v in log_arr]
 
@@ -516,32 +534,20 @@ async def _build_line_input(
         mode_by_year.get(str(model_year[t]), default_mode) for t in range(n)
     ]
 
-    # C #14: per-period override-массивы для 4 параметров. Эффективное
-    # значение = override (если есть) → fallback на per-period базу
-    # (текущее поведение). Для logistics база — log_arr[i] (где уже
-    # применён PeriodValue → static fallback). Для copacking/CA&M/Marketing
-    # база — соответствующий скаляр PSC/PSK.
+    # C #14: per-period override-массивы для 3 полей без scenario delta
+    # (copacking, CA&M, marketing). Logistics override уже применён выше
+    # (до delta_logistics) — здесь просто берём текущий log_arr.
     #
-    # NULL JSONB → пустой output tuple? Нет: каждый индекс из 43 строится
-    # независимо. Если все индексы fallback'ают на одно и то же значение,
-    # это идентично текущему поведению (drift = 0 by construction).
+    # NULL JSONB → каждый индекс fallback'ает на скаляр → drift = 0
+    # by construction (поведение идентично pre-Task 7).
     copack_scalar = (
-        Decimal(psk.copacking_rate) if psk.copacking_rate else Decimal("0")
+        Decimal(psk.copacking_rate) if psk.copacking_rate is not None else Decimal("0")
     )
     copacking_rate_arr = tuple(
         float(_resolve_period_value(psk.copacking_rate_by_period, copack_scalar, i))
         for i in range(n)
     )
-    logistics_cost_per_kg_arr = tuple(
-        float(
-            _resolve_period_value(
-                psc.logistics_cost_per_kg_by_period,
-                Decimal(str(log_arr[i])),
-                i,
-            )
-        )
-        for i in range(n)
-    )
+    logistics_cost_per_kg_arr = tuple(log_arr)
     ca_m_scalar = Decimal(psc.ca_m_rate)
     marketing_scalar = Decimal(psc.marketing_rate)
     ca_m_rate_arr = tuple(

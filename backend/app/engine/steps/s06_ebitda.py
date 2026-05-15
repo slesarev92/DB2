@@ -1,9 +1,12 @@
 """Шаг 6 — EBITDA.
 
 Формула (Excel: DATA rows 29-31, см. также D-05):
-    CA_M_COST[t]      = NET_REVENUE[t] × CA_M_RATE
-    MARKETING_COST[t] = NET_REVENUE[t] × MARKETING_RATE
+    CA_M_COST[t]      = NET_REVENUE[t] × CA_M_RATE[t]
+    MARKETING_COST[t] = NET_REVENUE[t] × MARKETING_RATE[t]
     EBITDA[t]         = CONTRIBUTION[t] − CA_M_COST[t] − MARKETING_COST[t]
+
+C #14 (2026-05-15): rate'ы per-period — берутся из ca_m_rate_arr/
+marketing_rate_arr (override) с fallback на скаляр (см. _build_line_input).
 
 CA&M (КАиУР) и Marketing — % от выручки на уровне ProjectSKU. По D-05
 именно эти статьи Excel вычитает на уровне EBITDA, а не на уровне
