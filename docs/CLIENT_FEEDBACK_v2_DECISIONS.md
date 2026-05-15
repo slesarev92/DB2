@@ -171,58 +171,73 @@ EX_FACTORY = SHELF_PRICE / (1 + VAT_RATE) × (1 − CHANNEL_MARGIN)
 
 # План работ — Фазы A/B/C
 
-## Фаза A — регрессии и блокеры данных
+Прогресс на 2026-05-15:
 
-Цель: чтобы demo не было "новое работает, старое сломано".
+| Фаза | Закрыто | Осталось |
+|---|---|---|
+| A — регрессии | 6/6 ✅ | — |
+| B — архитектура | 4.5/5 ⏳ | B.9b (помесячный Y1-Y3) |
+| C — фичи и UX | 0/19 | 19 пунктов |
 
-1. Логирование payload в `replace_plan` → диагностика Финплан +
-   CAPEX=0 (`TO_DIAGNOSE_LATER.md` D-2, D-3)
-2. Экспорт PDF/XLSX/PPTX — верификация в браузере на проде, фикс
-   (`TO_DIAGNOSE_LATER.md` D-1)
-3. Gantt не перестраивается → immutable update тасок
-   (`TO_DIAGNOSE_LATER.md` D-4)
-4. SKU images / логотипы — диагностика (`TO_DIAGNOSE_LATER.md` D-5, D-6)
-5. D-12 docstring + ROADMAP sync ("5 лет финально"); D-19 docstring
-   рассинхрон в `s11_kpi.py`
-6. Сценарии — intermittent ошибка (`TO_DIAGNOSE_LATER.md` D-7)
+## Фаза A — регрессии и блокеры данных ✅
 
-## Фаза B — архитектурные изменения
+Закрыта целиком. Demo не сломается на старых фичах.
 
-Цель: разблокировать P&L переработку и Fine Tuning.
+1. ✅ A.1 Логирование payload в `replace_plan` (`ea262e1`) — D-2, D-3
+2. ✅ A.2 Экспорт PDF/XLSX/PPTX — закрыто без правок (клиент подтвердил)
+3. ✅ A.3 Gantt status dropdown (`3aa5b8d`) — корневая причина была
+   рассинхрон языка ввода и `STATUS_COLORS`; попутно MEMO 1.2
+4. ✅ A.4 SKU images / лого — закрыто без правок (клиент подтвердил)
+5. ✅ A.5 D-12 docstring + ROADMAP sync ("5 лет финально") (`498486c`)
+6. ✅ A.6 Сценарии intermittent — diagnostic logging (`ea262e1`)
 
-7. **Q6:** CA&M / Marketing → per-channel (БД миграция, движок, UI)
-8. **Q1:** `production_mode_by_year` (новая таблица или JSONB на
-   ProjectSKU; движок; UI Fine Tuning)
-9. CAPEX/OPEX помесячно Y1-Y3 + статьи CAPEX (Молды, Линия розлива,
-   Оборудование, ...)
-10. **Q7:** UI для ставки НДС проекта, дефолт 22% для новых проектов
-11. 3 уровня себестоимости (max / normal / optimal) на BOM
+## Фаза B — архитектурные изменения ⏳ (4.5/5)
+
+7. ✅ **B.7 Q6 CA&M / Marketing → per-channel** (`53e4629`) — миграция
+   `b2c3d4e5f6a7`, engine + UI, GORJI acceptance 4/4 без сдвига
+8. ✅ **B.8 Q1 production_mode_by_year** (`f1ec2eb`) — JSONB на
+   ProjectSKU, PipelineInput per-period, UI YearOverrideEditor
+9. 🟡 **B.9 CAPEX/OPEX + статьи CAPEX (MEMO 2.1)** — часть 1 закрыта
+   (`9df4617`): таблица `capex_items` + UI "+ Статья CAPEX".
+   **Часть 2 (B.9b) — выделена в начало Фазы C, см. ниже.**
+10. ✅ **B.10 Q7 НДС dropdown + дефолт 22%** (`60d5edb`)
+11. ✅ **B.11 Q5 MEMO 5.2 — 3 уровня BOM** (`0875eb8`) — `cost_level`
+    на BOMItem + JSONB override per год; generic `YearOverrideEditor`
 
 ## Фаза C — фичи и UX
 
-Цель: довести MEMO до закрытия 30/30 пунктов.
-
-12. **Q4:** перенос OBPPC таб в "Содержание"
-13. Fine Tuning расширение: copacking_rate, logistics_per_l, CA&M,
+12. ⏳ **B.9b Помесячная гранулярность Y1-Y3 + UI матрицы 43 колонки.**
+    *Поднято наверх как самое impactful из C-задач.*
+    - Service переход с `_get_first_period_by_year` → сохранение
+      во **все** 43 период'а (M1..M36 + Y4..Y10) с UNIQUE гарантией
+    - Engine `aggregator.project_opex/project_capex` уже принимает
+      tuple длины n — backend infrastructure готова
+    - UI: переписать `financial-plan-editor.tsx` на матрицу
+      43 ячейки/scrollable с раскрытием статей; toggle "yearly view"
+      для обратной совместимости
+13. **Q4:** перенос OBPPC таб в "Содержание"
+14. Fine Tuning расширение: copacking_rate, logistics_per_l, CA&M,
     marketing per-period (помесячно для Y1-Y3, годами Y4-Y10)
-14. P&L фильтры + pivot Excel экспорт
-15. Каналы: группы (HM/SM/MM/TT/E-COM) + source_type (Nielsen/ЦРПТ/
+15. P&L фильтры + pivot Excel экспорт
+16. Каналы: группы (HM/SM/MM/TT/E-COM) + source_type (Nielsen/ЦРПТ/
     2GIS/Infoline/custom)
-16. АКБ автоматический расчёт из `nd_target × ОКБ`
-17. Waterfall-диаграмма в Unit-экономике
-18. Тип упаковки → справочник enum (ПЭТ/Стекло/Банка/Сашет/Стик/Пауч)
-19. Раскраска чувствительности с настраиваемыми порогами
-20. Статус проекта dropdown + ручная раскраска Gantt
-21. Collapse/expand разделов отчёта
-22. кг/л через слеш, единицы измерения systematically
-23. Перенос Сценариев → в Анализ/Результаты + название
-24. Дублирование SKU между табами устранить
-25. BOM сводка справа (Сырьё/Материалы/Прочее/Итого)
-26. PDF чекбоксы выбора секций
-27. Подсветка BOM — документировать пороги
-28. Валидация вводных (отрицательная цена, нулевой объём)
-29. `nielsen_benchmarks.source_type` — добавить заранее
-30. Финальная русификация спот-чек
+17. АКБ автоматический расчёт из `nd_target × ОКБ`
+18. Waterfall-диаграмма в Unit-экономике
+19. Тип упаковки → справочник enum (ПЭТ/Стекло/Банка/Сашет/Стик/Пауч)
+20. Раскраска чувствительности с настраиваемыми порогами
+21. Статус проекта dropdown + ручная раскраска Gantt — *частично
+    закрыто A.3* (Roadmap status уже dropdown; осталась раскраска
+    ячеек Гантта вручную и общий "статус проекта" вне Roadmap-задач)
+22. Collapse/expand разделов отчёта
+23. кг/л через слеш, единицы измерения systematically
+24. Перенос Сценариев → в Анализ/Результаты + название
+25. Дублирование SKU между табами устранить
+26. BOM сводка справа (Сырьё/Материалы/Прочее/Итого)
+27. PDF чекбоксы выбора секций
+28. Подсветка BOM — документировать пороги
+29. Валидация вводных (отрицательная цена, нулевой объём)
+30. `nielsen_benchmarks.source_type` — добавить заранее
+31. Финальная русификация спот-чек
 
 ---
 
