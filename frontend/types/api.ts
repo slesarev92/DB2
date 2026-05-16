@@ -733,7 +733,12 @@ export const PRICE_TIER_LABELS: Record<string, string> = {
   value: "Эконом",
 };
 
-/** Формат упаковки. */
+/**
+ * Формат упаковки OBPPC-матрицы (англ. ключи bottle/can/pack/box).
+ *
+ * НЕ путать с `PackFormat` из `@/lib/pack-format` — там тип материала
+ * SKU (ПЭТ/Стекло/Банка/Сашет/Стик/Пауч). См. C #19 spec §2 «Out of scope».
+ */
 export const PACK_FORMAT_LABELS: Record<string, string> = {
   bottle: "Бутылка",
   can: "Банка",
