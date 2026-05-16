@@ -11,6 +11,10 @@
 
 Фаза B (MEMO v2.1 — архитектурные изменения). В работе.
 
+### Added (Phase C — C #20)
+
+- **C #20**: Раскраска чувствительности с настраиваемыми порогами. На вкладке «Чувствительность» появились два input «Зелёный ≥ %» и «Красный ≤ −%» (default 5/5) + кнопка «Сбросить». Пороги применяются к NPV-таблице (tailwind text-color) и tornado-bars (recharts `<Cell>` fill). Значения сохраняются в localStorage (`sensitivity-thresholds-v1`), 0-100 clamping. Helpers `classifyNpv`/`classifyNpvHex` в `lib/sensitivity-thresholds.ts`. Backend не трогался. (MEMO 9 — Чувствительность)
+
 ### Added (Phase C — C #25)
 
 - **C #25**: Устранено дублирование ввода SKU между вкладками. На вкладке «Каналы» диалог добавления SKU теперь работает только в режиме привязки существующего из каталога (`existingOnly` prop в `AddSkuDialog`). Mode toggle и форма создания нового SKU скрыты, заголовок диалога — «Привязать SKU к проекту», label кнопки — «+ Привязать SKU». На вкладке «SKU и BOM» оба режима (existing + new) остаются доступными, заголовок «Добавить SKU в проект». Backend защищён `ProjectSKU.sku_id` с `RESTRICT FK` — orphan невозможен. (MEMO 4.4)
