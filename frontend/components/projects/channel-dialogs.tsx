@@ -28,24 +28,459 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ApiError } from "@/lib/api";
 import {
   CHANNEL_GROUP_LABELS,
   CHANNEL_GROUP_ORDER,
+  CHANNEL_SOURCE_TYPE_LABELS,
 } from "@/lib/channel-group";
 import {
   bulkAddChannelsToPsk,
+  createChannel,
   listChannels,
+  updateChannel,
   updatePskChannel,
 } from "@/lib/channels";
 import { pluralizeRu } from "@/lib/format";
 
 import type {
   Channel,
+  ChannelCreate,
   ChannelGroup,
+  ChannelSourceType,
   ProjectSKUChannelDefaults,
   ProjectSKUChannelRead,
 } from "@/types/api";
+
+// ============================================================
+// Shared form state for catalog create/edit dialogs
+// ============================================================
+
+interface ChannelCatalogFormState {
+  code: string;
+  name: string;
+  channel_group: ChannelGroup;
+  source_type: ChannelSourceType | "";
+  region: string;
+  universe_outlets: string;
+}
+
+const EMPTY_CATALOG_FORM: ChannelCatalogFormState = {
+  code: "",
+  name: "",
+  channel_group: "OTHER",
+  source_type: "custom",
+  region: "",
+  universe_outlets: "",
+};
+
+// ============================================================
+// CreateChannelDialog (C #16-T4)
+// ============================================================
+
+interface CreateChannelDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Вызывается с созданным каналом — родитель добавит его в список и автоматически чекнет. */
+  onCreated: (channel: Channel) => void;
+}
+
+export function CreateChannelDialog({
+  open,
+  onOpenChange,
+  onCreated,
+}: CreateChannelDialogProps) {
+  const [form, setForm] = useState<ChannelCatalogFormState>(EMPTY_CATALOG_FORM);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setForm(EMPTY_CATALOG_FORM);
+      setError(null);
+      setSubmitting(false);
+    }
+  }, [open]);
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    if (!form.code.trim() || !form.name.trim()) {
+      setError("Код и название обязательны");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const payload: ChannelCreate = {
+        code: form.code.trim(),
+        name: form.name.trim(),
+        channel_group: form.channel_group,
+        source_type: form.source_type === "" ? null : form.source_type,
+        region: form.region.trim() || null,
+        universe_outlets:
+          form.universe_outlets === "" ? null : Number(form.universe_outlets),
+      };
+      const channel = await createChannel(payload);
+      toast.success(`Канал «${channel.code}» создан`);
+      onCreated(channel);
+      onOpenChange(false);
+    } catch (err) {
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка";
+      setError(msg);
+      toast.error(`Не удалось создать: ${msg}`);
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Новый канал</DialogTitle>
+          <DialogDescription>
+            Создание кастомного канала. После сохранения он появится в списке
+            Фазы 1 и будет автоматически отмечен.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="space-y-1">
+            <Label htmlFor="cch_code">Код *</Label>
+            <Input
+              id="cch_code"
+              value={form.code}
+              onChange={(e) => setForm({ ...form, code: e.target.value })}
+              maxLength={50}
+              disabled={submitting}
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="cch_name">Название *</Label>
+            <Input
+              id="cch_name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              maxLength={255}
+              disabled={submitting}
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="cch_group">Группа *</Label>
+            <Select
+              value={form.channel_group}
+              onValueChange={(v) =>
+                setForm({ ...form, channel_group: v as ChannelGroup })
+              }
+              disabled={submitting}
+              items={Object.fromEntries(
+                CHANNEL_GROUP_ORDER.map((g) => [g, CHANNEL_GROUP_LABELS[g]]),
+              )}
+            >
+              <SelectTrigger id="cch_group">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CHANNEL_GROUP_ORDER.map((g) => (
+                  <SelectItem key={g} value={g}>
+                    {CHANNEL_GROUP_LABELS[g]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="cch_src">Источник данных</Label>
+            <Select
+              value={form.source_type === "" ? "__none__" : form.source_type}
+              onValueChange={(v) =>
+                setForm({
+                  ...form,
+                  source_type: v === "__none__" ? "" : (v as ChannelSourceType),
+                })
+              }
+              disabled={submitting}
+              items={{
+                __none__: "—",
+                ...Object.fromEntries(
+                  Object.entries(CHANNEL_SOURCE_TYPE_LABELS),
+                ),
+              }}
+            >
+              <SelectTrigger id="cch_src">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">—</SelectItem>
+                {Object.entries(CHANNEL_SOURCE_TYPE_LABELS).map(([k, v]) => (
+                  <SelectItem key={k} value={k}>
+                    {v}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="cch_region">Регион</Label>
+              <Input
+                id="cch_region"
+                value={form.region}
+                onChange={(e) => setForm({ ...form, region: e.target.value })}
+                maxLength={100}
+                disabled={submitting}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="cch_universe">ОКБ (шт.)</Label>
+              <Input
+                id="cch_universe"
+                type="number"
+                min="0"
+                value={form.universe_outlets}
+                onChange={(e) =>
+                  setForm({ ...form, universe_outlets: e.target.value })
+                }
+                disabled={submitting}
+              />
+            </div>
+          </div>
+
+          {error !== null && (
+            <p className="text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          )}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={submitting}
+            >
+              Отмена
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "Создание..." : "Создать"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ============================================================
+// EditChannelCatalogDialog (C #16-T4)
+// ============================================================
+
+interface EditChannelCatalogDialogProps {
+  channel: Channel | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Вызывается после успешного PATCH — родитель обновляет список каналов. */
+  onUpdated: (channel: Channel) => void;
+}
+
+export function EditChannelCatalogDialog({
+  channel,
+  open,
+  onOpenChange,
+  onUpdated,
+}: EditChannelCatalogDialogProps) {
+  const [form, setForm] = useState<ChannelCatalogFormState>(EMPTY_CATALOG_FORM);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open && channel !== null) {
+      setForm({
+        code: channel.code,
+        name: channel.name,
+        channel_group: channel.channel_group,
+        source_type: channel.source_type ?? "",
+        region: channel.region ?? "",
+        universe_outlets:
+          channel.universe_outlets === null
+            ? ""
+            : String(channel.universe_outlets),
+      });
+      setError(null);
+      setSubmitting(false);
+    }
+  }, [open, channel]);
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (channel === null) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      const updated = await updateChannel(channel.id, {
+        name: form.name.trim(),
+        channel_group: form.channel_group,
+        source_type: form.source_type === "" ? null : form.source_type,
+        region: form.region.trim() || null,
+        universe_outlets:
+          form.universe_outlets === "" ? null : Number(form.universe_outlets),
+      });
+      toast.success(`Канал «${updated.code}» обновлён`);
+      onUpdated(updated);
+      onOpenChange(false);
+    } catch (err) {
+      const msg =
+        err instanceof ApiError ? err.detail ?? err.message : "Ошибка";
+      setError(msg);
+      toast.error(`Не удалось сохранить: ${msg}`);
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Канал «{channel?.code ?? ""}»</DialogTitle>
+          <DialogDescription>
+            Редактирование канала в каталоге. Изменения видны во всех проектах.
+            Код менять нельзя — это якорь для импорта/экспорта.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          {/* code — immutable, только для отображения */}
+          <div className="space-y-1">
+            <Label htmlFor="ech_code">Код</Label>
+            <Input id="ech_code" value={form.code} disabled />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="ech_name">Название *</Label>
+            <Input
+              id="ech_name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              maxLength={255}
+              disabled={submitting}
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="ech_group">Группа *</Label>
+            <Select
+              value={form.channel_group}
+              onValueChange={(v) =>
+                setForm({ ...form, channel_group: v as ChannelGroup })
+              }
+              disabled={submitting}
+              items={Object.fromEntries(
+                CHANNEL_GROUP_ORDER.map((g) => [g, CHANNEL_GROUP_LABELS[g]]),
+              )}
+            >
+              <SelectTrigger id="ech_group">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CHANNEL_GROUP_ORDER.map((g) => (
+                  <SelectItem key={g} value={g}>
+                    {CHANNEL_GROUP_LABELS[g]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="ech_src">Источник данных</Label>
+            <Select
+              value={form.source_type === "" ? "__none__" : form.source_type}
+              onValueChange={(v) =>
+                setForm({
+                  ...form,
+                  source_type: v === "__none__" ? "" : (v as ChannelSourceType),
+                })
+              }
+              disabled={submitting}
+              items={{
+                __none__: "—",
+                ...Object.fromEntries(
+                  Object.entries(CHANNEL_SOURCE_TYPE_LABELS),
+                ),
+              }}
+            >
+              <SelectTrigger id="ech_src">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">—</SelectItem>
+                {Object.entries(CHANNEL_SOURCE_TYPE_LABELS).map(([k, v]) => (
+                  <SelectItem key={k} value={k}>
+                    {v}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="ech_region">Регион</Label>
+              <Input
+                id="ech_region"
+                value={form.region}
+                onChange={(e) => setForm({ ...form, region: e.target.value })}
+                maxLength={100}
+                disabled={submitting}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="ech_universe">ОКБ (шт.)</Label>
+              <Input
+                id="ech_universe"
+                type="number"
+                min="0"
+                value={form.universe_outlets}
+                onChange={(e) =>
+                  setForm({ ...form, universe_outlets: e.target.value })
+                }
+                disabled={submitting}
+              />
+            </div>
+          </div>
+
+          {error !== null && (
+            <p className="text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          )}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={submitting}
+            >
+              Отмена
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "Сохранение..." : "Сохранить"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 // ============================================================
 // AddChannelsDialog (C #16): двухфазный bulk-flow
@@ -98,6 +533,7 @@ export function AddChannelsDialog({
   onOpenChange,
   excludeChannelIds,
   onAdded,
+  onCatalogChanged,
 }: AddChannelsDialogProps) {
   const [phase, setPhase] = useState<Phase>("pick");
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -105,6 +541,9 @@ export function AddChannelsDialog({
   const [defaults, setDefaults] = useState<ChannelFormState>(EMPTY_CHANNEL_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // C #16-T4: sub-dialog state
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
   // C #16: collapse state — Map<group, isOpen>. Хранится локально (без LS),
   // потому что в диалоге persistence не нужен; init из defaults вычисляется
   // в useMemo ниже.
@@ -183,6 +622,25 @@ export function AddChannelsDialog({
     );
   }, [channels, channelsByGroup, excludeSet]);
 
+  // C #16-T4: reload catalog after create/update in sub-dialogs
+  function reloadChannels() {
+    listChannels()
+      .then(setChannels)
+      .catch(() => {});
+  }
+
+  function handleCatalogCreated(channel: Channel) {
+    reloadChannels();
+    // Автоматически чекнуть только что созданный канал
+    setSelectedIds((prev) => new Set(prev).add(channel.id));
+    onCatalogChanged?.();
+  }
+
+  function handleCatalogUpdated(_channel: Channel) {
+    reloadChannels();
+    onCatalogChanged?.();
+  }
+
   const toggleChannel = useCallback((id: number, checked: boolean) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -230,6 +688,7 @@ export function AddChannelsDialog({
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         {phase === "pick" && (
@@ -303,19 +762,13 @@ export function AddChannelsDialog({
                                 </span>
                               )}
                             </label>
-                            {/* C #16-T4: catalog edit ⚙ button hook. */}
+                            {/* C #16-T4: открыть EditChannelCatalogDialog */}
                             <Button
                               type="button"
                               variant="ghost"
                               size="sm"
                               aria-label="Редактировать канал в каталоге"
-                              onClick={() =>
-                                // eslint-disable-next-line no-console
-                                console.log(
-                                  "T4 will hook EditChannelCatalogDialog",
-                                  c.id,
-                                )
-                              }
+                              onClick={() => setEditingChannel(c)}
                             >
                               <Settings className="size-3.5" aria-hidden />
                             </Button>
@@ -338,14 +791,11 @@ export function AddChannelsDialog({
               <span className="text-sm text-muted-foreground mr-auto">
                 Выбрано: {selectedIds.size}
               </span>
-              {/* C #16-T4: hook для CreateChannelDialog. */}
+              {/* C #16-T4: открыть CreateChannelDialog */}
               <Button
                 type="button"
                 variant="outline"
-                onClick={() =>
-                  // eslint-disable-next-line no-console
-                  console.log("T4 will hook CreateChannelDialog")
-                }
+                onClick={() => setCreateDialogOpen(true)}
               >
                 + Новый канал
               </Button>
@@ -414,6 +864,23 @@ export function AddChannelsDialog({
         )}
       </DialogContent>
     </Dialog>
+
+    {/* C #16-T4: sub-dialogs — рендерим вне основного Dialog чтобы
+        избежать вложенных Dialog (конфликты z-index и portal в base-ui). */}
+    <CreateChannelDialog
+      open={createDialogOpen}
+      onOpenChange={setCreateDialogOpen}
+      onCreated={handleCatalogCreated}
+    />
+    <EditChannelCatalogDialog
+      channel={editingChannel}
+      open={editingChannel !== null}
+      onOpenChange={(o) => {
+        if (!o) setEditingChannel(null);
+      }}
+      onUpdated={handleCatalogUpdated}
+    />
+    </>
   );
 }
 
