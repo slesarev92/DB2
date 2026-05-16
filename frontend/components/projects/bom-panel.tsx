@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { FieldError } from "@/components/ui/field-error";
+import { FieldWarning } from "@/components/ui/field-warning";
 import { HelpButton } from "@/components/ui/help-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -105,7 +106,14 @@ const BOM_RULES: ValidationRules<BomField> = {
   ingredient_name: { required: true, message: "Введите название" },
   quantity_per_unit: { required: true, numeric: true, min: 0 },
   loss_pct: { numeric: true, min: 0, max: 1 },
-  price_per_unit: { numeric: true, min: 0 },
+  price_per_unit: {
+    numeric: true,
+    min: 0,
+    warn: {
+      when: (n) => n === 0,
+      message: "Цена сырья 0 — компонент не попадёт в COGS",
+    },
+  },
   vat_rate: { numeric: true, min: 0, max: 1 },
 };
 
@@ -160,8 +168,13 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
     };
   }, []);
   const bomRules = useMemo(() => BOM_RULES, []);
-  const { errors: bomErrors, validateAll: validateBom, clearError: clearBomError } =
-    useFieldValidation<BomField>(bomRules);
+  const {
+    errors: bomErrors,
+    warnings: bomWarnings,
+    validateAll: validateBom,
+    validateOne: validateBomField,
+    clearError: clearBomError,
+  } = useFieldValidation<BomField>(bomRules);
   const { sorted: sortedBom, sortState: bomSortState, toggleSort: toggleBomSort } =
     useSortableTable(bom ?? [], BOM_SORT_COLUMNS);
 
@@ -782,11 +795,13 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
                   setDraft({ ...draft, price_per_unit: e.target.value });
                   clearBomError("price_per_unit");
                 }}
+                onBlur={(e) => validateBomField("price_per_unit", e.target.value)}
                 aria-invalid={!!bomErrors.price_per_unit}
                 disabled={adding}
                 placeholder="80.00"
               />
               <FieldError error={bomErrors.price_per_unit} />
+              <FieldWarning warning={bomWarnings.price_per_unit} />
             </div>
             <div className="col-span-2 space-y-1">
               <Label htmlFor="bom-vat" className="flex items-center gap-1.5 text-xs">

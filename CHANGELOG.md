@@ -11,6 +11,11 @@
 
 Фаза B (MEMO v2.1 — архитектурные изменения). В работе.
 
+### Added (Phase C — C #29)
+
+- **C #29**: Валидация вводных (minimum protection). Inline amber-warnings (компонент `FieldWarning` с AlertTriangle) при значении `0` в критических полях: `shelf_price_reg` («Цена полки 0 ₽ — выручка обнулится»), `offtake_target` («Целевой offtake 0 — продаж не будет»), BOM `price_per_unit` («Цена сырья 0 — компонент не попадёт в COGS»), SKU `volume_l` («Объём 0 — расчёты per-unit некорректны»). Warnings не блокируют save — только сигнализируют пользователю. Hook `useFieldValidation` расширен `warn?: { when, message }` правилом (backward-compatible). Backend Pydantic `ge=0` остаётся защитой от отрицательных значений. (MEMO 7.2)
+- **C #29**: Playwright e2e `frontend/e2e/c29-input-validation.spec.ts` — 5 сценариев (4 positive + 1 negative). Test 4 (volume_l в AddSkuDialog) работает на чистом стеке; tests 1/2/3/5 помечены `test.skip` с TODO seed-data (требуют существующего канала/SKU в каталоге проекта).
+
 ### Added (Phase C — C #23)
 
 - **C #23**: SKU получил поле `unit_of_measure` (Literal "л" / "кг", default "л"). Везде в UI volume отображается с единицей (`1.5 л` / `0.5 кг`). Per-unit ценовые поля через `formatPerUnit(value, unit)` — `52,30 ₽/л` или `52,30 ₽/кг` в pricing/value-chain. Helpers `formatVolume`, `formatPerUnit`, `formatPieces` в `lib/format.ts`. (MEMO 1.2)
