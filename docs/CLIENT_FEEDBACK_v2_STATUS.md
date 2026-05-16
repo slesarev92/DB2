@@ -116,8 +116,8 @@ based_on: tag v2.4.0 (2026-04-15) + main HEAD
 |---|---|---|
 | Редактируемый каталог каналов | 🟡 | `Channel` таблица + CRUD endpoints (`api/channels.py`). Frontend `channels-panel.tsx` показывает список. Редактирование — есть. |
 | Кастомный канал | ✅ | Через CRUD POST `/api/channels`. |
-| Чекбоксы с группировкой HM/SM/MM/TT/E-COM | ❌ | `channels-panel.tsx` не имеет группировки по группам. `Channel` модель не имеет поля `group` / `category`. |
-| Источник данных (Nielsen/ЦРПТ/2GIS/Infoline/кастомный) | ❌ | Поля `source_type` на `Channel` нет. |
+| Чекбоксы с группировкой HM/SM/MM/TT/E-COM | ✅ | `channel_group` enum на `Channel` (C #16, 8 значений). UI: двухфазный `AddChannelsDialog` с `CollapsibleSection` per группу. |
+| Источник данных (Nielsen/ЦРПТ/2GIS/Infoline/кастомный) | ✅ | `source_type` enum на `Channel` (C #16, 5 значений, nullable). UI: Select в Create/Edit catalog диалогах. |
 | Баг верстки в названии канала | ⚠️ | Не локализован. |
 
 ### 4.2 Офтейки и рамп-ап
@@ -262,7 +262,7 @@ based_on: tag v2.4.0 (2026-04-15) + main HEAD
 8. **P&L фильтры + pivot Excel** (6.1, ❌) — endpoint возвращает агрегат, разрезов нет.
 9. **НДС 22%** (3.3, 🟡) — server_default `BOMItem.vat_rate` = 0.20, не 0.22. `Project.vat_rate` default 0.20. Per-ingredient VAT не используется в engine. **С 01.01.2026 РФ ставка 22%** — это уже текущая.
 10. **3 уровня себестоимости** (5.2, ❌) — нет ни поля, ни UI.
-11. **Группы каналов + источник данных** (4.1, ❌) — `Channel` без `group` и `source_type`.
+11. **Группы каналов + источник данных** (4.1, ✅ — закрыто C #16 2026-05-16) — `channel_group` + `source_type` на `Channel`, двухфазный UI диалог.
 12. **Структурные SKU поля для фильтрации** (3.3, 🟡) — суббренд/вкус слиты в `name`.
 
 ### 🟡 Средний
