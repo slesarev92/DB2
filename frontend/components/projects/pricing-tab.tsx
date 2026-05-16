@@ -16,7 +16,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { CollapsibleSection } from "@/components/ui/collapsible";
 import { ApiError, apiGet } from "@/lib/api";
 import { PRICING_SECTIONS } from "@/lib/analysis-sections";
+import { formatVolume } from "@/lib/format";
 import { useCollapseState } from "@/lib/use-collapse-state";
+import type { SkuUnitOfMeasure } from "@/types/api";
 
 interface PricingCell {
   channel_code: string;
@@ -35,6 +37,8 @@ interface SKUColumn {
   sku_name: string;
   sku_format: string | null;
   sku_volume_l: string | null;
+  /** C #23: единица измерения объёма/массы SKU. */
+  sku_unit_of_measure: SkuUnitOfMeasure;
   cogs_per_unit: string;
   channels: PricingCell[];
 }
@@ -129,7 +133,7 @@ export function PricingTab({ projectId }: { projectId: number }) {
                       <div>{s.sku_brand}</div>
                       <div className="text-[10px] text-muted-foreground font-normal">
                         {s.sku_name}
-                        {s.sku_volume_l ? ` ${s.sku_volume_l}L` : ""}
+                        {s.sku_volume_l ? ` ${formatVolume(s.sku_volume_l, s.sku_unit_of_measure)}` : ""}
                       </div>
                     </th>
                   ))}

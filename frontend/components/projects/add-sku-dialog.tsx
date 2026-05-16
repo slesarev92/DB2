@@ -29,7 +29,7 @@ import {
   listSkus,
 } from "@/lib/skus";
 
-import type { SKURead } from "@/types/api";
+import type { SkuUnitOfMeasure, SKURead } from "@/types/api";
 
 interface AddSkuDialogProps {
   projectId: number;
@@ -67,6 +67,7 @@ export function AddSkuDialog({
   const [name, setName] = useState("");
   const [format, setFormat] = useState<PackFormat | "">("");
   const [volumeL, setVolumeL] = useState("");
+  const [unitOfMeasure, setUnitOfMeasure] = useState<SkuUnitOfMeasure>("л");
   const [packageType, setPackageType] = useState("");
 
   // Загружаем глобальный каталог при открытии
@@ -95,6 +96,7 @@ export function AddSkuDialog({
     setName("");
     setFormat("");
     setVolumeL("");
+    setUnitOfMeasure("л");
     setPackageType("");
   }, [open]);
 
@@ -117,6 +119,7 @@ export function AddSkuDialog({
           name,
           format: format === "" ? null : format,
           volume_l: volumeL || null,
+          unit_of_measure: unitOfMeasure,
           package_type: packageType || null,
           segment: null,
         });
@@ -217,17 +220,35 @@ export function AddSkuDialog({
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="volume_l">Объём, л</Label>
-                  <Input
-                    id="volume_l"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={volumeL}
-                    onChange={(e) => setVolumeL(e.target.value)}
-                    disabled={submitting}
-                    placeholder="0.5"
-                  />
+                  <Label htmlFor="volume_l">Объём / масса</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="volume_l"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={volumeL}
+                      onChange={(e) => setVolumeL(e.target.value)}
+                      disabled={submitting}
+                      placeholder="0.5"
+                      className="flex-1"
+                    />
+                    <Select
+                      value={unitOfMeasure}
+                      onValueChange={(v) =>
+                        setUnitOfMeasure((v ?? "л") as SkuUnitOfMeasure)
+                      }
+                      disabled={submitting}
+                    >
+                      <SelectTrigger className="w-16">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="л">л</SelectItem>
+                        <SelectItem value="кг">кг</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="format">Тип упаковки</Label>

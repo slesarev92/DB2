@@ -20,7 +20,9 @@ import { CollapsibleSection } from "@/components/ui/collapsible";
 import { ApiError, apiGet } from "@/lib/api";
 import { listProjectScenarios, listScenarioResults } from "@/lib/scenarios";
 import { VALUE_CHAIN_SECTIONS } from "@/lib/analysis-sections";
+import { formatVolume } from "@/lib/format";
 import { useCollapseState } from "@/lib/use-collapse-state";
+import type { SkuUnitOfMeasure } from "@/types/api";
 
 /* ── Types ── */
 
@@ -49,6 +51,8 @@ interface ValueChainSKU {
   sku_name: string;
   sku_format: string | null;
   sku_volume_l: string | null;
+  /** C #23: единица измерения объёма/массы SKU. */
+  sku_unit_of_measure: SkuUnitOfMeasure;
   channels: ValueChainCell[];
 }
 
@@ -211,7 +215,7 @@ export function ValueChainTab({ projectId }: { projectId: number }) {
                     <div>{s.sku_brand}</div>
                     <div className="text-[10px] text-muted-foreground font-normal">
                       {s.sku_name}
-                      {s.sku_volume_l ? ` ${s.sku_volume_l}L` : ""}
+                      {s.sku_volume_l ? ` ${formatVolume(s.sku_volume_l, s.sku_unit_of_measure)}` : ""}
                     </div>
                   </th>
                 ))}

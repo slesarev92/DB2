@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { formatVolume } from "@/lib/format";
 import { deleteProjectSku, listProjectSkus } from "@/lib/skus";
 
 import type { ProjectSKURead } from "@/types/api";
@@ -140,7 +141,7 @@ export function SkuPanel({
                     <p className="mt-0.5 truncate text-xs text-muted-foreground">
                       {p.sku.format ?? "—"}
                       {p.sku.volume_l !== null
-                        ? ` · ${Number(p.sku.volume_l)} л`
+                        ? ` · ${formatVolume(p.sku.volume_l, p.sku.unit_of_measure)}`
                         : ""}
                       {p.sku.package_type !== null
                         ? ` · ${p.sku.package_type}`
