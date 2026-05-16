@@ -114,22 +114,49 @@ async def test_bulk_create_duplicate_returns_409(
     )
     assert single_resp.status_code == 201
 
-    # Bulk с тем же ch1 + новым ch2 → должен вернуть 409
+    # Bulk с НОВЫМ ch2 (вставится первым) + duplicate ch1 (упадёт)
+    # — порядок [ch2, ch1] критичен: ch2 успешно flush'нется + predict-
+    # layer (129 PeriodValue), затем ch1 поднимет DuplicateError. Outer
+    # transaction должна откатить ВСЁ (ch2 + 129 PeriodValue).
+    # Если порядок [ch1, ch2] — failure на iter1, ch2 не вставлялся
+    # никогда → assert тривиально проходит даже без rollback.
     bulk_resp = await auth_client.post(
         f"/api/project-skus/{psk_id}/channels/bulk",
         json={
-            "channel_ids": [ch1.id, ch2.id],
+            "channel_ids": [ch2.id, ch1.id],
             "defaults": _DEFAULTS_JSON,
         },
     )
     assert bulk_resp.status_code == 409
 
-    # Проверяем atomicity: ch2 НЕ должен быть создан
+    # Atomic guarantee: ch2 НЕ должен быть в БД (rollback после ch1 failure)
     list_resp = await auth_client.get(f"/api/project-skus/{psk_id}/channels")
     assert list_resp.status_code == 200
     linked_ids = {p["channel_id"] for p in list_resp.json()}
     assert ch1.id in linked_ids
-    assert ch2.id not in linked_ids
+    assert ch2.id not in linked_ids, (
+        "atomic rollback нарушен: ch2 был вставлен до DuplicateError на ch1, "
+        "но остался в БД после rollback'а outer transaction"
+    )
+
+    # Дополнительно: проверяем что predict-layer ch2 (129 PeriodValue)
+    # тоже откатился — это финальный hardening atomic guarantee.
+    from sqlalchemy import func, select
+
+    from app.models import PeriodValue, ProjectSKUChannel
+
+    orphan_pv_count = await db_session.scalar(
+        select(func.count())
+        .select_from(PeriodValue)
+        .join(
+            ProjectSKUChannel,
+            PeriodValue.psk_channel_id == ProjectSKUChannel.id,
+        )
+        .where(ProjectSKUChannel.channel_id == ch2.id)
+    )
+    assert orphan_pv_count == 0, (
+        f"ch2 predict-layer not rolled back: {orphan_pv_count} orphan PeriodValues"
+    )
 
 
 async def test_bulk_create_missing_channel_returns_404(
