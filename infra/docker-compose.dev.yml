@@ -46,8 +46,7 @@ services:
       context: ../backend
       dockerfile: Dockerfile
     ports:
-      # Host 8001 → container 8000. Host 8000 occupied by OP_GANSTA dev backend.
-      - "8001:8000"
+      - "8000:8000"
     volumes:
       - ../backend:/app
       # Фаза 4.5.2: file storage backend для media (package images,
@@ -166,7 +165,7 @@ services:
       - /app/node_modules
       - /app/.next
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8001
+      NEXT_PUBLIC_API_URL: http://localhost:8000
       NODE_ENV: development
     depends_on:
       - backend
