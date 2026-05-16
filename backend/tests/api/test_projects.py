@@ -587,6 +587,82 @@ async def test_patch_project_full_jsonb_roundtrip(
     assert data["approvers"][1]["name"] == "Head of Insights"
 
 
+async def test_nielsen_benchmark_with_source_type(
+    auth_client: AsyncClient,
+) -> None:
+    """C #30: PATCH с typed NielsenBenchmarkItem — source_type + extra fields."""
+    create = await auth_client.post("/api/projects", json=VALID_BODY)
+    project_id = create.json()["id"]
+
+    patch_body = {
+        "nielsen_benchmarks": [
+            {
+                "source_type": "manual",
+                "metric": "Market share",
+                "value": 12.3,
+                "year": 2025,
+            },
+            {
+                "source_type": "nielsen",
+                "metric": "Penetration",
+                "value": 4.5,
+            },
+        ],
+    }
+    resp = await auth_client.patch(
+        f"/api/projects/{project_id}", json=patch_body
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    benchmarks = data["nielsen_benchmarks"]
+    assert len(benchmarks) == 2
+    assert benchmarks[0]["source_type"] == "manual"
+    assert benchmarks[0]["metric"] == "Market share"  # extra field preserved
+    assert benchmarks[0]["year"] == 2025
+    assert benchmarks[1]["source_type"] == "nielsen"
+
+
+async def test_nielsen_benchmark_invalid_source_type_returns_422(
+    auth_client: AsyncClient,
+) -> None:
+    """C #30: source_type вне Literal → 422."""
+    create = await auth_client.post("/api/projects", json=VALID_BODY)
+    project_id = create.json()["id"]
+
+    patch_body = {
+        "nielsen_benchmarks": [
+            {"source_type": "twitter", "metric": "Followers"},
+        ],
+    }
+    resp = await auth_client.patch(
+        f"/api/projects/{project_id}", json=patch_body
+    )
+    assert resp.status_code == 422
+    assert "source_type" in resp.text.lower()
+
+
+async def test_nielsen_benchmark_without_source_type_ok(
+    auth_client: AsyncClient,
+) -> None:
+    """C #30: source_type Optional — backward-compat для UI без C #30 поля."""
+    create = await auth_client.post("/api/projects", json=VALID_BODY)
+    project_id = create.json()["id"]
+
+    patch_body = {
+        "nielsen_benchmarks": [
+            {"metric": "Awareness", "value": 67},  # без source_type
+        ],
+    }
+    resp = await auth_client.patch(
+        f"/api/projects/{project_id}", json=patch_body
+    )
+    assert resp.status_code == 200
+    benchmarks = resp.json()["nielsen_benchmarks"]
+    assert len(benchmarks) == 1
+    assert benchmarks[0].get("source_type") is None
+    assert benchmarks[0]["metric"] == "Awareness"
+
+
 async def test_patch_project_sku_with_package_image_id(
     auth_client: AsyncClient,
 ) -> None:

@@ -13,6 +13,31 @@ from pydantic import BaseModel, ConfigDict, Field
 GateStage = Literal["G0", "G1", "G2", "G3", "G4", "G5"]
 
 
+# C #30: типизированный элемент списка nielsen_benchmarks.
+# Phase 8.9 ввела поле `Project.nielsen_benchmarks: JSONB` как
+# free-form `list[Any]`. C #30 (MEMO 1.4) — заранее ввести
+# Pydantic-модель элементов с обязательным `source_type`, чтобы
+# при последующем UI/импорте (#16 Nielsen-интеграция) не мигрировать
+# данные. `extra="allow"` оставляет любые дополнительные поля,
+# которые UI кладёт сейчас (название бренда, метрика, значение,
+# год и т.п.) — структура подполей не зашита.
+NielsenBenchmarkSourceType = Literal["manual", "excel", "ai", "nielsen"]
+
+
+class NielsenBenchmarkItem(BaseModel):
+    """Элемент списка `Project.nielsen_benchmarks` (JSONB).
+
+    Жёстко типизирован только `source_type` — позволяет аналитике
+    различать ручной ввод vs импорт. Остальные поля принимаются
+    как есть (`extra="allow"`) для backward-compat с уже сохранёнными
+    бенчмарками и для гибкости UI.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    source_type: NielsenBenchmarkSourceType | None = None
+
+
 # ============================================================
 # Base / Create / Update / Read
 # ============================================================
@@ -75,7 +100,7 @@ class ProjectBase(BaseModel):
     function_readiness: dict[str, Any] | None = None
     roadmap_tasks: list[Any] | None = None
     approvers: list[Any] | None = None
-    nielsen_benchmarks: list[Any] | None = None  # Phase 8.9
+    nielsen_benchmarks: list[NielsenBenchmarkItem] | None = None  # Phase 8.9 + C #30 source_type
     supplier_quotes: list[Any] | None = None  # Phase 8.10
 
     # 7.x: AI cached commentaries (persisted for page reload survival)
@@ -133,7 +158,7 @@ class ProjectUpdate(BaseModel):
     function_readiness: dict[str, Any] | None = None
     roadmap_tasks: list[Any] | None = None
     approvers: list[Any] | None = None
-    nielsen_benchmarks: list[Any] | None = None  # Phase 8.9
+    nielsen_benchmarks: list[NielsenBenchmarkItem] | None = None  # Phase 8.9 + C #30 source_type
     supplier_quotes: list[Any] | None = None  # Phase 8.10
     ai_budget_rub_monthly: Decimal | None = None
 

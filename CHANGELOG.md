@@ -149,6 +149,18 @@
     обнулены с логом — если нужно сохранить, дополнить MAPPING_RULES
     перед выкаткой. См. spec §5.4.
 
+- **C #30 nielsen_benchmarks.source_type — prep для #16 (MEMO 1.4, 2026-05-16).**
+  Добавлена Pydantic-модель `NielsenBenchmarkItem` (в `backend/app/schemas/
+  project.py`) для элементов JSONB-списка `Project.nielsen_benchmarks` —
+  существующее свободное `list[Any]` теперь `list[NielsenBenchmarkItem]`.
+  Единственное жёстко типизированное поле — `source_type: Literal["manual",
+  "excel", "ai", "nielsen"] | None`; остальные поля проходят через
+  `extra="allow"` (имя метрики, значение, год — структура остаётся
+  гибкой). Backward-compat: source_type Optional, существующие данные
+  без поля валидны. Готовит почву для C #16 (импорт Nielsen) — не
+  потребуется миграция данных. БД-структура (JSONB) не тронута. Тесты:
+  514 passed (+3 новых на source_type validation).
+
 ### Changed
 
 - **C #13 Q4 OBPPC — перенос в группу «Основа» (MEMO 1.3, 2026-05-16).**

@@ -52,7 +52,7 @@ based_on: tag v2.4.0 (2026-04-15) + main HEAD
 
 | Пункт | Статус | Доказательство |
 |---|---|---|
-| Бенчмарки через Excel/AI/Nielsen | 🟡 | `nielsen_benchmarks: JSONB` уже есть на `Project` (Phase 8.9). Поле `source_type` не предусмотрено — Claude в MEMO рекомендует добавить заранее, не сделано. |
+| Бенчмарки через Excel/AI/Nielsen | 🟡 | `nielsen_benchmarks: JSONB` уже есть на `Project` (Phase 8.9). C #30 (2026-05-16): добавлена Pydantic-модель `NielsenBenchmarkItem` с опциональным `source_type: Literal["manual", "excel", "ai", "nielsen"]` + `extra="allow"` для гибкости UI. Готовит почву для #16 (импорт Nielsen). |
 
 ---
 
