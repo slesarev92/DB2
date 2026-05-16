@@ -20,6 +20,8 @@ class ScenarioRead(BaseModel):
     id: int
     project_id: int
     type: ScenarioType
+    # C #24: пользовательское название (MEMO 5.3). NULL → UI fallback на type.
+    name: str | None = None
     delta_nd: Decimal
     delta_offtake: Decimal
     delta_opex: Decimal
@@ -40,6 +42,7 @@ class ScenarioUpdate(BaseModel):
     4.5: price/COGS/logistics дельты могут быть большими (до ±50%).
     """
 
+    name: str | None = Field(default=None, max_length=200)
     delta_nd: Decimal | None = Field(default=None, ge=-1, le=1)
     delta_offtake: Decimal | None = Field(default=None, ge=-1, le=1)
     delta_opex: Decimal | None = Field(default=None, ge=-1, le=1)

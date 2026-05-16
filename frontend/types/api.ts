@@ -485,6 +485,8 @@ export interface ScenarioRead {
   id: number;
   project_id: number;
   type: ScenarioType;
+  /** C #24: пользовательское название сценария. NULL → UI fallback на type. */
+  name: string | null;
   delta_nd: string;
   delta_offtake: string;
   delta_opex: string;
@@ -501,6 +503,8 @@ export interface ScenarioRead {
 }
 
 export interface ScenarioUpdate {
+  /** C #24: PATCH название сценария. Empty string или null = сброс. */
+  name?: string | null;
   delta_nd?: string;
   delta_offtake?: string;
   delta_opex?: string;

@@ -149,6 +149,26 @@
     обнулены с логом — если нужно сохранить, дополнить MAPPING_RULES
     перед выкаткой. См. spec §5.4.
 
+- **C #24 Сценарии — перенос в «Анализ» + название (MEMO 5.3, 2026-05-16).**
+  Три суб-задачи из MEMO 5.3:
+  1. **Навигация:** таб «Сценарии» перемещён из группы ④ «Моделирование»
+     в ⑤ «Анализ» (первая позиция, перед «Результаты»). Только правка
+     `SECTION_GROUPS` в `frontend/lib/project-nav-context.tsx`.
+  2. **Название сценария:** Migration `b9986ce73ab2` добавляет
+     `scenarios.name VARCHAR(200) NULL`. Pydantic `ScenarioRead.name` /
+     `ScenarioUpdate.name`. UI Input в `scenarios-tab.tsx` рядом с
+     дельтами (placeholder = type-label «Base»/«Conservative»/«Aggressive»
+     когда name=NULL). PATCH name работает и для base-сценария (раньше
+     base пропускался в `handleApplyAndRecalc`).
+  3. **Пояснительная подсказка про flow:** CardDescription секции
+     «Дельты сценариев» дополнена блоком «Изоляция от основного
+     расчёта» — кратко объясняет что сценарии = дельты поверх base,
+     base никогда не перезаписывается.
+  - **Out of scope (defer):** «Интермиттирующая ошибка в блоке сценариев»
+     (MEMO 5.3 п.3) — не локализована, нужна репродукция.
+  - Backend tests: 514 passed; tsc 0 ошибок; migration upgrade/downgrade
+    cycle clean.
+
 - **C #31 Финальная русификация спот-чек (MEMO 1.2, 2026-05-16).**
   Спот-проверка UI на остатки английских лейблов. Найдены и
   зафиксированы 4 случая:

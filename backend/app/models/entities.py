@@ -344,6 +344,11 @@ class Scenario(Base, TimestampMixin):
         nullable=False,
     )
 
+    # C #24: пользовательское название сценария (MEMO 5.3). Optional —
+    # старые проекты могут иметь NULL; UI показывает type-based fallback
+    # ("Base"/"Conservative"/"Aggressive") когда name=NULL.
+    name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
     # Дельты к Base — в долях единицы (0.10 = +10%).
     delta_nd: Mapped[Decimal] = mapped_column(
         Numeric(8, 6), nullable=False, default=Decimal("0")

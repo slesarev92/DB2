@@ -60,6 +60,8 @@ const SCOPE_ORDER: PeriodScope[] = ["y1y3", "y1y5", "y1y10"];
 
 /** Локальное состояние дельт сценария — храним как строки для удобства inputs. */
 interface DeltaDraft {
+  /** C #24: пользовательское название сценария поверх системного type. */
+  name: string;
   delta_nd: string;
   delta_offtake: string;
   delta_opex: string;
@@ -87,6 +89,7 @@ function fractionToPct(s: string): string {
 
 function deltaFromScenario(s: ScenarioRead): DeltaDraft {
   return {
+    name: s.name ?? "",
     delta_nd: fractionToPct(s.delta_nd),
     delta_offtake: fractionToPct(s.delta_offtake),
     delta_opex: fractionToPct(s.delta_opex),
@@ -249,19 +252,24 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
     setRecalculating(true);
     setRecalcStatus("PENDING");
     try {
-      // PATCH дельты для всех scenarios (только conservative/aggressive)
+      // PATCH дельты для всех scenarios. C #24: name редактируется для
+      // всех сценариев включая base; deltas — только для non-base.
       for (const s of scenarios) {
-        if (s.type === "base") continue;
         const draft = drafts[s.id];
         if (draft === undefined) continue;
-        await updateScenario(s.id, {
-          delta_nd: pctToFraction(draft.delta_nd),
-          delta_offtake: pctToFraction(draft.delta_offtake),
-          delta_opex: pctToFraction(draft.delta_opex),
-          delta_shelf_price: pctToFraction(draft.delta_shelf_price),
-          delta_bom_cost: pctToFraction(draft.delta_bom_cost),
-          delta_logistics: pctToFraction(draft.delta_logistics),
-        });
+        const trimmedName = draft.name.trim();
+        const patch: Record<string, string | null> = {
+          name: trimmedName === "" ? null : trimmedName,
+        };
+        if (s.type !== "base") {
+          patch.delta_nd = pctToFraction(draft.delta_nd);
+          patch.delta_offtake = pctToFraction(draft.delta_offtake);
+          patch.delta_opex = pctToFraction(draft.delta_opex);
+          patch.delta_shelf_price = pctToFraction(draft.delta_shelf_price);
+          patch.delta_bom_cost = pctToFraction(draft.delta_bom_cost);
+          patch.delta_logistics = pctToFraction(draft.delta_logistics);
+        }
+        await updateScenario(s.id, patch);
       }
       // Recalculate
       const { task_id } = await recalculateProject(projectId);
@@ -292,7 +300,15 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
     setDrafts((prev) => ({
       ...prev,
       [scenarioId]: {
-        ...(prev[scenarioId] ?? { delta_nd: "0", delta_offtake: "0", delta_opex: "0" }),
+        ...(prev[scenarioId] ?? {
+          name: "",
+          delta_nd: "0",
+          delta_offtake: "0",
+          delta_opex: "0",
+          delta_shelf_price: "0",
+          delta_bom_cost: "0",
+          delta_logistics: "0",
+        }),
         [key]: value,
       },
     }));
@@ -416,6 +432,13 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
             Например, +10% ND означает что все значения числовой дистрибуции
             увеличиваются на 10%. Conservative обычно отрицательные дельты,
             Aggressive — положительные.
+            <span className="mt-2 block text-xs">
+              <strong>Изоляция от основного расчёта:</strong> сценарий = набор
+              дельт <em>поверх</em> базового; базовый расчёт никогда не
+              перезаписывается. «Пересчитать» прогоняет pipeline для всех 3
+              сценариев и обновляет результаты в табах «Результаты» /
+              «Чувствительность» / «Цены» / «Unit-экономика» / «P&L».
+            </span>
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -431,6 +454,26 @@ export function ScenariosTab({ projectId }: ScenariosTabProps) {
                   <p className="text-sm font-semibold">
                     {SCENARIO_LABELS[s.type]}
                   </p>
+                  {/* C #24: пользовательское название сценария (Optional) */}
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor={`name-${s.id}`}
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                    >
+                      Название
+                    </Label>
+                    <Input
+                      id={`name-${s.id}`}
+                      type="text"
+                      maxLength={200}
+                      value={draft?.name ?? ""}
+                      onChange={(e) =>
+                        updateDraft(s.id, "name", e.target.value)
+                      }
+                      disabled={recalculating}
+                      placeholder={SCENARIO_LABELS[s.type]}
+                    />
+                  </div>
                   <div className="space-y-2">
                     <Label
                       htmlFor={`delta-nd-${s.id}`}
