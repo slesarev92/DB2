@@ -44,6 +44,20 @@ interface ValidationResult {
   warning?: string;
 }
 
+/** Shallow equality for FieldErrors/FieldWarnings maps. */
+function shallowEqualMap<T extends string>(
+  a: Partial<Record<T, string>>,
+  b: Partial<Record<T, string>>,
+): boolean {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const k of aKeys) {
+    if (a[k as T] !== b[k as T]) return false;
+  }
+  return true;
+}
+
 /** Validate a single field value against a rule. */
 function validateField(value: string, rule: FieldRule): ValidationResult {
   const trimmed = value.trim();
@@ -99,7 +113,10 @@ export function useFieldValidation<T extends string>(
   const [errors, setErrors] = useState<FieldErrors<T>>({});
   const [warnings, setWarnings] = useState<FieldWarnings<T>>({});
 
-  /** Validate one field. Returns error message or null. */
+  /**
+   * Validate one field. Updates both `errors` and `warnings` state in
+   * parallel. Returns error message or null (backward-compatible).
+   */
   const validateOne = useCallback(
     (field: T, value: string): string | null => {
       const rule = rules[field];
@@ -130,7 +147,11 @@ export function useFieldValidation<T extends string>(
     [rules],
   );
 
-  /** Validate all fields at once. Returns true if no errors (warnings allowed). */
+  /**
+   * Validate all fields at once. Returns true if no errors (warnings allowed).
+   * Idempotent: bails out of state updates when the new map equals previous
+   * by shallow key/value comparison.
+   */
   const validateAll = useCallback(
     (values: Record<T, string>): boolean => {
       const nextErrors: FieldErrors<T> = {};
@@ -147,8 +168,10 @@ export function useFieldValidation<T extends string>(
           nextWarnings[field] = result.warning;
         }
       }
-      setErrors(nextErrors);
-      setWarnings(nextWarnings);
+      setErrors((prev) => (shallowEqualMap(prev, nextErrors) ? prev : nextErrors));
+      setWarnings((prev) =>
+        shallowEqualMap(prev, nextWarnings) ? prev : nextWarnings,
+      );
       return valid;
     },
     [rules],
