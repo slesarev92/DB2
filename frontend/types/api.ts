@@ -327,16 +327,63 @@ export interface BOMItemRead {
 }
 
 // ============================================================
-// Channel (глобальный справочник, B-05: region + CRUD)
+// Channel (глобальный справочник, B-05: region + CRUD; C #16: group + source)
 // ============================================================
+
+/**
+ * C #16: группировка каналов в UI (8 групп: HM/SM/MM/TT/E_COM/HORECA/QSR/OTHER).
+ * Источник истины = backend Literal `ChannelGroup` в schemas/channel.py.
+ */
+export type ChannelGroup =
+  | "HM"
+  | "SM"
+  | "MM"
+  | "TT"
+  | "E_COM"
+  | "HORECA"
+  | "QSR"
+  | "OTHER";
+
+/**
+ * C #16: происхождение канала (Nielsen / ЦРПТ / 2GIS / Infoline / кастомный).
+ * Backend Literal `ChannelSourceType` в schemas/channel.py.
+ */
+export type ChannelSourceType =
+  | "nielsen"
+  | "tsrpt"
+  | "gis2"
+  | "infoline"
+  | "custom";
 
 export interface Channel {
   id: number;
   code: string;
   name: string;
+  /** C #16: NOT NULL на backend (default OTHER при импорте). */
+  channel_group: ChannelGroup;
+  /** C #16: nullable — старые каналы могут не иметь source_type. */
+  source_type: ChannelSourceType | null;
   region: string | null;
   universe_outlets: number | null;
   created_at: string;
+}
+
+export interface ChannelCreate {
+  code: string;
+  name: string;
+  channel_group: ChannelGroup;
+  source_type?: ChannelSourceType | null;
+  region?: string | null;
+  universe_outlets?: number | null;
+}
+
+export interface ChannelUpdate {
+  code?: string;
+  name?: string;
+  channel_group?: ChannelGroup;
+  source_type?: ChannelSourceType | null;
+  region?: string | null;
+  universe_outlets?: number | null;
 }
 
 // ============================================================
@@ -397,6 +444,36 @@ export interface ProjectSKUChannelRead {
   marketing_rate: string;
   seasonality_profile_id: number | null;
   created_at: string;
+}
+
+/**
+ * C #16: общие defaults для bulk-привязки нескольких каналов к одному PSK.
+ * Backend schema = `ProjectSKUChannelDefaults` в schemas/project_sku_channel.py.
+ * Все поля кроме обязательных PSC-метрик имеют backend-defaults.
+ */
+export interface ProjectSKUChannelDefaults {
+  launch_year?: number;
+  launch_month?: number;
+  nd_target: string;
+  nd_ramp_months?: number;
+  offtake_target: string;
+  channel_margin: string;
+  promo_discount?: string;
+  promo_share?: string;
+  shelf_price_reg: string;
+  logistics_cost_per_kg?: string;
+  ca_m_rate?: string;
+  marketing_rate?: string;
+  seasonality_profile_id?: number | null;
+}
+
+/**
+ * C #16: payload для POST /api/project-skus/{psk_id}/channels/bulk —
+ * атомарно привязывает список каналов с общими defaults.
+ */
+export interface BulkChannelLinkCreate {
+  channel_ids: number[];
+  defaults: ProjectSKUChannelDefaults;
 }
 
 // ============================================================

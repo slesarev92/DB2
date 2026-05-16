@@ -117,6 +117,12 @@ interface ChannelFormProps {
   excludeChannelIds?: number[];
   /** При edit channel_id не меняется — Select disabled. */
   channelLocked?: boolean;
+  /**
+   * C #16: полностью скрыть Select канала и убрать channel_id из
+   * validation (для Фазы 2 bulk-диалога — канал не выбирается, только
+   * метрики).
+   */
+  channelHidden?: boolean;
   disabled?: boolean;
   /** Ref to validate function — parent can call before submit. */
   onValidate?: (validateAll: () => boolean) => void;
@@ -127,13 +133,21 @@ export function ChannelForm({
   onChange,
   excludeChannelIds = [],
   channelLocked = false,
+  channelHidden = false,
   disabled = false,
   onValidate,
 }: ChannelFormProps) {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [seasonality, setSeasonality] = useState<RefSeasonality[]>([]);
+  // C #16: при channelHidden убираем channel_id из rules — bulk-форма
+  // не имеет селектора, валидация не должна требовать выбора канала.
+  const effectiveRules = channelHidden
+    ? (Object.fromEntries(
+        Object.entries(CHANNEL_FORM_RULES).filter(([k]) => k !== "channel_id"),
+      ) as ValidationRules<FormField>)
+    : CHANNEL_FORM_RULES;
   const { errors, validateOne, validateAll, clearError } =
-    useFieldValidation<FormField>(CHANNEL_FORM_RULES);
+    useFieldValidation<FormField>(effectiveRules);
 
   // Expose validateAll to parent (dialogs call before submit)
   useEffect(() => {
@@ -173,33 +187,38 @@ export function ChannelForm({
 
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="channel_id">Канал *</Label>
-        <Select
-          value={state.channel_id}
-          onValueChange={(v) => update("channel_id", v ?? "")}
-          disabled={disabled || channelLocked}
-          items={Object.fromEntries(
-            availableChannels.map((c) => [String(c.id), `${c.code} — ${c.name}`]),
+      {!channelHidden && (
+        <div className="space-y-2">
+          <Label htmlFor="channel_id">Канал *</Label>
+          <Select
+            value={state.channel_id}
+            onValueChange={(v) => update("channel_id", v ?? "")}
+            disabled={disabled || channelLocked}
+            items={Object.fromEntries(
+              availableChannels.map((c) => [
+                String(c.id),
+                `${c.code} — ${c.name}`,
+              ]),
+            )}
+          >
+            <SelectTrigger id="channel_id">
+              <SelectValue placeholder="Выберите канал" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableChannels.map((c) => (
+                <SelectItem key={c.id} value={String(c.id)}>
+                  {c.code} — {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {availableChannels.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              Все каналы уже привязаны к этому SKU.
+            </p>
           )}
-        >
-          <SelectTrigger id="channel_id">
-            <SelectValue placeholder="Выберите канал" />
-          </SelectTrigger>
-          <SelectContent>
-            {availableChannels.map((c) => (
-              <SelectItem key={c.id} value={String(c.id)}>
-                {c.code} — {c.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {availableChannels.length === 0 && (
-          <p className="text-xs text-muted-foreground">
-            Все каналы уже привязаны к этому SKU.
-          </p>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* === Launch lag (D-13): per канал, не per SKU === */}
       <div className="rounded-md border border-dashed p-3">
