@@ -4,7 +4,9 @@ Channels — read-only (вариант A одобрен), 25 каналов за
 test_engine fixture в conftest.py.
 ProjectSKUChannel — full CRUD по аналогии с ProjectSKU из 1.3.
 
-11 кейсов всего.
+C #16: добавлены тесты на channel_group и source_type (4 теста).
+
+11 + 4 = 15 кейсов всего.
 """
 from decimal import Decimal
 
@@ -290,3 +292,74 @@ async def test_delete_psk_channel(
 
     get_resp = await auth_client.get(f"/api/psk-channels/{psk_channel_id}")
     assert get_resp.status_code == 404
+
+
+# ============================================================
+# C #16: channel_group + source_type field tests (4 новых теста)
+# ============================================================
+
+
+async def test_create_channel_with_group_and_source(
+    auth_client: AsyncClient,
+) -> None:
+    """C #16: POST /api/channels принимает channel_group и source_type."""
+    resp = await auth_client.post(
+        "/api/channels",
+        json={
+            "code": "TEST_HM_C16",
+            "name": "Test Hypermarket C16",
+            "channel_group": "HM",
+            "source_type": "nielsen",
+            "universe_outlets": 100,
+        },
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["channel_group"] == "HM"
+    assert body["source_type"] == "nielsen"
+
+
+async def test_patch_channel_group(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """C #16: PATCH channel_group переводит канал в другую группу."""
+    # Используем существующий засеянный канал OTHER (Beauty)
+    channel_id = await _get_channel_id(db_session, "Beauty")
+    resp = await auth_client.patch(
+        f"/api/channels/{channel_id}",
+        json={"channel_group": "HM"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["channel_group"] == "HM"
+
+
+async def test_create_channel_invalid_group_422(
+    auth_client: AsyncClient,
+) -> None:
+    """C #16: Pydantic отвергает channel_group вне 8 значений."""
+    resp = await auth_client.post(
+        "/api/channels",
+        json={
+            "code": "X_INVALID",
+            "name": "X Invalid",
+            "channel_group": "INVALID_GROUP",
+        },
+    )
+    assert resp.status_code == 422
+
+
+async def test_create_channel_invalid_source_type_422(
+    auth_client: AsyncClient,
+) -> None:
+    """C #16: Pydantic отвергает source_type вне 5 значений."""
+    resp = await auth_client.post(
+        "/api/channels",
+        json={
+            "code": "X_INVALID2",
+            "name": "X Invalid Source",
+            "channel_group": "OTHER",
+            "source_type": "other_source",
+        },
+    )
+    assert resp.status_code == 422

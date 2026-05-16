@@ -13,7 +13,7 @@
 """
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import (
     Boolean,
@@ -104,6 +104,10 @@ class SKU(Base, TimestampMixin):
     segment: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
 
+ChannelGroup = Literal["HM", "SM", "MM", "TT", "E_COM", "HORECA", "QSR", "OTHER"]
+ChannelSourceType = Literal["nielsen", "tsrpt", "gis2", "infoline", "custom"]
+
+
 class Channel(Base, TimestampMixin):
     """Справочник каналов сбыта (HM, SM, MM, TT, E-COM_OZ, E-COM_OZ_Fresh).
 
@@ -111,6 +115,9 @@ class Channel(Base, TimestampMixin):
     канал общефедеральный. Если заполнено (напр. "Москва", "Урал") —
     региональная версия канала. UNIQUE(code) гарантирует уникальность
     кода (напр. "HM_MSK", "HM_URAL").
+
+    C #16: добавлены channel_group (8 значений, NOT NULL, default OTHER)
+    и source_type (5 значений, nullable, NULL = не указан).
     """
 
     __tablename__ = "channels"
@@ -120,6 +127,15 @@ class Channel(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     region: Mapped[str | None] = mapped_column(String(100), nullable=True)
     universe_outlets: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    channel_group: Mapped[ChannelGroup] = mapped_column(
+        String(20),
+        nullable=False,
+        server_default="OTHER",
+    )
+    source_type: Mapped[ChannelSourceType | None] = mapped_column(
+        String(20),
+        nullable=True,
+    )
 
 
 class Period(Base):
