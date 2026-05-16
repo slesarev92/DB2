@@ -28,6 +28,12 @@ import {
   createSku,
   listSkus,
 } from "@/lib/skus";
+import {
+  useFieldValidation,
+  type ValidationRules,
+} from "@/lib/use-field-validation";
+import { FieldError } from "@/components/ui/field-error";
+import { FieldWarning } from "@/components/ui/field-warning";
 
 import type { SkuUnitOfMeasure, SKURead } from "@/types/api";
 
@@ -39,6 +45,17 @@ interface AddSkuDialogProps {
 }
 
 type Mode = "existing" | "new";
+
+const SKU_VOLUME_RULES: ValidationRules<"volume_l"> = {
+  volume_l: {
+    numeric: true,
+    min: 0,
+    warn: {
+      when: (n) => n === 0,
+      message: "Объём 0 — расчёты per-unit некорректны",
+    },
+  },
+};
 
 /**
  * Диалог добавления SKU к проекту с двумя режимами:
@@ -69,6 +86,9 @@ export function AddSkuDialog({
   const [volumeL, setVolumeL] = useState("");
   const [unitOfMeasure, setUnitOfMeasure] = useState<SkuUnitOfMeasure>("л");
   const [packageType, setPackageType] = useState("");
+
+  const { errors: volErrors, warnings: volWarnings, validateOne: validateVolume } =
+    useFieldValidation<"volume_l">(SKU_VOLUME_RULES);
 
   // Загружаем глобальный каталог при открытии
   useEffect(() => {
@@ -229,6 +249,8 @@ export function AddSkuDialog({
                       min="0"
                       value={volumeL}
                       onChange={(e) => setVolumeL(e.target.value)}
+                      onBlur={(e) => validateVolume("volume_l", e.target.value)}
+                      aria-invalid={!!volErrors.volume_l}
                       disabled={submitting}
                       placeholder="0.5"
                       className="flex-1"
@@ -249,6 +271,8 @@ export function AddSkuDialog({
                       </SelectContent>
                     </Select>
                   </div>
+                  <FieldError error={volErrors.volume_l} />
+                  <FieldWarning warning={volWarnings.volume_l} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="format">Тип упаковки</Label>

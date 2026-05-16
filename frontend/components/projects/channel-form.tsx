@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { FieldError } from "@/components/ui/field-error";
+import { FieldWarning } from "@/components/ui/field-warning";
 import { HelpButton } from "@/components/ui/help-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -99,8 +100,24 @@ const CHANNEL_FORM_RULES: ValidationRules<FormField> = {
   launch_month: { required: true, numeric: true, min: 1, max: 12 },
   nd_target: { required: true, numeric: true, min: 0, max: 1 },
   nd_ramp_months: { required: true, numeric: true, min: 1, max: 36 },
-  offtake_target: { required: true, numeric: true, min: 0 },
-  shelf_price_reg: { required: true, numeric: true, min: 0 },
+  offtake_target: {
+    required: true,
+    numeric: true,
+    min: 0,
+    warn: {
+      when: (n) => n === 0,
+      message: "Целевой offtake 0 — продаж не будет",
+    },
+  },
+  shelf_price_reg: {
+    required: true,
+    numeric: true,
+    min: 0,
+    warn: {
+      when: (n) => n === 0,
+      message: "Цена полки 0 ₽ — выручка обнулится",
+    },
+  },
   channel_margin: { required: true, numeric: true, min: 0, max: 1 },
   promo_discount: { required: true, numeric: true, min: 0, max: 1 },
   promo_share: { required: true, numeric: true, min: 0, max: 1 },
@@ -146,7 +163,7 @@ export function ChannelForm({
         Object.entries(CHANNEL_FORM_RULES).filter(([k]) => k !== "channel_id"),
       ) as ValidationRules<FormField>)
     : CHANNEL_FORM_RULES;
-  const { errors, validateOne, validateAll, clearError } =
+  const { errors, warnings, validateOne, validateAll, clearError } =
     useFieldValidation<FormField>(effectiveRules);
 
   // Expose validateAll to parent (dialogs call before submit)
@@ -325,6 +342,7 @@ export function ChannelForm({
             disabled={disabled}
           />
           <FieldError error={errors.offtake_target} />
+          <FieldWarning warning={warnings.offtake_target} />
         </div>
         <div className="space-y-1">
           <Label htmlFor="shelf_price_reg" className="flex items-center gap-1.5">
@@ -343,6 +361,7 @@ export function ChannelForm({
             disabled={disabled}
           />
           <FieldError error={errors.shelf_price_reg} />
+          <FieldWarning warning={warnings.shelf_price_reg} />
         </div>
       </div>
 
