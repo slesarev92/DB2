@@ -87,8 +87,13 @@ export function AddSkuDialog({
   const [unitOfMeasure, setUnitOfMeasure] = useState<SkuUnitOfMeasure>("л");
   const [packageType, setPackageType] = useState("");
 
-  const { errors: volErrors, warnings: volWarnings, validateOne: validateVolume } =
-    useFieldValidation<"volume_l">(SKU_VOLUME_RULES);
+  const {
+    errors: volErrors,
+    warnings: volWarnings,
+    validateOne: validateVolume,
+    clearError: clearVolumeError,
+    clearAll: clearVolumeValidation,
+  } = useFieldValidation<"volume_l">(SKU_VOLUME_RULES);
 
   // Загружаем глобальный каталог при открытии
   useEffect(() => {
@@ -118,7 +123,8 @@ export function AddSkuDialog({
     setVolumeL("");
     setUnitOfMeasure("л");
     setPackageType("");
-  }, [open]);
+    clearVolumeValidation();
+  }, [open, clearVolumeValidation]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -248,7 +254,10 @@ export function AddSkuDialog({
                       step="0.01"
                       min="0"
                       value={volumeL}
-                      onChange={(e) => setVolumeL(e.target.value)}
+                      onChange={(e) => {
+                        setVolumeL(e.target.value);
+                        clearVolumeError("volume_l");
+                      }}
                       onBlur={(e) => validateVolume("volume_l", e.target.value)}
                       aria-invalid={!!volErrors.volume_l}
                       disabled={submitting}
