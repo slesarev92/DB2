@@ -10,6 +10,8 @@
  * `parseFloat()` при отображении.
  */
 
+import type { PackFormat } from "@/lib/pack-format";
+
 // ============================================================
 // Auth (синхронизировано с lib/api.ts типами)
 // ============================================================
@@ -217,7 +219,7 @@ export interface ProjectListItem extends ProjectRead {
 export interface SKUBase {
   brand: string;
   name: string;
-  format: string | null;
+  format: PackFormat | null;
   volume_l: string | null; // Decimal as string
   package_type: string | null;
   segment: string | null;

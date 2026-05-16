@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ApiError } from "@/lib/api";
+import { PACK_FORMAT_OPTIONS, type PackFormat } from "@/lib/pack-format";
 import {
   addSkuToProject,
   createSku,
@@ -64,7 +65,7 @@ export function AddSkuDialog({
   // new mode
   const [brand, setBrand] = useState("");
   const [name, setName] = useState("");
-  const [format, setFormat] = useState("");
+  const [format, setFormat] = useState<PackFormat | "">("");
   const [volumeL, setVolumeL] = useState("");
   const [packageType, setPackageType] = useState("");
 
@@ -114,7 +115,7 @@ export function AddSkuDialog({
         const newSku = await createSku({
           brand,
           name,
-          format: format || null,
+          format: format === "" ? null : format,
           volume_l: volumeL || null,
           package_type: packageType || null,
           segment: null,
@@ -216,16 +217,6 @@ export function AddSkuDialog({
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="format">Тип упаковки</Label>
-                  <Input
-                    id="format"
-                    value={format}
-                    onChange={(e) => setFormat(e.target.value)}
-                    disabled={submitting}
-                    placeholder="0,5л ПЭТ"
-                  />
-                </div>
-                <div className="space-y-2">
                   <Label htmlFor="volume_l">Объём, л</Label>
                   <Input
                     id="volume_l"
@@ -237,6 +228,30 @@ export function AddSkuDialog({
                     disabled={submitting}
                     placeholder="0.5"
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="format">Тип упаковки</Label>
+                  <Select
+                    value={format}
+                    onValueChange={(v) =>
+                      setFormat((v ?? "") as PackFormat | "")
+                    }
+                    disabled={submitting}
+                    items={Object.fromEntries(
+                      PACK_FORMAT_OPTIONS.map((opt) => [opt, opt]),
+                    )}
+                  >
+                    <SelectTrigger id="format">
+                      <SelectValue placeholder="Не указано" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PACK_FORMAT_OPTIONS.map((opt) => (
+                        <SelectItem key={opt} value={opt}>
+                          {opt}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="space-y-2">
