@@ -14,6 +14,15 @@ export interface FieldRule {
   numeric?: boolean;
   /** Custom error message override. */
   message?: string;
+  /**
+   * Optional non-blocking warning.
+   * Triggers ONLY if no error present and `when(num)` is true.
+   * Empty/non-numeric values never produce warnings.
+   */
+  warn?: {
+    when: (n: number) => boolean;
+    message: string;
+  };
 }
 
 /** Map of field names to their validation rules. */
@@ -24,91 +33,128 @@ export type ValidationRules<T extends string = string> = Partial<
 /** Map of field names to their current error message (empty = no error). */
 export type FieldErrors<T extends string = string> = Partial<Record<T, string>>;
 
-/** Validate a single field value against a rule. Returns error message or null. */
-function validateField(value: string, rule: FieldRule): string | null {
+/** Map of field names to their current warning message. */
+export type FieldWarnings<T extends string = string> = Partial<
+  Record<T, string>
+>;
+
+/** Result of validating a single field. */
+interface ValidationResult {
+  error?: string;
+  warning?: string;
+}
+
+/** Validate a single field value against a rule. */
+function validateField(value: string, rule: FieldRule): ValidationResult {
   const trimmed = value.trim();
 
   if (rule.required && trimmed === "") {
-    return rule.message ?? "Обязательное поле";
+    return { error: rule.message ?? "Обязательное поле" };
   }
 
   // Skip numeric checks if field is empty and not required
-  if (trimmed === "") return null;
+  if (trimmed === "") return {};
 
-  if (rule.numeric || rule.min !== undefined || rule.max !== undefined) {
+  if (
+    rule.numeric ||
+    rule.min !== undefined ||
+    rule.max !== undefined ||
+    rule.warn !== undefined
+  ) {
     const num = Number(trimmed.replace(",", "."));
     if (Number.isNaN(num)) {
-      return rule.message ?? "Введите число";
+      return { error: rule.message ?? "Введите число" };
     }
     if (rule.min !== undefined && num < rule.min) {
-      return rule.message ?? `Минимум ${rule.min}`;
+      return { error: rule.message ?? `Минимум ${rule.min}` };
     }
     if (rule.max !== undefined && num > rule.max) {
-      return rule.message ?? `Максимум ${rule.max}`;
+      return { error: rule.message ?? `Максимум ${rule.max}` };
+    }
+    if (rule.warn && rule.warn.when(num)) {
+      return { warning: rule.warn.message };
     }
   }
 
-  return null;
+  return {};
 }
 
 /**
- * Lightweight field validation hook.
+ * Lightweight field validation hook with non-blocking warnings.
  *
  * Usage:
  * ```ts
- * const { errors, validateAll, validateOne, clearError } = useFieldValidation(RULES);
+ * const { errors, warnings, validateAll, validateOne, clearError } =
+ *   useFieldValidation(RULES);
  * // On blur: validateOne("field_name", value);
- * // On submit: if (!validateAll(formState)) return;
- * // In JSX: <Input aria-invalid={!!errors.field_name} />
- * //         {errors.field_name && <p className="text-xs text-destructive">{errors.field_name}</p>}
+ * // On submit: if (!validateAll(formState)) return;  // blocks on errors only
+ * // In JSX:
+ * //   <FieldError error={errors.field_name} />
+ * //   <FieldWarning warning={warnings.field_name} />
  * ```
  */
 export function useFieldValidation<T extends string>(
   rules: ValidationRules<T>,
 ) {
   const [errors, setErrors] = useState<FieldErrors<T>>({});
+  const [warnings, setWarnings] = useState<FieldWarnings<T>>({});
 
   /** Validate one field. Returns error message or null. */
   const validateOne = useCallback(
     (field: T, value: string): string | null => {
       const rule = rules[field];
       if (!rule) return null;
-      const err = validateField(value, rule);
+      const result = validateField(value, rule);
       setErrors((prev) => {
-        if (prev[field] === (err ?? undefined)) return prev;
+        if (prev[field] === (result.error ?? undefined)) return prev;
         const next = { ...prev };
-        if (err) {
-          next[field] = err;
+        if (result.error) {
+          next[field] = result.error;
         } else {
           delete next[field];
         }
         return next;
       });
-      return err;
+      setWarnings((prev) => {
+        if (prev[field] === (result.warning ?? undefined)) return prev;
+        const next = { ...prev };
+        if (result.warning) {
+          next[field] = result.warning;
+        } else {
+          delete next[field];
+        }
+        return next;
+      });
+      return result.error ?? null;
     },
     [rules],
   );
 
-  /** Validate all fields at once. Returns true if valid. */
+  /** Validate all fields at once. Returns true if no errors (warnings allowed). */
   const validateAll = useCallback(
     (values: Record<T, string>): boolean => {
-      const next: FieldErrors<T> = {};
+      const nextErrors: FieldErrors<T> = {};
+      const nextWarnings: FieldWarnings<T> = {};
       let valid = true;
       for (const [field, rule] of Object.entries(rules) as [T, FieldRule][]) {
         const val = values[field] ?? "";
-        const err = validateField(val, rule);
-        if (err) {
-          next[field] = err;
+        const result = validateField(val, rule);
+        if (result.error) {
+          nextErrors[field] = result.error;
           valid = false;
         }
+        if (result.warning) {
+          nextWarnings[field] = result.warning;
+        }
       }
-      setErrors(next);
+      setErrors(nextErrors);
+      setWarnings(nextWarnings);
       return valid;
     },
     [rules],
   );
 
-  /** Clear error for a specific field (e.g., on focus). */
+  /** Clear error for a specific field (e.g., on focus). Warning preserved. */
   const clearError = useCallback((field: T) => {
     setErrors((prev) => {
       if (!(field in prev)) return prev;
@@ -118,11 +164,22 @@ export function useFieldValidation<T extends string>(
     });
   }, []);
 
-  /** Clear all errors. */
-  const clearAll = useCallback(() => setErrors({}), []);
+  /** Clear all errors and warnings. */
+  const clearAll = useCallback(() => {
+    setErrors({});
+    setWarnings({});
+  }, []);
 
-  /** Whether there are any validation errors. */
+  /** Whether there are any validation errors (warnings do NOT count). */
   const hasErrors = Object.keys(errors).length > 0;
 
-  return { errors, hasErrors, validateOne, validateAll, clearError, clearAll };
+  return {
+    errors,
+    warnings,
+    hasErrors,
+    validateOne,
+    validateAll,
+    clearError,
+    clearAll,
+  };
 }
