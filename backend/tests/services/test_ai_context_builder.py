@@ -107,7 +107,7 @@ async def project_with_skus(
         sku = SKU(
             brand=brand,
             name=f"{brand} 0.5L Product {i}",
-            format="PET",
+            format="ПЭТ",
             volume_l=Decimal("0.5"),
             segment="premium",
         )

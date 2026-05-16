@@ -1542,7 +1542,7 @@ async def gorji_sku(db_session: AsyncSession, gorji_project: Project) -> "Projec
     sku = SKUModel(
         brand="GORJI",
         name="Premium ICE",
-        format="bottle",
+        format=None,
         volume_l=Decimal("0.5"),
         segment="premium",
     )
