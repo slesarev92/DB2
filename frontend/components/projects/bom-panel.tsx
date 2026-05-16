@@ -32,6 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { BomSummarySidebar } from "@/components/projects/bom-summary-sidebar";
 import { MockupGallery } from "@/components/projects/mockup-gallery";
 import { SkuImageUpload } from "@/components/projects/sku-image-upload";
 import { YearOverrideEditor } from "@/components/projects/year-override-editor";
@@ -177,21 +178,6 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
   } = useFieldValidation<BomField>(bomRules);
   const { sorted: sortedBom, sortState: bomSortState, toggleSort: toggleBomSort } =
     useSortableTable(bom ?? [], BOM_SORT_COLUMNS);
-
-  // UX-10: BOM summary by ingredient category (moved here, hooks before early returns)
-  const categorySums = useMemo(() => {
-    const sums: Record<string, number> = {};
-    if (bom === null) return sums;
-    for (const b of bom) {
-      const cat = b.ingredient_category ?? "other";
-      const cost =
-        Number(b.quantity_per_unit) *
-        Number(b.price_per_unit) *
-        (1 + Number(b.loss_pct));
-      sums[cat] = (sums[cat] ?? 0) + cost;
-    }
-    return sums;
-  }, [bom]);
 
   // Локальные значения rates для редактирования (PATCH on blur)
   // Q6 (2026-05-15): ca_m_rate и marketing_rate переехали в Каналы.
@@ -405,13 +391,6 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
 
   const cogsPreview = computeCogsPreview(bom);
 
-  // UX-10: BOM summary by ingredient category — labels
-  const CATEGORY_LABELS_BOM: Record<string, string> = {
-    raw_material: "Сырьё",
-    packaging: "Упаковка",
-    other: "Прочее",
-  };
-
   return (
     <div className="space-y-4">
       {/* === ProjectSKU rates editor === */}
@@ -585,8 +564,9 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
         </CardContent>
       </Card>
 
-      {/* === BOM table + add form + COGS preview === */}
-      <Card>
+      {/* === BOM table + add form + COGS preview + summary sidebar === */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <Card className="md:col-span-2">
         <CardHeader>
           <div className="flex items-start justify-between gap-2">
             <div>
@@ -602,18 +582,6 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
               <p className="text-lg font-semibold">
                 {formatMoney(String(cogsPreview))}
               </p>
-              {Object.keys(categorySums).length > 0 && (
-                <div className="text-xs text-muted-foreground space-y-0.5">
-                  {Object.entries(categorySums).map(([cat, sum]) => (
-                    <div key={cat} className="flex justify-end gap-2">
-                      <span>{CATEGORY_LABELS_BOM[cat] ?? cat}:</span>
-                      <span className="font-medium text-foreground">
-                        {formatMoney(String(sum))}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         </CardHeader>
@@ -845,6 +813,10 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
           )}
         </CardContent>
       </Card>
+      <div className="md:col-span-1">
+        <BomSummarySidebar items={bom ?? []} />
+      </div>
+      </div>
 
       <ConfirmDialog
         open={deletingBomId !== null}
