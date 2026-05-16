@@ -13,7 +13,7 @@
 
 ### Added (Phase C — C #20)
 
-- **C #20**: Раскраска чувствительности с настраиваемыми порогами. На вкладке «Чувствительность» появились два input «Зелёный ≥ %» и «Красный ≤ −%» (default 5/5) + кнопка «Сбросить». Пороги применяются к NPV-таблице (tailwind text-color) и tornado-bars (recharts `<Cell>` fill). Значения сохраняются в localStorage (`sensitivity-thresholds-v1`), 0-100 clamping. Helpers `classifyNpv`/`classifyNpvHex` в `lib/sensitivity-thresholds.ts`. Backend не трогался. (MEMO 9 — Чувствительность)
+- **C #20**: Настраиваемые пороги раскраски таблицы чувствительности NPV и tornado-диаграммы. В header вкладки «Чувствительность» появились два input — «Зелёный ≥ %» и «Красный ≤ −%» (default 5%/5%), регулирующие порог отклонения от базового NPV для подсветки ячеек. Между порогами — нейтральный (серый/без подсветки). Tornado-bars меняют цвет по той же логике (зелёный/красный/серый). Пороги сохраняются в `localStorage` (`sensitivity-thresholds-v1`), кнопка «Сбросить» возвращает 5/5. Edge case base NPV = 0 → нейтральный. Pre-existing bug в фильтре tornado-bars (`!npv_y1y10` пропускал значение 0) тоже исправлен. Backend не трогался. (MEMO 6.2)
 
 ### Added (Phase C — C #25)
 
