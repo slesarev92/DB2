@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.models import Channel, ProjectSKUChannel
 from app.schemas.project_sku_channel import (
     ProjectSKUChannelCreate,
+    ProjectSKUChannelDefaults,
     ProjectSKUChannelUpdate,
 )
 
@@ -94,6 +95,41 @@ async def create_psk_channel(
 
     # Перезагружаем с selectinload для корректной сериализации nested
     return await get_psk_channel(session, psk_channel.id)  # type: ignore[return-value]
+
+
+async def bulk_create_psk_channels(
+    session: AsyncSession,
+    project_sku_id: int,
+    channel_ids: list[int],
+    defaults: ProjectSKUChannelDefaults,
+) -> list[ProjectSKUChannel]:
+    """C #16: создаёт N PSC в одной savepoint-транзакции (atomic).
+
+    Весь loop обёрнут в `session.begin_nested()` — outer SAVEPOINT.
+    Если любой iteration raise'ит (ChannelNotFoundError /
+    ProjectSKUChannelDuplicateError из create_psk_channel), savepoint
+    откатывается атомарно: уже flushed PSC + их predict-layer (43×3=129
+    PeriodValue) исчезают. Outer transaction (test_user, project и т.п.)
+    не затрагивается — критично для test-environment с shared session.
+
+    Внутренний savepoint pattern внутри `create_psk_channel` для
+    IntegrityError per-channel — это nested savepoint внутри нашего
+    outer savepoint, конфликта нет (savepoints стекируются).
+
+    Errors (пробрасываются как есть после savepoint rollback'а):
+      - `ChannelNotFoundError` — первый невалидный channel_id
+      - `ProjectSKUChannelDuplicateError` — первый duplicate (psk_id, channel_id)
+    """
+    created: list[ProjectSKUChannel] = []
+    async with session.begin_nested():
+        for ch_id in channel_ids:
+            data = ProjectSKUChannelCreate(
+                channel_id=ch_id,
+                **defaults.model_dump(),
+            )
+            psc = await create_psk_channel(session, project_sku_id, data)
+            created.append(psc)
+    return created
 
 
 async def update_psk_channel(

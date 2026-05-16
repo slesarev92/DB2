@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import {
-  AddChannelDialog,
+  AddChannelsDialog,
   EditChannelDialog,
 } from "@/components/projects/channel-dialogs";
 import { Button } from "@/components/ui/button";
@@ -239,7 +239,7 @@ export function ChannelsPanel({ pskId }: ChannelsPanelProps) {
         </CardContent>
       </Card>
 
-      <AddChannelDialog
+      <AddChannelsDialog
         pskId={pskId}
         open={addOpen}
         onOpenChange={setAddOpen}

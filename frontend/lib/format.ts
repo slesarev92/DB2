@@ -51,3 +51,22 @@ export function formatDate(iso: string | null | undefined): string {
   if (Number.isNaN(d.getTime())) return iso;
   return dateFmt.format(d);
 }
+
+/**
+ * Русская плюрализация: 1 → one, 2-4 → few, 5+ → many.
+ * Пример: pluralizeRu(1, "канал", "канала", "каналов") → "канал"
+ *         pluralizeRu(3, "канал", "канала", "каналов") → "канала"
+ *         pluralizeRu(5, "канал", "канала", "каналов") → "каналов"
+ */
+export function pluralizeRu(
+  n: number,
+  one: string,
+  few: string,
+  many: string,
+): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
+  return many;
+}

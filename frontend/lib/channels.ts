@@ -11,7 +11,10 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from "./api";
 
 import type {
+  BulkChannelLinkCreate,
   Channel,
+  ChannelCreate,
+  ChannelUpdate,
   ProjectSKUChannelCreate,
   ProjectSKUChannelRead,
   ProjectSKUChannelUpdate,
@@ -19,11 +22,29 @@ import type {
 } from "@/types/api";
 
 // ============================================================
-// Channel справочник (read-only)
+// Channel справочник (read + CRUD; C #16)
 // ============================================================
 
 export function listChannels(): Promise<Channel[]> {
   return apiGet<Channel[]>("/api/channels");
+}
+
+/** C #16: создать кастомный канал в каталоге. */
+export function createChannel(data: ChannelCreate): Promise<Channel> {
+  return apiPost<Channel>("/api/channels", data);
+}
+
+/** C #16: PATCH полей канала в каталоге (name/group/source_type/...). */
+export function updateChannel(
+  id: number,
+  data: ChannelUpdate,
+): Promise<Channel> {
+  return apiPatch<Channel>(`/api/channels/${id}`, data);
+}
+
+/** C #16: удалить канал из каталога (запрещено если есть FK-зависимости). */
+export function deleteChannel(id: number): Promise<void> {
+  return apiDelete<void>(`/api/channels/${id}`);
 }
 
 // ============================================================
@@ -50,6 +71,20 @@ export function addChannelToPsk(
 ): Promise<ProjectSKUChannelRead> {
   return apiPost<ProjectSKUChannelRead>(
     `/api/project-skus/${pskId}/channels`,
+    data,
+  );
+}
+
+/**
+ * C #16: атомарно привязать список каналов к PSK с общими defaults.
+ * Backend гарантирует rollback при FK / unique violation.
+ */
+export function bulkAddChannelsToPsk(
+  pskId: number,
+  data: BulkChannelLinkCreate,
+): Promise<ProjectSKUChannelRead[]> {
+  return apiPost<ProjectSKUChannelRead[]>(
+    `/api/project-skus/${pskId}/channels/bulk`,
     data,
   );
 }

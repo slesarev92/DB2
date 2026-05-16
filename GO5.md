@@ -1,7 +1,7 @@
 # GO5 — Старт новой сессии DB2
 
 > Создано 2026-05-16 после релиза v2.5.0.
-> Фаза B = 5/5 ✅. Фаза C = **7/19 ✅** (закрыто #13, #14, #19, #22, #24, #30, #31).
+> Фаза B = 5/5 ✅. Фаза C = **8/19 ✅** (закрыто #13, #14, #16, #19, #22, #24, #30, #31).
 
 ---
 
@@ -17,18 +17,19 @@
    docker compose -f infra/docker-compose.dev.yml exec backend alembic upgrade head
    docker compose -f infra/docker-compose.dev.yml exec backend pytest -q --ignore=tests/integration
    ```
-   Ожидаемо: **514 passed**, alembic head `b9986ce73ab2`.
+   Ожидаемо: **545 passed**, alembic head `eb59341b9034`.
 
 ---
 
 ## 1. Где остановились (2026-05-16)
 
-### Фаза C — 7/19 ✅
+### Фаза C — 8/19 ✅
 
 | # | Что | Статус |
 |---|---|---|
 | 13 | Q4 OBPPC в «Основа» | ✅ 2026-05-16 |
 | 14 | Fine Tuning per-period | ✅ 2026-05-15 |
+| 16 | Каналы: группы + source_type + bulk endpoint | ✅ 2026-05-16 |
 | 19 | SKU.format → enum | ✅ 2026-05-16 |
 | 22 | Collapse/expand разделов | ✅ 2026-05-16 |
 | 24 | Сценарии: перенос в «Анализ» + name | ✅ 2026-05-16 (интермиттирующая ошибка ⚠️ defer'нута) |
@@ -39,7 +40,6 @@
 
 **Большие (новые фичи, неделя+):**
 - **#15** P&L фильтры + pivot Excel экспорт
-- **#16** Каналы: группы (HM/SM/MM/TT/E-COM) + source_type *(prep сделан в #30)*
 - **#17** АКБ автоматический расчёт из `nd_target × ОКБ`
 - **#18** Waterfall-диаграмма в Unit-экономике
 - **#20** Раскраска чувствительности с настраиваемыми порогами
@@ -63,13 +63,15 @@
 
 **Лучшие кандидаты по порядку (стратегия GO4 + текущий контекст):**
 
-1. **#16 Каналы: группы + source_type** — самый стратегический. Разблокирует #15, #17, #18. Prep сделан в C #30 (`NielsenBenchmarkItem.source_type`). Размер: medium-large, нужен полный brainstorm → spec → plan → subagent-driven.
+1. **#27 PDF чекбоксы** — естественное продолжение C #22 (UI collapse). Спека уже частично есть («экспорт игнорирует collapse, селективный экспорт = #27»). Medium, ~день.
 
-2. **#27 PDF чекбоксы** — естественное продолжение C #22 (UI collapse). Спека уже частично есть («экспорт игнорирует collapse, селективный экспорт = #27»). Medium, ~день.
+2. **#17 АКБ автоматический расчёт** — разблокирован закрытием #16 (теперь есть channel_group для разрезов). Medium-large, нужен brainstorm.
 
-3. **#29 Валидация вводных** — широкая UX-задача (multi-form). Medium, без архитектуры.
+3. **#15 P&L фильтры + pivot Excel** — разблокирован #16 (group-разрезы теперь доступны в DB). Large, нужна декомпозиция.
 
-4. **#25 Дублирование SKU между табами** — нужна сначала диагностика (что дублируется); потом decision.
+4. **#29 Валидация вводных** — широкая UX-задача (multi-form). Medium, без архитектуры.
+
+5. **#25 Дублирование SKU между табами** — нужна сначала диагностика (что дублируется); потом decision.
 
 Не рекомендуется как первое:
 - **#28** — требует уточнения спецификации заказчика
@@ -86,7 +88,7 @@
 # Backend pytest (~85 сек)
 docker compose -f infra/docker-compose.dev.yml exec -T backend \
     pytest -q --ignore=tests/integration
-# Ожидаемо: 514 passed
+# Ожидаемо: 545 passed
 
 # Frontend tsc
 docker compose -f infra/docker-compose.dev.yml exec -T frontend npx tsc --noEmit
@@ -109,11 +111,11 @@ docker compose -f infra/docker-compose.dev.yml exec -T backend \
 
 ### Миграции
 
-Последняя: **`b9986ce73ab2`** (C #24 — scenarios.name).
+Последняя: **`eb59341b9034`** (C #16 — channel_group + source_type).
 
 ```bash
 docker compose -f infra/docker-compose.dev.yml exec -T backend alembic current
-# b9986ce73ab2 (head)
+# eb59341b9034 (head)
 ```
 
 Если поднимаешь стенд с нуля — `alembic upgrade head` обязателен.
@@ -126,6 +128,12 @@ SELECT DISTINCT format FROM skus WHERE format IS NOT NULL;
 ```
 Сверить с MAPPING_RULES в миграции `649d7f6f7144_c19_pack_format_enum.py`. Незнакомые значения будут обнулены — если нужно сохранить, дополнить MAPPING_RULES.
 
+C #16 (channel groups) добавила миграцию с auto-backfill `channel_group` по паттерну `code`. Перед выкаткой:
+```sql
+SELECT DISTINCT code FROM channels;
+```
+Сверить с MAPPING_RULES (`EXACT_RULES` + `PREFIX_RULES`) в миграции `eb59341b9034_c16_channel_group_source_type.py`. Кастомные коды попадут в OTHER (тихо). Если для какого-то канала нужна другая группа — UPDATE до миграции.
+
 ### Полезные точки в коде (после v2.5.0)
 
 | Файл | Что внутри |
@@ -133,6 +141,16 @@ SELECT DISTINCT format FROM skus WHERE format IS NOT NULL;
 | `backend/app/schemas/sku.py` | `PackFormat` Literal — enum упаковки (C #19) |
 | `backend/app/schemas/project.py` | `NielsenBenchmarkItem` — type для бенчмарков (C #30) |
 | `backend/app/schemas/scenario.py` | `ScenarioRead.name` / `ScenarioUpdate.name` (C #24) |
+| `backend/app/schemas/channel.py` | `ChannelGroup` + `ChannelSourceType` Literal (C #16) |
+| `backend/app/schemas/project_sku_channel.py` | `ProjectSKUChannelDefaults` + `BulkChannelLinkCreate` (C #16) |
+| `backend/app/api/project_sku_channels.py` | bulk endpoint `POST /api/project-skus/{psk_id}/channels/bulk` (C #16) |
+| `backend/app/services/project_sku_channel_service.py` | `bulk_create_psk_channels` savepoint pattern (C #16) |
+| `backend/migrations/versions/eb59341b9034_c16_channel_group_source_type.py` | миграция + MAPPING_RULES (C #16) |
+| `frontend/lib/channel-group.ts` | `CHANNEL_GROUP_LABELS`/`_ORDER` + `CHANNEL_SOURCE_TYPE_LABELS` (C #16) |
+| `frontend/lib/format.ts` | `pluralizeRu` helper (C #16) |
+| `frontend/components/projects/channels-panel.tsx` | точка входа, кнопка «+ Привязать канал» (C #16) |
+| `frontend/components/projects/channel-dialogs.tsx` | `AddChannelsDialog` двухфазный + `CreateChannelDialog` + `EditChannelCatalogDialog` (C #16) |
+| `frontend/components/ui/checkbox.tsx` | shadcn Checkbox wrapper над @base-ui/react (C #16) |
 | `frontend/lib/pack-format.ts` | `PackFormat` + `PACK_FORMAT_OPTIONS` (C #19) |
 | `frontend/lib/analysis-sections.ts` | section ID константы (C #22) |
 | `frontend/lib/use-collapse-state.ts` | хук collapse-state + localStorage (C #22) |
@@ -164,28 +182,28 @@ SELECT DISTINCT format FROM skus WHERE format IS NOT NULL;
 
 ```bash
 git status                           # clean
-git log --oneline -3                 # 1ffa9a2 feat(c24)... + ранее
+git log --oneline -3                 # последний коммит T5 docs(c16) + ранее
 git branch                           # * main (feat/* удалены)
 git tag | tail -3                    # v2.4.0, v2.5.0 (← последний)
 docker compose -f infra/docker-compose.dev.yml ps  # 6 контейнеров healthy
 
 docker compose -f infra/docker-compose.dev.yml exec -T backend alembic current
-# b9986ce73ab2 (head)
+# eb59341b9034 (head)
 
 docker compose -f infra/docker-compose.dev.yml exec -T backend \
     pytest -q --ignore=tests/integration | tail -3
-# 514 passed
+# 545 passed
 
 docker compose -f infra/docker-compose.dev.yml exec -T frontend npx tsc --noEmit
 # (без output = ок)
 ```
 
-Всё зелёное — можно стартовать brainstorm для следующего item (рекомендация: #16 каналы группы, или #27 PDF чекбоксы).
+Всё зелёное — можно стартовать brainstorm для следующего item (рекомендация: #27 PDF чекбоксы, или #17 АКБ авторасчёт).
 
 ---
 
 ## 5. Стартовая фраза для новой сессии
 
 > Продолжаем DB2, читай `GO5.md` в корне репозитория. Стартуем
-> следующий item Фазы C — рекомендация #16 (каналы группы) или
-> #27 (PDF чекбоксы). Если у тебя есть свои предпочтения — скажу.
+> следующий item Фазы C — рекомендация #27 (PDF чекбоксы) или
+> #17 (АКБ авторасчёт). Если у тебя есть свои предпочтения — скажу.

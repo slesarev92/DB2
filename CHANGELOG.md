@@ -11,6 +11,25 @@
 
 Фаза B (MEMO v2.1 — архитектурные изменения). В работе.
 
+### Added (Phase C — C #16)
+
+- **C #16**: Каналы получили поля `channel_group` (HM/SM/MM/TT/E_COM/HORECA/QSR/OTHER) и `source_type` (Nielsen/ЦРПТ/2GIS/Infoline/custom). Существующие 25 GORJI seed-каналов автоматически отмаплены по паттерну кода. (MEMO 1.4)
+- **C #16**: Новый bulk endpoint `POST /api/project-skus/{psk_id}/channels/bulk` для привязки нескольких каналов к SKU за одну atomic-транзакцию через savepoint pattern.
+- **C #16**: Двухфазный диалог «+ Привязать канал»: Фаза 1 — выбор чекбоксами по 8 группам с CollapsibleSection, Фаза 2 — одна форма метрик для всех выбранных → atomic POST bulk. Заменил старый single-channel `AddChannelDialog`.
+- **C #16**: Inline-редактирование каталога каналов из диалога: «+ Новый канал» (CreateChannelDialog) и ⚙ (EditChannelCatalogDialog) с CRUD над name/group/source_type/region/universe_outlets.
+
+### Migrations (Phase C — C #16)
+
+- `eb59341b9034_c16_channel_group_source_type` — добавлены `channels.channel_group` (NOT NULL, default OTHER, CHECK 8 значений) и `channels.source_type` (nullable, CHECK 5 значений). Auto-backfill для 25 seed-кодов через MAPPING_RULES + invariant test seed↔миграция.
+
+### Pre-flight для прода (C #16)
+
+Перед `alembic upgrade head` сверить `SELECT DISTINCT code FROM channels` с MAPPING_RULES (`EXACT_RULES` + `PREFIX_RULES`) в миграции `eb59341b9034_c16_channel_group_source_type.py`. Незнакомые коды попадают в OTHER (тихо). Если для какого-то канала нужна другая группа — `UPDATE channels SET channel_group='X' WHERE code='...'` до миграции.
+
+### Known limitations (C #16)
+
+- **Catalog edit global для всех юзеров.** Inline `CreateChannelDialog` и `EditChannelCatalogDialog` доступны любому аутентифицированному пользователю (наследие B-05 CRUD `/api/channels`). Переименование «HM» в одном проекте видно во всех. Accepted для закрытой беты; admin role-gate — follow-up issue перед открытием продукта на нескольких аналитиков.
+
 ### Changed (Phase B)
 
 - **B.9b Помесячный финплан Y1-Y3 (MEMO 2.1, финал, 2026-05-15).** Завершает
