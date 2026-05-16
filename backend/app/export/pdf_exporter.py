@@ -421,12 +421,19 @@ def _build_package_images_context(
 async def generate_project_pdf(
     session: AsyncSession,
     project_id: int,
+    sections: set | None = None,
 ) -> bytes:
     """Генерирует PDF для проекта через WeasyPrint, возвращает bytes.
+
+    Args:
+        sections: Subset of SectionId to include in the PDF. None = all 17
+            sections (backward-compatible default).
 
     Raises:
         ProjectNotFoundForExport: если проект не найден.
     """
+    from app.export.pdf_sections import ALL_SECTIONS
+    active_sections: set = set(ALL_SECTIONS) if sections is None else sections
     project = await _load_project_full(session, project_id)
     if project is None:
         raise ProjectNotFoundForExport(f"Project {project_id} not found")
@@ -518,6 +525,7 @@ async def generate_project_pdf(
     # Jinja2 context
     pnl_ctx = _build_pnl_context(base_aggregate)
     context: dict[str, Any] = {
+        "active_sections": active_sections,
         "project": project,
         "inflation_profile_name": (
             inflation_profile.profile_name if inflation_profile else "—"

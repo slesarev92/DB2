@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.export.excel_exporter import ProjectNotFoundForExport
 from app.export.pdf_exporter import generate_project_pdf
+from app.export.pdf_sections import ALL_SECTIONS
 from tests.api.test_calculation import _seed_minimal_project
 
 
@@ -156,12 +157,14 @@ class TestGenerateProjectPdf:
 
         pnl_ctx = _build_pnl_context(None)
         html_str = template.render(
+            active_sections=set(ALL_SECTIONS),
             project=project,
             inflation_profile_name="—",
             validation_subtests=VALIDATION_SUBTESTS,
             sku_rows=[],
             package_images=[],
             kpi_rows=[],
+            per_unit_kpi=[],
             pnl_years=pnl_ctx["pnl_years"],
             pnl_rows=pnl_ctx["pnl_rows"],
             bom_top=[],
@@ -173,6 +176,11 @@ class TestGenerateProjectPdf:
             gate_label=_gate_label,
             fmt_money=_fmt_money,
             fmt_pct=_fmt_pct,
+            sensitivity=None,
+            pricing=None,
+            value_chain=None,
+            opex_by_category={},
+            opex_category_labels={},
         )
         assert "МАРКЕР_DESCRIPTION_123" in html_str
         assert "МАРКЕР_РИСК_ABC" in html_str
@@ -250,3 +258,77 @@ class TestExportPdfEndpoint:
     async def test_unauthorized(self, client: AsyncClient):
         resp = await client.get("/api/projects/1/export/pdf")
         assert resp.status_code == 401
+
+
+# ============================================================
+# C #27: Section-selection tests
+# ============================================================
+
+
+class TestPdfSectionSelection:
+    """C #27: GET ?sections=... query param behaviour."""
+
+    async def test_pdf_export_all_sections_default(
+        self,
+        auth_client: AsyncClient,
+        db_session: AsyncSession,
+    ):
+        """C #27: GET без sections param — все 17 секций, валидный PDF."""
+        project_id, _, _, _ = await _seed_minimal_project(db_session)
+        await db_session.commit()
+
+        resp = await auth_client.get(f"/api/projects/{project_id}/export/pdf")
+        assert resp.status_code == 200, resp.text
+        assert resp.headers["content-type"].startswith("application/pdf")
+        assert len(resp.content) > 1000
+        assert resp.content[:5] == b"%PDF-"
+        # Без sections — filename НЕ содержит _partial
+        cd = resp.headers.get("content-disposition", "")
+        assert "_partial" not in cd
+
+    async def test_pdf_export_subset_sections(
+        self,
+        auth_client: AsyncClient,
+        db_session: AsyncSession,
+    ):
+        """C #27: sections=kpi,pnl → меньший PDF, _partial в filename."""
+        project_id, _, _, _ = await _seed_minimal_project(db_session)
+        await db_session.commit()
+
+        resp = await auth_client.get(
+            f"/api/projects/{project_id}/export/pdf?sections=kpi,pnl"
+        )
+        assert resp.status_code == 200, resp.text
+        assert len(resp.content) > 0
+        assert resp.content[:5] == b"%PDF-"
+        cd = resp.headers.get("content-disposition", "")
+        assert "_partial.pdf" in cd
+
+    async def test_pdf_export_empty_sections_422(
+        self,
+        auth_client: AsyncClient,
+        db_session: AsyncSession,
+    ):
+        """C #27: ?sections= (пустая строка) → 422."""
+        project_id, _, _, _ = await _seed_minimal_project(db_session)
+        await db_session.commit()
+
+        resp = await auth_client.get(
+            f"/api/projects/{project_id}/export/pdf?sections="
+        )
+        assert resp.status_code == 422
+
+    async def test_pdf_export_invalid_section_422(
+        self,
+        auth_client: AsyncClient,
+        db_session: AsyncSession,
+    ):
+        """C #27: ?sections=xyz,kpi → 422 с указанием невалидного ID."""
+        project_id, _, _, _ = await _seed_minimal_project(db_session)
+        await db_session.commit()
+
+        resp = await auth_client.get(
+            f"/api/projects/{project_id}/export/pdf?sections=xyz,kpi"
+        )
+        assert resp.status_code == 422
+        assert "xyz" in resp.text
