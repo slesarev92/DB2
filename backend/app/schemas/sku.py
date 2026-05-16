@@ -17,6 +17,9 @@ PackFormat = Literal[
     "Пауч",
 ]
 
+# C #23: единица измерения объёма/массы SKU.
+SkuUnitOfMeasure = Literal["л", "кг"]
+
 
 class SKUBase(BaseModel):
     brand: str = Field(..., min_length=1, max_length=255)
@@ -25,6 +28,7 @@ class SKUBase(BaseModel):
     volume_l: Decimal | None = Field(default=None, ge=0)
     package_type: str | None = Field(default=None, max_length=100)
     segment: str | None = Field(default=None, max_length=100)
+    unit_of_measure: SkuUnitOfMeasure = "л"
 
 
 class SKUCreate(SKUBase):
@@ -40,6 +44,7 @@ class SKUUpdate(BaseModel):
     volume_l: Decimal | None = Field(default=None, ge=0)
     package_type: str | None = Field(default=None, max_length=100)
     segment: str | None = Field(default=None, max_length=100)
+    unit_of_measure: SkuUnitOfMeasure | None = None
 
 
 class SKURead(SKUBase):

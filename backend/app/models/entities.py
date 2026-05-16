@@ -90,6 +90,9 @@ class RefSeasonality(Base, TimestampMixin):
     month_coefficients: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
 
 
+SkuUnitOfMeasure = Literal["л", "кг"]
+
+
 class SKU(Base, TimestampMixin):
     """Справочник SKU. Не привязан к проекту."""
 
@@ -102,6 +105,12 @@ class SKU(Base, TimestampMixin):
     volume_l: Mapped[Decimal | None] = mapped_column(Numeric(8, 4), nullable=True)
     package_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     segment: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # C #23: единица измерения объёма/массы. Backfill existing → "л".
+    unit_of_measure: Mapped[SkuUnitOfMeasure] = mapped_column(
+        String(2),
+        nullable=False,
+        server_default="л",
+    )
 
 
 ChannelGroup = Literal["HM", "SM", "MM", "TT", "E_COM", "HORECA", "QSR", "OTHER"]
