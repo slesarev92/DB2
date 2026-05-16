@@ -36,7 +36,9 @@
 **Create (frontend):**
 - `frontend/components/shared/period-grid.tsx` — generic 43-колоночный grid (extracted из financial-plan-editor)
 - `frontend/components/shared/period-bulk-fill.tsx` — переезд из `projects/financial-plan-bulk-fill.tsx`
-- `frontend/components/projects/fine-tuning-per-period-panel.tsx` — оркестрация 4 секций
+- `frontend/components/projects/fine-tuning-per-period-panel.tsx` — оркестрация 4 секций (~30 строк, только compose)
+- `frontend/components/projects/fine-tuning-copacking-section.tsx` — секция per-SKU copacking (~60 строк)
+- `frontend/components/projects/fine-tuning-channel-section.tsx` — generic секция per-channel (logistics / ca_m / marketing) (~80 строк)
 - `frontend/lib/api/fine-tuning.ts` — fetch helpers (get/put overrides)
 - `frontend/app/projects/[id]/fine-tuning/page.tsx` — страница Fine Tuning (или extension существующей)
 
@@ -1552,6 +1554,8 @@ EOF
 **Files:**
 - Create: `frontend/lib/api/fine-tuning.ts`
 - Create: `frontend/components/projects/fine-tuning-per-period-panel.tsx`
+- Create: `frontend/components/projects/fine-tuning-copacking-section.tsx`
+- Create: `frontend/components/projects/fine-tuning-channel-section.tsx`
 - Create: `frontend/app/projects/[id]/fine-tuning/page.tsx`
 - Modify: `frontend/types/api.ts`
 - Modify: `frontend/contexts/project-nav-context.tsx`
@@ -1618,43 +1622,46 @@ export async function putChannelOverrides(
 
 **Точное имя `apiClient` или axios-instance** — посмотреть `frontend/lib/api/financial-plan.ts` (B.9b) и использовать ту же утилиту.
 
-- [ ] **Step 3: Create panel component**
+- [ ] **Step 3a: Create panel orchestrator**
 
-`frontend/components/projects/fine-tuning-per-period-panel.tsx`:
+`frontend/components/projects/fine-tuning-per-period-panel.tsx` (только compose):
 
 ```tsx
 "use client";
 
-import { useEffect, useState } from "react";
-import { PeriodGrid } from "@/components/shared/period-grid";
-import { PeriodBulkFill } from "@/components/shared/period-bulk-fill";
-import {
-  getSkuOverrides,
-  putSkuOverrides,
-  getChannelOverrides,
-  putChannelOverrides,
-} from "@/lib/api/fine-tuning";
-import type { Project, ProjectSKU, ProjectSKUChannel } from "@/types/api";
+import { CopackingSection } from "./fine-tuning-copacking-section";
+import { ChannelSection } from "./fine-tuning-channel-section";
+import type { Project } from "@/types/api";
 
 interface Props {
   project: Project;
 }
 
 export function FineTuningPerPeriodPanel({ project }: Props) {
-  // 4 секции: copacking (per-SKU), logistics / ca_m / marketing (per-channel)
-  // State per SKU и per Channel хранит текущий массив длины 43
-
   return (
     <div className="space-y-8">
       <CopackingSection project={project} />
-      <ChannelOverridesSection project={project} field="logistics_cost_per_kg" label="Логистика (₽/кг)" />
-      <ChannelOverridesSection project={project} field="ca_m_rate" label="CA&M rate" />
-      <ChannelOverridesSection project={project} field="marketing_rate" label="Маркетинг rate" />
+      <ChannelSection project={project} field="logistics_cost_per_kg" label="Логистика (₽/кг)" />
+      <ChannelSection project={project} field="ca_m_rate" label="CA&M rate" />
+      <ChannelSection project={project} field="marketing_rate" label="Маркетинг rate" />
     </div>
   );
 }
+```
 
-function CopackingSection({ project }: { project: Project }) {
+- [ ] **Step 3b: Create CopackingSection (per-SKU)**
+
+`frontend/components/projects/fine-tuning-copacking-section.tsx`:
+
+```tsx
+"use client";
+
+import { useEffect, useState } from "react";
+import { PeriodGrid } from "@/components/shared/period-grid";
+import { getSkuOverrides, putSkuOverrides } from "@/lib/api/fine-tuning";
+import type { Project } from "@/types/api";
+
+export function CopackingSection({ project }: { project: Project }) {
   const [rows, setRows] = useState<Record<number, (string | null)[]>>({});
   const [dirty, setDirty] = useState<Set<number>>(new Set());
 
@@ -1669,13 +1676,13 @@ function CopackingSection({ project }: { project: Project }) {
       });
   }, [project.id]);
 
-  const handleCellChange = (skuId: number, idx: number, value: string | null) => {
+  const handleCellChange = (skuId: number | string, idx: number, value: string | null) => {
     setRows((prev) => {
-      const arr = [...(prev[skuId] ?? Array(43).fill(null))];
+      const arr = [...(prev[Number(skuId)] ?? Array(43).fill(null))];
       arr[idx] = value;
-      return { ...prev, [skuId]: arr };
+      return { ...prev, [Number(skuId)]: arr };
     });
-    setDirty((s) => new Set(s).add(skuId));
+    setDirty((s) => new Set(s).add(Number(skuId)));
   };
 
   const handleSave = async () => {
@@ -1704,25 +1711,37 @@ function CopackingSection({ project }: { project: Project }) {
         <button disabled={!dirty.size} onClick={handleSave} className="btn-primary">
           Сохранить ({dirty.size} изменений)
         </button>
-        {/* PeriodBulkFill — отдельная кнопка с диалогом */}
       </div>
     </section>
   );
 }
+```
 
-function ChannelOverridesSection({
+- [ ] **Step 3c: Create ChannelSection (generic per-channel)**
+
+`frontend/components/projects/fine-tuning-channel-section.tsx`:
+
+```tsx
+"use client";
+
+import { useEffect, useState } from "react";
+import { PeriodGrid } from "@/components/shared/period-grid";
+import { getChannelOverrides, putChannelOverrides } from "@/lib/api/fine-tuning";
+import type { Project, ChannelOverridesPayload } from "@/types/api";
+
+type ChannelField = "logistics_cost_per_kg" | "ca_m_rate" | "marketing_rate";
+
+export function ChannelSection({
   project,
   field,
   label,
 }: {
   project: Project;
-  field: "logistics_cost_per_kg" | "ca_m_rate" | "marketing_rate";
+  field: ChannelField;
   label: string;
 }) {
-  type FieldKey = `${typeof field}_by_period`;
-  const fieldKey: FieldKey = `${field}_by_period` as FieldKey;
+  const fieldKey = `${field}_by_period` as keyof ChannelOverridesPayload;
 
-  // Плоский список (sku, channel) пар для рендера в одной таблице
   const channels = project.skus.flatMap((sku) =>
     (sku.channels ?? []).map((ch) => ({ sku, channel: ch })),
   );
@@ -1735,24 +1754,23 @@ function ChannelOverridesSection({
       .then((responses) => {
         const next: Record<number, (string | null)[]> = {};
         channels.forEach(({ channel }, idx) => {
-          next[channel.id] = responses[idx][fieldKey] ?? Array(43).fill(null);
+          next[channel.id] = (responses[idx][fieldKey] as (string | null)[] | null) ?? Array(43).fill(null);
         });
         setRows(next);
       });
   }, [project.id, fieldKey]);
 
-  const handleCellChange = (channelId: number, idx: number, value: string | null) => {
+  const handleCellChange = (channelId: number | string, idx: number, value: string | null) => {
     setRows((prev) => {
-      const arr = [...(prev[channelId] ?? Array(43).fill(null))];
+      const arr = [...(prev[Number(channelId)] ?? Array(43).fill(null))];
       arr[idx] = value;
-      return { ...prev, [channelId]: arr };
+      return { ...prev, [Number(channelId)]: arr };
     });
-    setDirty((s) => new Set(s).add(channelId));
+    setDirty((s) => new Set(s).add(Number(channelId)));
   };
 
   const handleSave = async () => {
-    // Для каждого dirty канала вытягиваем актуальные значения трёх полей
-    // (отправляем все 3 в payload — два других сохраняем как есть с бэка).
+    // GET перед PUT чтобы не перезатереть два других поля канала.
     await Promise.all(Array.from(dirty).map(async (channelId) => {
       const current = await getChannelOverrides(project.id, channelId);
       const arr = rows[channelId];
@@ -1789,7 +1807,7 @@ function ChannelOverridesSection({
 }
 ```
 
-**Примечание для исполнителя:** `handleSave` делает дополнительный GET перед PUT чтобы не перезатереть два других поля канала. Это компромисс простоты vs N+1; если станет проблемой — заменить на единое state-хранилище всех 3 полей канала и один PUT.
+**Примечание:** `handleSave` делает дополнительный GET перед PUT чтобы не перезатереть два других поля канала. Если N+1 станет проблемой — заменить на shared state всех 3 полей канала с одним PUT.
 
 - [ ] **Step 4: Create page**
 
@@ -1859,6 +1877,8 @@ docker compose -f infra/docker-compose.dev.yml restart frontend
 ```bash
 git add frontend/lib/api/fine-tuning.ts \
         frontend/components/projects/fine-tuning-per-period-panel.tsx \
+        frontend/components/projects/fine-tuning-copacking-section.tsx \
+        frontend/components/projects/fine-tuning-channel-section.tsx \
         frontend/app/projects/[id]/fine-tuning/page.tsx \
         frontend/types/api.ts \
         frontend/contexts/project-nav-context.tsx

@@ -15,6 +15,7 @@ from app.api import auth as auth_router
 from app.api import bom as bom_router
 from app.api import channels as channels_router
 from app.api import financial_plan as financial_plan_router
+from app.api import fine_tuning as fine_tuning_router
 from app.api import ingredients as ingredients_router
 from app.api import media as media_router
 from app.api import obppc as obppc_router
@@ -65,6 +66,7 @@ app.include_router(period_values_router.batch_router)
 app.include_router(scenarios_router.router)
 app.include_router(reference_router.router)
 app.include_router(financial_plan_router.router)
+app.include_router(fine_tuning_router.router)
 app.include_router(ingredients_router.router)
 app.include_router(media_router.router)
 app.include_router(tasks_router.router)

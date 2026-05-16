@@ -34,13 +34,18 @@ def step(ctx: PipelineContext) -> PipelineContext:
     density = inp.product_density
     # project_opex может быть пустым (≈ нули по всему горизонту).
     opex = inp.project_opex if inp.project_opex else (0.0,) * n
+    # C #14: per-period override logistics. Если массив непустой —
+    # используем его (calculation_service строит tuple с override-on-top
+    # of-PeriodValue-on-top-of-scalar). Пусто (unit-тесты) → fallback
+    # на legacy поле logistics_cost_per_kg (per-period tuple).
+    log_arr = inp.logistics_cost_per_kg_arr or inp.logistics_cost_per_kg
 
     for t in range(n):
         kg = ctx.volume_liters[t] * density
         # D-18: per-period logistics_cost_per_kg (Excel DASH row 40 имеет
-        # custom Apr/Oct +N% inflation). PipelineInput.logistics_cost_per_kg
-        # — tuple длины period_count.
-        l_cost = inp.logistics_cost_per_kg[t] * kg
+        # custom Apr/Oct +N% inflation). C #14: log_arr может содержать
+        # override JSON (длина n) или legacy per-period tuple.
+        l_cost = log_arr[t] * kg
         logistics[t] = l_cost
         contribution[t] = ctx.gross_profit[t] - l_cost - opex[t]
 

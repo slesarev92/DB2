@@ -7,6 +7,7 @@ import { AkbTab } from "@/components/projects/akb-tab";
 import { ChannelsTab } from "@/components/projects/channels-tab";
 import { ContentTab } from "@/components/projects/content-tab";
 import { FinancialPlanEditor } from "@/components/projects/financial-plan-editor";
+import { FineTuningPerPeriodPanel } from "@/components/projects/fine-tuning-per-period-panel";
 import { IngredientsCatalog } from "@/components/projects/ingredients-catalog";
 import { ObppcTab } from "@/components/projects/obppc-tab";
 import { PeriodsTab } from "@/components/projects/periods-tab";
@@ -288,6 +289,10 @@ export default function ProjectDetailPage() {
       {activeTab === "obppc" && <ObppcTab projectId={projectId} />}
 
       {activeTab === "periods" && <PeriodsTab projectId={projectId} />}
+
+      {activeTab === "fine-tuning" && (
+        <FineTuningPerPeriodPanel projectId={projectId} />
+      )}
 
       {activeTab === "scenarios" && <ScenariosTab projectId={projectId} />}
 

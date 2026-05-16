@@ -35,11 +35,12 @@ import pytest
 from openpyxl import load_workbook
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.export.excel_exporter import generate_project_xlsx
 from app.export.pdf_exporter import generate_project_pdf
 from app.export.ppt_exporter import generate_project_pptx
-from app.models import Project, Scenario, ScenarioResult, ScenarioType
+from app.models import Project, ProjectSKU, Scenario, ScenarioResult, ScenarioType
 from app.models.base import PeriodScope
 from app.services.calculation_service import calculate_all_scenarios
 from scripts.import_gorji_full import (
@@ -326,4 +327,143 @@ class TestE2EGorji:
             assert r.go_no_go is not None, (
                 f"go_no_go должен быть проставлен для scope={r.period_scope}, "
                 f"scenario_id={r.scenario_id}"
+            )
+
+    async def test_override_changes_kpi_in_expected_direction(
+        self, db_session: AsyncSession
+    ) -> None:
+        """C #14: per-period copacking override снижает NPV Y1Y3 vs. baseline.
+
+        Сценарий:
+        - Первый SKU переключается в copacking mode (production_mode="copacking")
+          чтобы задействовать copacking_rate_arr в s03_cogs.
+        - copacking_rate_by_period устанавливается в 10.0 ₽/шт для M1..M36
+          (GORJI не имеет copacking в оригинале — скаляр = 0, поэтому
+          используем фиксированное ненулевое значение, не base × 2).
+        - После пересчёта NPV Y1Y3 Base сценария должен упасть:
+          copacking cost ↑ → COGS ↑ → gross_profit ↓ → contribution ↓ → NPV ↓.
+        """
+        project_id = await _build_gorji_project(db_session)
+
+        # Базовый расчёт — Base сценарий, scope Y1Y3
+        await calculate_all_scenarios(db_session, project_id)
+        await db_session.flush()
+
+        base_scenario = await db_session.scalar(
+            select(Scenario).where(
+                Scenario.project_id == project_id,
+                Scenario.type == ScenarioType.BASE,
+            )
+        )
+        assert base_scenario is not None
+
+        baseline_result = await db_session.scalar(
+            select(ScenarioResult).where(
+                ScenarioResult.scenario_id == base_scenario.id,
+                ScenarioResult.period_scope == PeriodScope.Y1Y3,
+            )
+        )
+        assert baseline_result is not None
+        assert baseline_result.npv is not None
+        baseline_npv = baseline_result.npv
+
+        # Применить override: переключить первый PSK в copacking mode,
+        # установить non-zero copacking_rate_by_period.
+        # GORJI default production_mode = "own" и copacking_rate = 0,
+        # поэтому нужно одновременно задать режим и ставку.
+        psk = await db_session.scalar(
+            select(ProjectSKU).where(ProjectSKU.project_id == project_id)
+        )
+        assert psk is not None
+
+        psk.production_mode = "copacking"
+        # 10.0 ₽/шт на все 36 monthly периодов; Y4..Y10 (7 годовых) — None,
+        # pipeline получит fallback на скаляр copacking_rate (= 0), что корректно
+        # для демонстрации: только Y1-Y3 получают ненулевой copacking cost.
+        # Используем float (не Decimal) — JSONB требует JSON-сериализуемые типы.
+        psk.copacking_rate_by_period = [10.0] * 36 + [None] * 7
+        flag_modified(psk, "copacking_rate_by_period")
+        await db_session.flush()
+
+        # Пересчёт с override
+        await calculate_all_scenarios(db_session, project_id)
+        await db_session.flush()
+
+        new_result = await db_session.scalar(
+            select(ScenarioResult).where(
+                ScenarioResult.scenario_id == base_scenario.id,
+                ScenarioResult.period_scope == PeriodScope.Y1Y3,
+            )
+        )
+        assert new_result is not None
+        assert new_result.npv is not None
+        new_npv = new_result.npv
+
+        assert new_npv < baseline_npv, (
+            f"override должен снизить NPV Y1Y3: baseline={baseline_npv}, "
+            f"with override={new_npv}"
+        )
+
+    async def test_empty_override_bit_identical_to_baseline(
+        self, db_session: AsyncSession
+    ) -> None:
+        """C #14: NULL override → pipeline output идентичен скаляр-режиму.
+
+        Сценарий: первый PSK имеет copacking_rate_by_period = NULL (default).
+        Установка [None] * 43 должна дать ровно тот же NPV для всех scopes,
+        потому что _resolve_period_value возвращает скаляр на каждом None-элементе
+        — поведение идентично NULL-массиву целиком.
+        """
+        project_id = await _build_gorji_project(db_session)
+
+        # Базовый расчёт без override (copacking_rate_by_period = NULL)
+        await calculate_all_scenarios(db_session, project_id)
+        await db_session.flush()
+
+        psk = await db_session.scalar(
+            select(ProjectSKU).where(ProjectSKU.project_id == project_id)
+        )
+        assert psk is not None
+        # Убеждаемся что JSONB действительно NULL (default GORJI import)
+        assert psk.copacking_rate_by_period is None
+
+        base_scenario = await db_session.scalar(
+            select(Scenario).where(
+                Scenario.project_id == project_id,
+                Scenario.type == ScenarioType.BASE,
+            )
+        )
+        assert base_scenario is not None
+
+        baseline_results = (
+            await db_session.scalars(
+                select(ScenarioResult).where(
+                    ScenarioResult.scenario_id == base_scenario.id,
+                )
+            )
+        ).all()
+        by_scope_baseline = {r.period_scope: r.npv for r in baseline_results}
+
+        # Установить все-None override — семантически эквивалентен NULL-массиву
+        psk.copacking_rate_by_period = [None] * 43
+        flag_modified(psk, "copacking_rate_by_period")
+        await db_session.flush()
+
+        await calculate_all_scenarios(db_session, project_id)
+        await db_session.flush()
+
+        new_results = (
+            await db_session.scalars(
+                select(ScenarioResult).where(
+                    ScenarioResult.scenario_id == base_scenario.id,
+                )
+            )
+        ).all()
+        by_scope_new = {r.period_scope: r.npv for r in new_results}
+
+        for scope in [PeriodScope.Y1Y3, PeriodScope.Y1Y5, PeriodScope.Y1Y10]:
+            assert by_scope_baseline[scope] == by_scope_new[scope], (
+                f"NPV для scope={scope} должен быть bit-identical: "
+                f"baseline={by_scope_baseline[scope]}, "
+                f"with_nulls={by_scope_new[scope]}"
             )

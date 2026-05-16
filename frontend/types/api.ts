@@ -789,6 +789,38 @@ export interface FinancialPlanRequest {
 }
 
 // ============================================================
+// Fine Tuning per-period overrides (C #14)
+// ============================================================
+
+/**
+ * SKU-уровень override (C #14): copacking rate per-period (43 значения).
+ * `null` для всего поля = override отсутствует, fallback на скаляр
+ * `ProjectSKURead.copacking_rate`. `null` для элемента = на этот период
+ * fallback на скаляр.
+ *
+ * Decimal приходит с backend как string (Pydantic v2 → JSON для Decimal).
+ * Для отображения парсить через `Number()` — JSONB round-trip может
+ * влиять на precision (e.g. "99.5" → "99.50000000000001"), поэтому
+ * сравнивать численно, а не через string-equality.
+ */
+export interface SkuOverridesResponse {
+  copacking_rate_by_period: (string | null)[] | null;
+}
+
+/**
+ * Channel-уровень override (C #14): 3 поля per-period.
+ * Каждое поле независимо: `null` = убрать override этого поля.
+ */
+export interface ChannelOverridesResponse {
+  logistics_cost_per_kg_by_period: (string | null)[] | null;
+  ca_m_rate_by_period: (string | null)[] | null;
+  marketing_rate_by_period: (string | null)[] | null;
+}
+
+export type SkuOverridesPayload = SkuOverridesResponse;
+export type ChannelOverridesPayload = ChannelOverridesResponse;
+
+// ============================================================
 // MediaAsset (Фаза 4.5.2 — загруженные файлы проекта)
 // ============================================================
 
