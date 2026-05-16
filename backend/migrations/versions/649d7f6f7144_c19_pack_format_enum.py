@@ -81,4 +81,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_constraint("ck_skus_format", "skus", type_="check")
+    # Naming convention (backend/app/models/base.py) expands "format" →
+    # "ck_skus_format". Передаём логическое имя в обоих направлениях
+    # (create + drop), иначе drop пытается удалить "ck_skus_ck_skus_format".
+    op.drop_constraint("format", "skus", type_="check")
