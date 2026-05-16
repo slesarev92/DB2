@@ -42,6 +42,12 @@ interface AddSkuDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAdded: () => void;
+  /**
+   * Если true — режим «создать новый SKU» скрыт. Диалог работает
+   * только в mode="existing" (выбор из каталога). Используется на
+   * вкладке «Каналы» (MEMO 4.4: SKU создаётся только в SKU и BOM).
+   */
+  existingOnly?: boolean;
 }
 
 type Mode = "existing" | "new";
@@ -70,6 +76,7 @@ export function AddSkuDialog({
   open,
   onOpenChange,
   onAdded,
+  existingOnly = false,
 }: AddSkuDialogProps) {
   const [mode, setMode] = useState<Mode>("existing");
   const [submitting, setSubmitting] = useState(false);
@@ -168,30 +175,36 @@ export function AddSkuDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Добавить SKU в проект</DialogTitle>
+          <DialogTitle>
+            {existingOnly ? "Привязать SKU к проекту" : "Добавить SKU в проект"}
+          </DialogTitle>
           <DialogDescription>
-            Выберите существующий SKU из справочника или создайте новый.
+            {existingOnly
+              ? "Выберите SKU из каталога и привяжите к проекту."
+              : "Выберите существующий SKU из справочника или создайте новый."}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant={mode === "existing" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setMode("existing")}
-          >
-            Из каталога
-          </Button>
-          <Button
-            type="button"
-            variant={mode === "new" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setMode("new")}
-          >
-            Создать новый
-          </Button>
-        </div>
+        {!existingOnly && (
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant={mode === "existing" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setMode("existing")}
+            >
+              Из каталога
+            </Button>
+            <Button
+              type="button"
+              variant={mode === "new" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setMode("new")}
+            >
+              Создать новый
+            </Button>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {mode === "existing" ? (
@@ -222,7 +235,7 @@ export function AddSkuDialog({
                 </p>
               )}
             </div>
-          ) : (
+          ) : !existingOnly && (
             <div className="space-y-3">
               <div className="space-y-2">
                 <Label htmlFor="brand">Бренд *</Label>
@@ -337,7 +350,11 @@ export function AddSkuDialog({
               Отмена
             </Button>
             <Button type="submit" disabled={submitting}>
-              {submitting ? "Добавление..." : "Добавить"}
+              {submitting
+                ? "Добавление..."
+                : existingOnly
+                  ? "Привязать"
+                  : "Добавить"}
             </Button>
           </DialogFooter>
         </form>
