@@ -38,6 +38,7 @@ import {
   listChannels,
   updatePskChannel,
 } from "@/lib/channels";
+import { pluralizeRu } from "@/lib/format";
 
 import type {
   Channel,
@@ -111,19 +112,29 @@ export function AddChannelsDialog({
   const validateRef = useRef<(() => boolean) | null>(null);
 
   // Загрузка каналов при открытии (вызывается каждый раз — каталог может
-  // обновиться через T4 CreateChannelDialog).
+  // обновиться через T4 CreateChannelDialog). cancelled flag — стандартный
+  // паттерн в проекте (см. channel-form.tsx, channels-panel.tsx).
   useEffect(() => {
     if (!open) return;
+    let cancelled = false;
     listChannels()
       .then((data) => {
+        if (cancelled) return;
         setChannels(data);
         setError(null);
       })
-      .catch(() => setError("Ошибка загрузки каналов"));
+      .catch(() => {
+        if (cancelled) return;
+        setError("Ошибка загрузки каналов");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
 
-  // Reset формы при закрытии (НЕ сразу после open=false: дать анимации
-  // dialog'а отыграть; для нашего случая достаточно сбросить state).
+  // Reset формы при закрытии.
+  // setChannels([]) — избегаем stale list на следующем open (важно после T4
+  // когда каталог можно менять inline).
   useEffect(() => {
     if (open) return;
     setPhase("pick");
@@ -132,6 +143,7 @@ export function AddChannelsDialog({
     setError(null);
     setSubmitting(false);
     setOpenGroups({});
+    setChannels([]);
   }, [open]);
 
   const excludeSet = useMemo(
@@ -202,7 +214,10 @@ export function AddChannelsDialog({
         channel_ids: Array.from(selectedIds),
         defaults: toDefaultsPayload(defaults),
       });
-      toast.success(`Привязано ${result.length} каналов`);
+      const n = result.length;
+      const verb = pluralizeRu(n, "Привязан", "Привязано", "Привязано");
+      const noun = pluralizeRu(n, "канал", "канала", "каналов");
+      toast.success(`${verb} ${n} ${noun}`);
       onAdded();
       onOpenChange(false);
     } catch (err) {
@@ -391,7 +406,7 @@ export function AddChannelsDialog({
                 <Button type="submit" disabled={submitting}>
                   {submitting
                     ? "Привязка..."
-                    : `Привязать ${selectedIds.size} каналов`}
+                    : `Привязать ${selectedIds.size} ${pluralizeRu(selectedIds.size, "канал", "канала", "каналов")}`}
                 </Button>
               </DialogFooter>
             </form>
