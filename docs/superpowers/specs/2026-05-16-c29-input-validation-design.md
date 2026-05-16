@@ -133,41 +133,32 @@ export function FieldWarning({ warning }: { warning?: string | null }) {
 | 3 | `frontend/components/projects/channel-form.tsx` | Добавить `warn` в rules для 2 полей + render `FieldWarning` |
 | 4 | `frontend/components/projects/bom-panel.tsx` | Добавить `warn` в `BOM_RULES` для `price_per_unit` + render |
 | 5 | `frontend/components/projects/add-sku-dialog.tsx` | Добавить warn для `volume_l` + render |
-| 6 | `frontend/__tests__/use-field-validation.test.ts` | Unit-тесты warn-rule (создать или дополнить existing test) |
+| 6 | `frontend/e2e/c29-input-validation.spec.ts` | Playwright e2e — 4 positive + 1 negative scenarios |
 | 7 | `CHANGELOG.md` | Секция [Unreleased] → C #29 |
 | 8 | `docs/CLIENT_FEEDBACK_v2_STATUS.md` | Поменять статус «Валидация вводных» с ❌ на ✅ (minimum protection) |
 
 ## 6. Testing
 
-### 6.1 Unit (`use-field-validation.test.ts`)
+**Фронт-инфра DB2 не содержит vitest/jest** — тесты в `frontend/e2e/*.spec.ts` через Playwright (требует Docker stack). Из-за этого «полноценные unit-тесты» для hook'а заменяются комбинацией: TypeScript types (compile-time), Playwright e2e (integration), manual browser verify (controller).
 
-- `validateField("0", { numeric: true, min: 0, warn: { when: n => n===0, message: "M" } })` → `{ warning: "M" }` (no error)
-- `validateField("-1", { numeric: true, min: 0, warn: {...} })` → `{ error: "Минимум 0" }` (warn skipped)
-- `validateField("5", { numeric: true, min: 0, warn: { when: n => n===0, ... } })` → `{}` (нет error, нет warning)
-- `validateField("", { numeric: true, min: 0, warn: {...} })` → `{}` (empty, не required, нет warning)
-- `validateField("", { required: true, numeric: true, warn: {...} })` → `{ error: "Обязательное поле" }`
-- Hook: `validateAll` с warning-only state → возвращает `true` (не блокирует)
-- Hook: `validateAll` с error → возвращает `false`, errors set, warnings cleared/updated
+### 6.1 Compile-time (`npx tsc --noEmit`)
 
-### 6.2 Integration (per-form)
+Новый shape `validateField()` (`{ error?: string; warning?: string }`) и новое поле `warnings` в hook return-объекте должны компилироваться без ошибок. Каждая form-интеграция деструктурирует `warnings` — несоответствие даст compile error.
 
-Каждая из 3 форм — отдельный тестовый сценарий:
+### 6.2 Playwright e2e (новый файл `frontend/e2e/c29-input-validation.spec.ts`)
 
-- Ввод `0` в поле → видно amber-warning (data-testid или text query)
-- Ввод `-1` → видно red-error, warning не показан
-- Ввод корректного значения `>0` → ни error, ни warning
-- Submit формы с warning-only state → проходит (моки API вызваны)
-- Submit с error → блокируется (моки API не вызваны)
+Каждый из 4 кейсов = отдельный test():
+
+- **ChannelForm shelf_price_reg=0:** открыть проект → вкладка Каналы → добавить канал → ввести 0 в "Цена полки" → blur → проверить наличие текста "Цена полки 0 ₽ — выручка обнулится" → submit → форма закрылась (без блока).
+- **ChannelForm offtake_target=0:** аналогично, "Целевой offtake 0 — продаж не будет".
+- **BOMPanel price_per_unit=0:** проект → SKU и BOM → выбрать SKU → добавить компонент → 0 в "Цена за единицу" → blur → warning виден → submit → проходит.
+- **AddSkuDialog volume_l=0:** проект → SKU и BOM → "Добавить SKU" → 0 в "Объём" → blur → warning виден → submit → SKU создан.
+
+Дополнительно один negative-кейс: ввести `-1` в `shelf_price_reg` → видно red-error, submit заблокирован (нет навигации/закрытия диалога).
 
 ### 6.3 Manual в браузере
 
-После реализации, controller проверяет 4 кейса:
-1. ChannelForm: `shelf_price_reg = 0` → жёлтое сообщение, сохранение проходит
-2. ChannelForm: `offtake_target = 0` → жёлтое, сохранение проходит
-3. BOMPanel: `price_per_unit = 0` в новой строке → жёлтое, сохранение проходит
-4. AddSkuDialog: `volume_l = 0` → жёлтое, SKU создаётся
-
-Все 4 кейса с отрицательными значениями (`-1`) → красная ошибка, сохранение блокируется.
+После Playwright passes, controller проходит 4 кейса вручную и подтверждает читаемость текста (amber-цвет различим, иконка не съезжает).
 
 ## 7. Риски и ограничения
 
@@ -182,8 +173,7 @@ export function FieldWarning({ warning }: { warning?: string | null }) {
 - [ ] 4 поля показывают amber-warning при значении `0`
 - [ ] Submit формы с warning-only state не блокируется
 - [ ] Submit с error продолжает блокироваться
-- [ ] Unit-тесты (≥7 кейсов) проходят
-- [ ] Integration-тесты для 3 форм проходят
+- [ ] Playwright e2e `c29-input-validation.spec.ts` — 5 кейсов (4 positive + 1 negative) проходят
 - [ ] `frontend tsc --noEmit` — 0 ошибок
 - [ ] `CHANGELOG.md` + `docs/CLIENT_FEEDBACK_v2_STATUS.md` обновлены
 - [ ] Manual smoke: 4 кейса в браузере подтверждены controller
