@@ -168,8 +168,13 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
     };
   }, []);
   const bomRules = useMemo(() => BOM_RULES, []);
-  const { errors: bomErrors, warnings: bomWarnings, validateAll: validateBom, clearError: clearBomError } =
-    useFieldValidation<BomField>(bomRules);
+  const {
+    errors: bomErrors,
+    warnings: bomWarnings,
+    validateAll: validateBom,
+    validateOne: validateBomField,
+    clearError: clearBomError,
+  } = useFieldValidation<BomField>(bomRules);
   const { sorted: sortedBom, sortState: bomSortState, toggleSort: toggleBomSort } =
     useSortableTable(bom ?? [], BOM_SORT_COLUMNS);
 
@@ -790,6 +795,7 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
                   setDraft({ ...draft, price_per_unit: e.target.value });
                   clearBomError("price_per_unit");
                 }}
+                onBlur={(e) => validateBomField("price_per_unit", e.target.value)}
                 aria-invalid={!!bomErrors.price_per_unit}
                 disabled={adding}
                 placeholder="80.00"
