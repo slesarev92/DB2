@@ -17,7 +17,6 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { formatMoney } from "@/lib/format";
 
@@ -101,7 +100,6 @@ export function TornadoChart({ data }: TornadoChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Tornado chart</CardTitle>
         <CardDescription>
           Диапазон NPV Y1-Y10 при ±20% изменении каждого параметра.
           Вертикальная линия — Base NPV ({formatMoney(String(baseNpv))}).

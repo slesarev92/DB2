@@ -17,7 +17,7 @@
  * наличии results для всех scope'ов.
  */
 
-import { Sparkles, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAIPanel } from "./ai-panel-context";
@@ -125,12 +125,8 @@ export function ExplainKpiInline({
 
   return (
     <div className="rounded-lg border bg-card p-4">
-      {/* Header с кнопкой запуска */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-semibold">AI-объяснение KPI</h3>
-        </div>
+      {/* Header — controls only; title comes from outer CollapsibleSection */}
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <div className="flex items-center gap-2 text-xs">
           {/* Tier toggle */}
           <div

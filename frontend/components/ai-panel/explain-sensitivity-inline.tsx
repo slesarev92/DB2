@@ -4,7 +4,7 @@
  * Inline ✨ для SensitivityTab — интерпретация матрицы (Phase 7.3).
  */
 
-import { Sparkles, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAIPanel } from "./ai-panel-context";
@@ -96,11 +96,8 @@ export function ExplainSensitivityInline({
 
   return (
     <div className="rounded-lg border bg-card p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-semibold">AI-интерпретация чувствительности</h3>
-        </div>
+      {/* Title comes from outer CollapsibleSection; controls only here */}
+      <div className="flex flex-wrap items-center justify-end gap-3">
         {loading ? (
           <button
             type="button"

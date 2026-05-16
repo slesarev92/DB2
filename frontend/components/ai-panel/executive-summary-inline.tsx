@@ -7,7 +7,6 @@
  * save to DB → PPT/PDF экспорт подхватывает автоматически.
  */
 
-import { Sparkles } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 
 import { useAIPanel } from "./ai-panel-context";
@@ -126,18 +125,14 @@ export function ExecutiveSummaryInline({
 
   return (
     <div className="rounded-lg border bg-card p-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-semibold">Executive summary</h3>
-        </div>
-
-        {savedSummary && !data && (
+      {/* Title comes from outer CollapsibleSection; only badge remains here */}
+      {savedSummary && !data && (
+        <div className="flex items-center justify-end">
           <span className="rounded bg-green-100 px-2 py-0.5 text-[10px] text-green-700">
             Сохранён в паспорт
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Saved summary preview */}
       {savedSummary && !data && (
