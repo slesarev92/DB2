@@ -46,7 +46,7 @@ based_on: tag v2.4.0 (2026-04-15) + main HEAD
 | Что такое "Тип производства" в расчётах? | ❓ | `ProjectSKU.production_mode` ∈ {"own","copacking"} — миграция `6c10a01c69c0`. В s03_cogs (`backend/app/engine/steps/s03_cogs.py:41-58`) логика взаимоисключения реализована: `copacking → production=0`, иначе `copacking=0`. Поле работает, но описание для пользователя в UI отсутствует — нужно подтверждение семантики. |
 | "Источник" в Согласующих | ❓ | `Project.approvers` — JSONB list. Структура произвольная, поле "источник" не описано в коде. Никак не используется в расчётах. |
 | MOQ — расчётный или справочный? | ❓ | MOQ упомянут ТОЛЬКО в `supplier_quotes` JSONB (Phase 8.10) как описание формата котировок. Расчётно нигде не задействован. По умолчанию — справочный. |
-| OBPPC — перенести из Дистрибуции в Содержание | ❓ | Сейчас группа `distribution` в `project-nav-context.tsx:71` содержит `channels, akb, obppc`. Таблица `obppc_entries` имеет FK на `channels.id`. Перенос в "Содержание" возможен без миграции данных — таб переедет в группу `basics`. Решение от заказчика не зафиксировано. |
+| OBPPC — перенести из Дистрибуции в Содержание | ✅ | Закрыто C #13 Q4 (2026-05-16). `obppc` перемещён из `distribution.tabs` в `basics.tabs` после `content` в `frontend/lib/project-nav-context.tsx`. БД/API/сервис без изменений, FK сохранён. См. spec `docs/superpowers/specs/2026-05-16-c13-q4-obppc-in-contents-design.md`. |
 
 ### 1.4 Будущие версии
 

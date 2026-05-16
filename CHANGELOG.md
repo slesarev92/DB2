@@ -114,6 +114,20 @@
 
 - **C #14 Fine Tuning per-period:** override 4 финансовых полей (copacking_rate, logistics_cost_per_kg, ca_m_rate, marketing_rate) на per-period (43 точки = M1..M36 + Y4..Y10). Реализовано через JSONB-массивы на ProjectSKU / ProjectSKUChannel. Pipeline получает tuple-43 в шагах s03/s05/s06. Frontend: новый Fine Tuning tab с 4 секциями, reuse PeriodGrid и PeriodBulkFill из shared. NULL override = fallback на скаляр (backward-compat). Logistics override применяется ДО scenario delta (Option B — stress тест применяется поверх override).
 
+### Changed
+
+- **C #13 Q4 OBPPC — перенос в группу «Основа» (MEMO 1.3, 2026-05-16).**
+  Таб OBPPC семантически описывает ценовое позиционирование SKU,
+  а не дистрибуцию. Перемещён из группы «Дистрибуция» ③ в «Основа» ①
+  после таба «Содержание». Чисто frontend navigation refactor:
+  `frontend/lib/project-nav-context.tsx` — `TAB_ORDER` и
+  `SECTION_GROUPS`. Backend, БД, API, OBPPCService не тронуты;
+  миграция данных не нужна; FK `obppc_entries.channel_id → channels.id`
+  сохранён.
+  - Spec: `docs/superpowers/specs/2026-05-16-c13-q4-obppc-in-contents-design.md`
+  - Plan: `docs/superpowers/plans/2026-05-16-c13-q4-obppc-in-contents.md`
+  - Verification: `npx tsc --noEmit` 0 ошибок; manual browser smoke ok.
+
 ---
 
 ## Phase A 
