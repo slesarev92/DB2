@@ -123,6 +123,7 @@ export function AddSkuDialog({
     if (open) return;
     setError(null);
     setSubmitting(false);
+    setMode("existing");
     setSelectedSkuId("");
     setBrand("");
     setName("");
@@ -231,7 +232,9 @@ export function AddSkuDialog({
               </Select>
               {skus.length === 0 && (
                 <p className="text-xs text-muted-foreground">
-                  Каталог пуст. Создайте новый SKU.
+                  {existingOnly
+                    ? "Каталог пуст. Создайте SKU в разделе «SKU и BOM»."
+                    : "Каталог пуст. Создайте новый SKU."}
                 </p>
               )}
             </div>
