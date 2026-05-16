@@ -114,6 +114,22 @@
 
 - **C #14 Fine Tuning per-period:** override 4 финансовых полей (copacking_rate, logistics_cost_per_kg, ca_m_rate, marketing_rate) на per-period (43 точки = M1..M36 + Y4..Y10). Реализовано через JSONB-массивы на ProjectSKU / ProjectSKUChannel. Pipeline получает tuple-43 в шагах s03/s05/s06. Frontend: новый Fine Tuning tab с 4 секциями, reuse PeriodGrid и PeriodBulkFill из shared. NULL override = fallback на скаляр (backward-compat). Logistics override применяется ДО scenario delta (Option B — stress тест применяется поверх override).
 
+- **C #22 Collapse/expand разделов «Анализ» (MEMO 1.3, 2026-05-16).**
+  Section-level collapse/expand на 5 табах группы ⑤ «Анализ»: Results
+  (10 секций), Sensitivity (4), Pricing (3), Value-chain (1), P&L (1).
+  Новый wrapper `<CollapsibleSection>` поверх `@base-ui/react/collapsible`
+  + хук `useCollapseState` с localStorage persistence по (projectId,
+  tabKey, sectionId). Bulk toggle «Свернуть/Развернуть всё» в табах с
+  >1 секциями. Backend/БД/API не тронуты; экспорт PDF/PPTX/XLSX
+  игнорирует collapse-state (всегда полный отчёт). Inner header'ы 4-х
+  оборачиваемых компонентов (TornadoChart, ExplainKpiInline,
+  ExecutiveSummaryInline, ExplainSensitivityInline) убраны, чтобы не
+  было double-titles — title теперь живёт только в CollapsibleSection
+  trigger.
+  - Spec: `docs/superpowers/specs/2026-05-16-c22-analysis-collapsible-design.md`
+  - Plan: `docs/superpowers/plans/2026-05-16-c22-analysis-collapsible.md`
+  - Verification: `npx tsc --noEmit` 0 ошибок; manual smoke на всех 5 табах ok.
+
 ### Changed
 
 - **C #13 Q4 OBPPC — перенос в группу «Основа» (MEMO 1.3, 2026-05-16).**

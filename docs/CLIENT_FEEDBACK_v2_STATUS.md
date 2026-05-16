@@ -35,7 +35,7 @@ based_on: tag v2.4.0 (2026-04-15) + main HEAD
 |---|---|---|
 | Перевести все лейблы на русский | 🟡 | По коммиту `b2a107c` "remaining English strings" — закрыли финальные. Спотовая проверка показывает русские лейблы в `financial-plan-editor`, `periods-tab`, `project-nav-context` (SECTION_LABELS). Возможны остатки в редко открываемых компонентах. |
 | Добавить единицы измерения (шт, л, %, ₽, с/без НДС) | 🟡 | В `financial-plan-editor.tsx` колонки подписаны "CAPEX, ₽"; в `bom-panel`, `pricing-tab` встречаются единицы. Систематической проверки нет — часть полей без "₽/шт/%". |
-| Collapse/expand разделов | ❌ | Глобального механизма свёртывания блоков отчёта нет. Только локальные expansions: `financial-plan-editor` раскрывает OPEX-разбивку, `value-chain-tab` / `channels-panel` / `sensitivity-tab` имеют локальные раскрытия. Сохранение состояния между сессиями — нет. |
+| Collapse/expand разделов | ✅ | Закрыто C #22 (2026-05-16). Section-level collapse добавлен на 5 табах группы «Анализ» (Results, Sensitivity, Pricing, Value-chain, P&L) через wrapper `<CollapsibleSection>` поверх `@base-ui/react/collapsible`. Persistence — localStorage по ключу `db2:analysis-collapse:v1` (projectId × tabKey × sectionId). Bulk toggle «Свернуть/Развернуть всё» в табах с >1 секциями (Results 10, Sensitivity 4, Pricing 3). Локальные row-level раскрытия не тронуты. См. spec `docs/superpowers/specs/2026-05-16-c22-analysis-collapsible-design.md`. |
 | Статус проекта = dropdown | ❌ | `Project` модель имеет `gate_stage` (G0..G5), но не общий "статус". В UI `gate-timeline.tsx` рисует фиксированную шкалу — выпадающего списка для смены статуса нет. Цветовые метки на ячейках Гантта по статусу — есть (`gantt-chart.tsx:STATUS_COLORS`). |
 | Ручная раскраска ячеек Гантта (жёлтый/зелёный/красный) | ❌ | `gantt-chart.tsx` не имеет UI для ручной заливки. |
 
@@ -267,7 +267,7 @@ based_on: tag v2.4.0 (2026-04-15) + main HEAD
 
 ### 🟡 Средний
 
-13. **Collapse/expand разделов** (1.2, ❌).
+13. **Collapse/expand разделов** (1.2, ✅ — закрыто C #22 2026-05-16).
 14. **Статус проекта dropdown + ручная раскраска Гантта** (1.2, ❌).
 15. **Waterfall-диаграмма стакана** (6.3, ❌).
 16. **АКБ автоматический расчёт из nd × ОКБ** (4.3, ❌).
