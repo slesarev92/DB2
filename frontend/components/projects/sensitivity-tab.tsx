@@ -34,7 +34,14 @@ import { formatMoney, formatPercent } from "@/lib/format";
 import { getProject } from "@/lib/projects";
 import { listProjectScenarios } from "@/lib/scenarios";
 import { computeSensitivity } from "@/lib/sensitivity";
+import {
+  classifyNpv,
+  loadSensitivityThresholds,
+  saveSensitivityThresholds,
+  type SensitivityThresholds,
+} from "@/lib/sensitivity-thresholds";
 import { useCollapseState } from "@/lib/use-collapse-state";
+import { SensitivityThresholdsControls } from "./sensitivity-thresholds-controls";
 
 import type { ProjectRead, SensitivityCell, SensitivityResponse } from "@/types/api";
 
@@ -61,14 +68,6 @@ function formatDeltaLabel(delta: number): string {
   if (delta === 0) return "Базовый";
   const sign = delta > 0 ? "+" : "−";
   return `${sign}${Math.abs(delta * 100).toFixed(0)}%`;
-}
-
-/** Цвет для NPV: positive зелёный, negative красный, base нейтральный. */
-function npvClass(value: number | null, baseValue: number | null): string {
-  if (value === null || baseValue === null) return "";
-  if (value > baseValue) return "text-green-600";
-  if (value < baseValue) return "text-red-600";
-  return "";
 }
 
 /**
@@ -98,6 +97,14 @@ export function SensitivityTab({ projectId }: SensitivityTabProps) {
   const [baseScenarioId, setBaseScenarioId] = useState<number | null>(null);
   const [project, setProject] = useState<ProjectRead | null>(null);
   const [scope, setScope] = useState<string>("y1y10");
+  const [thresholds, setThresholds] = useState<SensitivityThresholds>(
+    loadSensitivityThresholds,
+  );
+
+  function handleThresholdsChange(next: SensitivityThresholds) {
+    setThresholds(next);
+    saveSensitivityThresholds(next);
+  }
 
   const collapse = useCollapseState(projectId, "sensitivity", SENSITIVITY_SECTIONS);
 
@@ -149,7 +156,11 @@ export function SensitivityTab({ projectId }: SensitivityTabProps) {
             параметров на ±10% и ±20% от Base сценария.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <SensitivityThresholdsControls
+            value={thresholds}
+            onChange={handleThresholdsChange}
+          />
           {collapse.allOpen ? (
             <Button
               variant="ghost"
@@ -273,7 +284,7 @@ export function SensitivityTab({ projectId }: SensitivityTabProps) {
             isOpen={collapse.isOpen("tornado")}
             onToggle={() => collapse.toggle("tornado")}
           >
-            <TornadoChart data={data} />
+            <TornadoChart data={data} thresholds={thresholds} />
           </CollapsibleSection>
 
           <CollapsibleSection
@@ -329,9 +340,10 @@ export function SensitivityTab({ projectId }: SensitivityTabProps) {
                           return (
                             <TableCell key={param} className="text-right">
                               <div
-                                className={`font-semibold ${npvClass(
+                                className={`font-semibold ${classifyNpv(
                                   cell.npv_y1y10,
                                   data.base_npv_y1y10,
+                                  thresholds,
                                 )}`}
                               >
                                 {cell.npv_y1y10 === null
@@ -353,11 +365,15 @@ export function SensitivityTab({ projectId }: SensitivityTabProps) {
                 </Table>
                 <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
                   <span>Раскраска:</span>
-                  <span className="text-green-600 font-semibold">NPV выше базового</span>
+                  <span className="text-green-600 font-semibold">
+                    NPV ≥ +{thresholds.greenPct}% от base
+                  </span>
                   <span>—</span>
-                  <span className="text-red-600 font-semibold">NPV ниже базового</span>
+                  <span className="text-red-600 font-semibold">
+                    NPV ≤ −{thresholds.redPct}% от base
+                  </span>
                   <span>—</span>
-                  <span>Базовый без подсветки</span>
+                  <span>Нейтральный (в пределах порогов)</span>
                 </div>
               </CardContent>
             </Card>

@@ -19,11 +19,16 @@ import {
   CardHeader,
 } from "@/components/ui/card";
 import { formatMoney } from "@/lib/format";
+import {
+  classifyNpvHex,
+  type SensitivityThresholds,
+} from "@/lib/sensitivity-thresholds";
 
 import type { SensitivityResponse } from "@/types/api";
 
 interface TornadoChartProps {
   data: SensitivityResponse;
+  thresholds: SensitivityThresholds;
 }
 
 // PARAM_LABELS — единый в types/api.ts (L-05).
@@ -51,7 +56,7 @@ interface TornadoBar {
  *
  * Используем ±20% (крайний уровень) для максимального контраста.
  */
-export function TornadoChart({ data }: TornadoChartProps) {
+export function TornadoChart({ data, thresholds }: TornadoChartProps) {
   if (data.base_npv_y1y10 === null) return null;
 
   const baseNpv = data.base_npv_y1y10;
@@ -135,14 +140,20 @@ export function TornadoChart({ data }: TornadoChartProps) {
               labelFormatter={(label) => `Параметр: ${String(label)}`}
             />
             <ReferenceLine x={0} stroke="#666" strokeWidth={2} />
-            <Bar dataKey="negative" stackId="a" fill="#ef4444" radius={[4, 0, 0, 4]}>
-              {chartData.map((_, i) => (
-                <Cell key={`neg-${i}`} fill="#ef4444" />
+            <Bar dataKey="negative" stackId="a" radius={[4, 0, 0, 4]}>
+              {chartData.map((entry, i) => (
+                <Cell
+                  key={`neg-${i}`}
+                  fill={classifyNpvHex(entry.low, entry.base, thresholds)}
+                />
               ))}
             </Bar>
-            <Bar dataKey="positive" stackId="a" fill="#22c55e" radius={[0, 4, 4, 0]}>
-              {chartData.map((_, i) => (
-                <Cell key={`pos-${i}`} fill="#22c55e" />
+            <Bar dataKey="positive" stackId="a" radius={[0, 4, 4, 0]}>
+              {chartData.map((entry, i) => (
+                <Cell
+                  key={`pos-${i}`}
+                  fill={classifyNpvHex(entry.high, entry.base, thresholds)}
+                />
               ))}
             </Bar>
           </BarChart>
