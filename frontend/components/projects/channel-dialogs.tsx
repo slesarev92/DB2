@@ -78,7 +78,10 @@ const EMPTY_CATALOG_FORM: ChannelCatalogFormState = {
   code: "",
   name: "",
   channel_group: "OTHER",
-  source_type: "custom",
+  // Пусто = "—" (NULL в backend). Юзер выбирает явно. Дефолт "custom"
+  // приводил к silent POST source_type=custom для всех создаваемых
+  // каналов без явного выбора — багово.
+  source_type: "",
   region: "",
   universe_outlets: "",
 };
@@ -326,6 +329,10 @@ export function EditChannelCatalogDialog({
     e.preventDefault();
     if (channel === null) return;
     setError(null);
+    if (!form.name.trim()) {
+      setError("Название обязательно");
+      return;
+    }
     setSubmitting(true);
     try {
       const updated = await updateChannel(channel.id, {
@@ -626,7 +633,9 @@ export function AddChannelsDialog({
   function reloadChannels() {
     listChannels()
       .then(setChannels)
-      .catch(() => {});
+      .catch(() =>
+        toast.error("Список каналов не обновился — закройте и откройте диалог"),
+      );
   }
 
   function handleCatalogCreated(channel: Channel) {
