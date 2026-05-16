@@ -143,6 +143,11 @@
   - Plan: `docs/superpowers/plans/2026-05-16-c19-pack-format-enum.md`
   - Verification: backend pytest 511 passed (+3 new); tsc 0 errors;
     alembic upgrade/downgrade cycle clean; manual smoke ok.
+  - **Pre-flight для прода:** перед `alembic upgrade head` на проде
+    выполнить `SELECT DISTINCT format FROM skus WHERE format IS NOT NULL`
+    и сверить с `MAPPING_RULES` в migration. Незнакомые значения будут
+    обнулены с логом — если нужно сохранить, дополнить MAPPING_RULES
+    перед выкаткой. См. spec §5.4.
 
 ### Changed
 
