@@ -69,7 +69,7 @@ export function TornadoChart({ data, thresholds }: TornadoChartProps) {
     const pos20 = data.cells.find(
       (c) => c.parameter === param && c.delta === 0.2,
     );
-    if (!neg20?.npv_y1y10 || !pos20?.npv_y1y10) continue;
+    if (neg20?.npv_y1y10 == null || pos20?.npv_y1y10 == null) continue;
 
     const low = Math.min(neg20.npv_y1y10, pos20.npv_y1y10);
     const high = Math.max(neg20.npv_y1y10, pos20.npv_y1y10);
