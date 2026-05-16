@@ -13,6 +13,7 @@ from app.api.deps import get_current_user
 from app.db import get_db
 from app.models import User
 from app.schemas.project_sku_channel import (
+    BulkChannelLinkCreate,
     ProjectSKUChannelCreate,
     ProjectSKUChannelRead,
     ProjectSKUChannelUpdate,
@@ -115,6 +116,40 @@ async def add_channel_to_psk_endpoint(
     await invalidation_service.mark_project_stale(session, psk.project_id)
     await session.commit()
     return ProjectSKUChannelRead.model_validate(psk_channel)
+
+
+@router.post(
+    "/api/project-skus/{psk_id}/channels/bulk",
+    response_model=list[ProjectSKUChannelRead],
+    status_code=status.HTTP_201_CREATED,
+)
+async def bulk_link_channels_endpoint(
+    psk_id: int,
+    data: BulkChannelLinkCreate,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> list[ProjectSKUChannelRead]:
+    """C #16: bulk-привязка каналов к SKU в одной транзакции (atomic)."""
+    psk = await _require_psk_owned(session, psk_id, current_user)
+
+    try:
+        created = await project_sku_channel_service.bulk_create_psk_channels(
+            session, psk_id, data.channel_ids, data.defaults
+        )
+    except project_sku_channel_service.ChannelNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="One or more channel_ids not found",
+        )
+    except project_sku_channel_service.ProjectSKUChannelDuplicateError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="One or more channels already attached to this ProjectSKU",
+        )
+
+    await invalidation_service.mark_project_stale(session, psk.project_id)
+    await session.commit()
+    return [ProjectSKUChannelRead.model_validate(psc) for psc in created]
 
 
 @router.get(

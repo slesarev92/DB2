@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.models import Channel, ProjectSKUChannel
 from app.schemas.project_sku_channel import (
     ProjectSKUChannelCreate,
+    ProjectSKUChannelDefaults,
     ProjectSKUChannelUpdate,
 )
 
@@ -94,6 +95,36 @@ async def create_psk_channel(
 
     # Перезагружаем с selectinload для корректной сериализации nested
     return await get_psk_channel(session, psk_channel.id)  # type: ignore[return-value]
+
+
+async def bulk_create_psk_channels(
+    session: AsyncSession,
+    project_sku_id: int,
+    channel_ids: list[int],
+    defaults: ProjectSKUChannelDefaults,
+) -> list[ProjectSKUChannel]:
+    """C #16: создаёт N PSC в outer-транзакции через reuse `create_psk_channel`.
+
+    Atomic: на любую ошибку (ChannelNotFoundError / ProjectSKUChannelDuplicateError)
+    endpoint не commit'ит, FastAPI откатит outer transaction. Все ранее flushed
+    PSC откатятся вместе.
+
+    Внутренний savepoint pattern в `create_psk_channel` локализует IntegrityError
+    per-channel; nested transactions не конфликтуют с outer rollback.
+
+    Errors (пробрасываются как есть из create_psk_channel):
+      - `ChannelNotFoundError` — первый невалидный channel_id
+      - `ProjectSKUChannelDuplicateError` — первый duplicate (psk_id, channel_id)
+    """
+    created: list[ProjectSKUChannel] = []
+    for ch_id in channel_ids:
+        data = ProjectSKUChannelCreate(
+            channel_id=ch_id,
+            **defaults.model_dump(),
+        )
+        psc = await create_psk_channel(session, project_sku_id, data)
+        created.append(psc)
+    return created
 
 
 async def update_psk_channel(

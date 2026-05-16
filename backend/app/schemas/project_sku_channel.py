@@ -58,6 +58,35 @@ class ProjectSKUChannelUpdate(BaseModel):
     seasonality_profile_id: int | None = None
 
 
+class ProjectSKUChannelDefaults(BaseModel):
+    """Метрики применяемые ко всем bulk-привязываемым каналам.
+
+    = ProjectSKUChannelCreate минус channel_id. Юзер потом редактирует
+    каждый PSC по отдельности через PATCH /api/psk-channels/{id}.
+    """
+
+    launch_year: int = Field(default=1, ge=1, le=10)
+    launch_month: int = Field(default=1, ge=1, le=12)
+    nd_target: Decimal = Field(..., ge=0, le=1)
+    nd_ramp_months: int = Field(default=12, ge=1, le=36)
+    offtake_target: Decimal = Field(..., ge=0)
+    channel_margin: Decimal = Field(..., ge=0, le=1)
+    promo_discount: Decimal = Field(default=Decimal("0"), ge=0, le=1)
+    promo_share: Decimal = Field(default=Decimal("1"), ge=0, le=1)
+    shelf_price_reg: Decimal = Field(..., ge=0)
+    logistics_cost_per_kg: Decimal = Field(default=Decimal("0"), ge=0)
+    ca_m_rate: Decimal = Field(default=Decimal("0"), ge=0, le=1)
+    marketing_rate: Decimal = Field(default=Decimal("0"), ge=0, le=1)
+    seasonality_profile_id: int | None = None
+
+
+class BulkChannelLinkCreate(BaseModel):
+    """Body для POST /api/project-skus/{psk_id}/channels/bulk."""
+
+    channel_ids: list[int] = Field(..., min_length=1, max_length=50)
+    defaults: ProjectSKUChannelDefaults
+
+
 class ProjectSKUChannelRead(BaseModel):
     """Возвращается из list/get с явно загруженным channel (selectinload)."""
 
