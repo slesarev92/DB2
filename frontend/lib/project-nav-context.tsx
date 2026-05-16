@@ -23,12 +23,12 @@ import {
 export const TAB_ORDER = [
   "overview",
   "content",
+  "obppc",
   "financial-plan",
   "skus",
   "ingredients",
   "channels",
   "akb",
-  "obppc",
   "periods",
   "fine-tuning",
   "scenarios",
@@ -68,9 +68,9 @@ export interface SectionGroup {
 }
 
 export const SECTION_GROUPS: readonly SectionGroup[] = [
-  { key: "basics", label: "Основа", number: "①", tabs: ["overview", "content", "financial-plan"] },
+  { key: "basics", label: "Основа", number: "①", tabs: ["overview", "content", "obppc", "financial-plan"] },
   { key: "product", label: "Продукт", number: "②", tabs: ["skus", "ingredients"] },
-  { key: "distribution", label: "Дистрибуция", number: "③", tabs: ["channels", "akb", "obppc"] },
+  { key: "distribution", label: "Дистрибуция", number: "③", tabs: ["channels", "akb"] },
   { key: "modeling", label: "Моделирование", number: "④", tabs: ["periods", "fine-tuning", "scenarios"] },
   { key: "analysis", label: "Анализ", number: "⑤", tabs: ["results", "sensitivity", "pricing", "value-chain", "pnl"] },
 ];
