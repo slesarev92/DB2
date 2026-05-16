@@ -18,6 +18,7 @@ interface SkuPanelProps {
   projectId: number;
   selectedPskId: number | null;
   onSelectPsk: (pskId: number | null) => void;
+  existingOnly?: boolean;
 }
 
 /**
@@ -31,6 +32,7 @@ export function SkuPanel({
   projectId,
   selectedPskId,
   onSelectPsk,
+  existingOnly = false,
 }: SkuPanelProps) {
   const [items, setItems] = useState<ProjectSKURead[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +94,7 @@ export function SkuPanel({
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">SKU проекта</h2>
         <Button size="sm" onClick={() => setDialogOpen(true)}>
-          + Добавить
+          {existingOnly ? "+ Привязать SKU" : "+ Добавить"}
         </Button>
       </div>
 
@@ -178,6 +180,7 @@ export function SkuPanel({
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         onAdded={reload}
+        existingOnly={existingOnly}
       />
 
       <ConfirmDialog

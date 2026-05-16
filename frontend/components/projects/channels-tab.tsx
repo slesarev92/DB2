@@ -30,6 +30,7 @@ export function ChannelsTab({ projectId }: ChannelsTabProps) {
           projectId={projectId}
           selectedPskId={selectedPskId}
           onSelectPsk={setSelectedPskId}
+          existingOnly
         />
       </div>
       <div className="md:col-span-2">
