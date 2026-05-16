@@ -26,7 +26,7 @@ from app.models import BOMItem
 SKU_BODY = {
     "brand": "Gorji",
     "name": "Gorji Citrus 0.5L PET",
-    "format": "PET",
+    "format": "ПЭТ",
     "volume_l": "0.5",
     "package_type": "Bottle",
     "segment": "CSD",
@@ -407,3 +407,45 @@ async def test_delete_project_sku_cascades_bom(
         ).all()
     )
     assert bom_count_after == 0
+
+
+# ============================================================
+# C #19: format enum validation (Literal type)
+# ============================================================
+
+
+async def test_create_sku_invalid_format_returns_422(
+    auth_client: AsyncClient,
+) -> None:
+    """C #19: format='random' → 422 (Pydantic Literal rejects)."""
+    body = {**SKU_BODY, "format": "random-package-type"}
+    resp = await auth_client.post("/api/skus", json=body)
+    assert resp.status_code == 422
+    detail = resp.json().get("detail", [])
+    assert any("format" in str(err).lower() for err in detail), (
+        f"Expected 'format' in 422 detail; got: {detail}"
+    )
+
+
+async def test_create_sku_null_format_ok(
+    auth_client: AsyncClient,
+) -> None:
+    """C #19: format=null → 201."""
+    body = {**SKU_BODY, "format": None}
+    resp = await auth_client.post("/api/skus", json=body)
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["format"] is None
+
+
+async def test_create_sku_all_enum_values_ok(
+    auth_client: AsyncClient,
+) -> None:
+    """C #19: все 6 enum значений принимаются."""
+    for fmt in ["ПЭТ", "Стекло", "Банка", "Сашет", "Стик", "Пауч"]:
+        body = {**SKU_BODY, "format": fmt, "name": f"SKU {fmt}"}
+        resp = await auth_client.post("/api/skus", json=body)
+        assert resp.status_code == 201, (
+            f"Format '{fmt}' rejected: {resp.json()}"
+        )
+        assert resp.json()["format"] == fmt
