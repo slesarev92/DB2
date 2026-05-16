@@ -11,6 +11,10 @@
 
 Фаза B (MEMO v2.1 — архитектурные изменения). В работе.
 
+### Added (Phase C — C #27)
+
+- **C #27**: PDF экспорт получил диалог выбора секций — 17 чекбоксов (титул, общая инфо, концепция, ..., executive summary). Endpoint расширен query param `?sections=kpi,pnl` для programmatic access. LocalStorage сохраняет выбор юзера. Backward-compat: без параметра — все 17 секций. Filename `_partial.pdf` если выбран subset.
+
 ### Added (Phase C — C #16)
 
 - **C #16**: Каналы получили поля `channel_group` (HM/SM/MM/TT/E_COM/HORECA/QSR/OTHER) и `source_type` (Nielsen/ЦРПТ/2GIS/Infoline/custom). Существующие 25 GORJI seed-каналов автоматически отмаплены по паттерну кода. (MEMO 1.4)
