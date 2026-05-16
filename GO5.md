@@ -141,14 +141,16 @@ SELECT DISTINCT code FROM channels;
 | `backend/app/schemas/sku.py` | `PackFormat` Literal — enum упаковки (C #19) |
 | `backend/app/schemas/project.py` | `NielsenBenchmarkItem` — type для бенчмарков (C #30) |
 | `backend/app/schemas/scenario.py` | `ScenarioRead.name` / `ScenarioUpdate.name` (C #24) |
-| `backend/app/schemas/channel.py` | `ChannelGroup` + `ChannelSourceType` enums (C #16) |
-| `backend/app/api/channels.py` | bulk endpoint `POST /channels/bulk` (C #16) |
-| `backend/alembic/versions/eb59341b9034_c16_channel_group_source_type.py` | миграция + MAPPING_RULES (C #16) |
-| `frontend/lib/channel-groups.ts` | `CHANNEL_GROUP_OPTIONS` + `SOURCE_TYPE_OPTIONS` (C #16) |
-| `frontend/components/projects/channels-panel.tsx` | точка входа, кнопка «+ Привязать» (C #16) |
-| `frontend/components/projects/add-channels-dialog.tsx` | двухфазный диалог (C #16) |
-| `frontend/components/projects/create-channel-dialog.tsx` | inline «+ Новый канал» (C #16) |
-| `frontend/components/projects/edit-channel-catalog-dialog.tsx` | inline ⚙ редактор (C #16) |
+| `backend/app/schemas/channel.py` | `ChannelGroup` + `ChannelSourceType` Literal (C #16) |
+| `backend/app/schemas/project_sku_channel.py` | `ProjectSKUChannelDefaults` + `BulkChannelLinkCreate` (C #16) |
+| `backend/app/api/project_sku_channels.py` | bulk endpoint `POST /api/project-skus/{psk_id}/channels/bulk` (C #16) |
+| `backend/app/services/project_sku_channel_service.py` | `bulk_create_psk_channels` savepoint pattern (C #16) |
+| `backend/migrations/versions/eb59341b9034_c16_channel_group_source_type.py` | миграция + MAPPING_RULES (C #16) |
+| `frontend/lib/channel-group.ts` | `CHANNEL_GROUP_LABELS`/`_ORDER` + `CHANNEL_SOURCE_TYPE_LABELS` (C #16) |
+| `frontend/lib/format.ts` | `pluralizeRu` helper (C #16) |
+| `frontend/components/projects/channels-panel.tsx` | точка входа, кнопка «+ Привязать канал» (C #16) |
+| `frontend/components/projects/channel-dialogs.tsx` | `AddChannelsDialog` двухфазный + `CreateChannelDialog` + `EditChannelCatalogDialog` (C #16) |
+| `frontend/components/ui/checkbox.tsx` | shadcn Checkbox wrapper над @base-ui/react (C #16) |
 | `frontend/lib/pack-format.ts` | `PackFormat` + `PACK_FORMAT_OPTIONS` (C #19) |
 | `frontend/lib/analysis-sections.ts` | section ID константы (C #22) |
 | `frontend/lib/use-collapse-state.ts` | хук collapse-state + localStorage (C #22) |
