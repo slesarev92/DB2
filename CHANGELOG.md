@@ -26,6 +26,10 @@
 
 Перед `alembic upgrade head` сверить `SELECT DISTINCT code FROM channels` с MAPPING_RULES (`EXACT_RULES` + `PREFIX_RULES`) в миграции `eb59341b9034_c16_channel_group_source_type.py`. Незнакомые коды попадают в OTHER (тихо). Если для какого-то канала нужна другая группа — `UPDATE channels SET channel_group='X' WHERE code='...'` до миграции.
 
+### Known limitations (C #16)
+
+- **Catalog edit global для всех юзеров.** Inline `CreateChannelDialog` и `EditChannelCatalogDialog` доступны любому аутентифицированному пользователю (наследие B-05 CRUD `/api/channels`). Переименование «HM» в одном проекте видно во всех. Accepted для закрытой беты; admin role-gate — follow-up issue перед открытием продукта на нескольких аналитиков.
+
 ### Changed (Phase B)
 
 - **B.9b Помесячный финплан Y1-Y3 (MEMO 2.1, финал, 2026-05-15).** Завершает
