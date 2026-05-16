@@ -101,6 +101,7 @@ async def build_pricing_summary(
                 sku_name=psk.sku.name,
                 sku_format=psk.sku.format,
                 sku_volume_l=psk.sku.volume_l,
+                sku_unit_of_measure=psk.sku.unit_of_measure,
                 cogs_per_unit=cogs,
                 channels=channels,
             )
@@ -207,6 +208,7 @@ async def build_value_chain(
                 sku_name=psk.sku.name,
                 sku_format=psk.sku.format,
                 sku_volume_l=psk.sku.volume_l,
+                sku_unit_of_measure=psk.sku.unit_of_measure,
                 channels=channels,
             )
         )

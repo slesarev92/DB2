@@ -25,6 +25,8 @@ class SKUPricingColumn(BaseModel):
     sku_name: str
     sku_format: str | None
     sku_volume_l: Decimal | None
+    # C #23: единица измерения объёма/массы SKU ("л" | "кг")
+    sku_unit_of_measure: str
     cogs_per_unit: Decimal
     channels: list[PricingCell]
 

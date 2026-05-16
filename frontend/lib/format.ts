@@ -52,6 +52,59 @@ export function formatDate(iso: string | null | undefined): string {
   return dateFmt.format(d);
 }
 
+// ──────────────────────────────────────────────────────
+// C #23: Единицы измерения объёма/массы SKU
+// ──────────────────────────────────────────────────────
+
+const volumeFmt = new Intl.NumberFormat("ru-RU", {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 4,
+});
+
+/**
+ * C #23: Объём / масса SKU с единицей.
+ * formatVolume("1.5", "л")  → "1,5 л"
+ * formatVolume("0.5", "кг") → "0,5 кг"
+ * formatVolume(null)         → "—"
+ */
+export function formatVolume(
+  value: string | number | null | undefined,
+  unit: "л" | "кг" = "л",
+): string {
+  if (value === null || value === undefined || value === "") return "—";
+  const num = Number(value);
+  if (Number.isNaN(num)) return "—";
+  return `${volumeFmt.format(num)} ${unit}`;
+}
+
+/**
+ * C #23: Деньги per-unit с единицей из контекста SKU.
+ * formatPerUnit("52.30", "л")  → "52,30 ₽/л"
+ * formatPerUnit("120", "кг")   → "120,00 ₽/кг"
+ * formatPerUnit(null)           → "—"
+ */
+export function formatPerUnit(
+  value: string | number | null | undefined,
+  unit: "л" | "кг" = "л",
+): string {
+  if (value === null || value === undefined || value === "") return "—";
+  const num = Number(value);
+  if (Number.isNaN(num)) return "—";
+  return `${moneyPerUnitFmt.format(num)} ₽/${unit}`;
+}
+
+/**
+ * C #23: Штучные значения.
+ * formatPieces(1500) → "1 500 шт"
+ * formatPieces(null)  → "—"
+ */
+export function formatPieces(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "—";
+  const num = Number(value);
+  if (Number.isNaN(num)) return "—";
+  return `${numberFmt.format(num)} шт`;
+}
+
 /**
  * Русская плюрализация: 1 → one, 2-4 → few, 5+ → many.
  * Пример: pluralizeRu(1, "канал", "канала", "каналов") → "канал"

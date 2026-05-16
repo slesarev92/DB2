@@ -216,6 +216,9 @@ export interface ProjectListItem extends ProjectRead {
 // SKU (глобальный справочник)
 // ============================================================
 
+/** C #23: единица измерения объёма/массы SKU. */
+export type SkuUnitOfMeasure = "л" | "кг";
+
 export interface SKUBase {
   brand: string;
   name: string;
@@ -225,11 +228,27 @@ export interface SKUBase {
   segment: string | null;
 }
 
-export interface SKUCreate extends SKUBase {}
+/** C #23: при создании unit_of_measure опционален (backend default "л"). */
+export interface SKUCreate extends SKUBase {
+  unit_of_measure?: SkuUnitOfMeasure;
+}
 
 export interface SKURead extends SKUBase {
   id: number;
+  /** C #23: NOT NULL на backend, backfill "л" для всех existing SKU. */
+  unit_of_measure: SkuUnitOfMeasure;
   created_at: string;
+}
+
+/** C #23: partial update для unit_of_measure. */
+export interface SKUUpdate {
+  brand?: string;
+  name?: string;
+  format?: PackFormat | null;
+  volume_l?: string | null;
+  package_type?: string | null;
+  segment?: string | null;
+  unit_of_measure?: SkuUnitOfMeasure;
 }
 
 // ============================================================

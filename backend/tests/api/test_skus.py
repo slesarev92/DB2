@@ -449,3 +449,51 @@ async def test_create_sku_all_enum_values_ok(
             f"Format '{fmt}' rejected: {resp.json()}"
         )
         assert resp.json()["format"] == fmt
+
+
+# ============================================================
+# C #23: unit_of_measure (Literal "л"/"кг")
+# ============================================================
+
+
+async def test_sku_create_default_unit_l(auth_client: AsyncClient) -> None:
+    """C #23: POST /api/skus без unit_of_measure → 'л' default."""
+    body = {"brand": "Test", "name": "Test SKU default unit"}
+    resp = await auth_client.post("/api/skus", json=body)
+    assert resp.status_code == 201
+    assert resp.json()["unit_of_measure"] == "л"
+
+
+async def test_sku_create_with_unit_kg(auth_client: AsyncClient) -> None:
+    """C #23: POST /api/skus с unit_of_measure='кг' → сохранено."""
+    body = {"brand": "Test", "name": "Test Powder", "unit_of_measure": "кг"}
+    resp = await auth_client.post("/api/skus", json=body)
+    assert resp.status_code == 201
+    assert resp.json()["unit_of_measure"] == "кг"
+
+
+async def test_sku_create_invalid_unit_422(auth_client: AsyncClient) -> None:
+    """C #23: Pydantic отвергает unit вне 'л'/'кг' → 422."""
+    body = {"brand": "Test", "name": "Test Invalid", "unit_of_measure": "g"}
+    resp = await auth_client.post("/api/skus", json=body)
+    assert resp.status_code == 422
+
+
+async def test_sku_patch_unit_of_measure(auth_client: AsyncClient) -> None:
+    """C #23: PATCH unit_of_measure меняет значение."""
+    # Create SKU with default "л"
+    create_resp = await auth_client.post(
+        "/api/skus",
+        json={"brand": "Test", "name": "Test Patch Unit"},
+    )
+    assert create_resp.status_code == 201
+    sku_id = create_resp.json()["id"]
+    assert create_resp.json()["unit_of_measure"] == "л"
+
+    # Patch to "кг"
+    patch_resp = await auth_client.patch(
+        f"/api/skus/{sku_id}",
+        json={"unit_of_measure": "кг"},
+    )
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["unit_of_measure"] == "кг"
