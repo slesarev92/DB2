@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import { ExplainSensitivityInline } from "@/components/ai-panel/explain-sensitivity-inline";
 import { TornadoChart } from "@/components/projects/tornado-chart";
 import { Button } from "@/components/ui/button";
@@ -10,8 +11,8 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
+import { CollapsibleSection } from "@/components/ui/collapsible";
 import {
   Select,
   SelectContent,
@@ -28,10 +29,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ApiError } from "@/lib/api";
+import { SENSITIVITY_SECTIONS } from "@/lib/analysis-sections";
 import { formatMoney, formatPercent } from "@/lib/format";
 import { getProject } from "@/lib/projects";
 import { listProjectScenarios } from "@/lib/scenarios";
 import { computeSensitivity } from "@/lib/sensitivity";
+import { useCollapseState } from "@/lib/use-collapse-state";
 
 import type { ProjectRead, SensitivityCell, SensitivityResponse } from "@/types/api";
 
@@ -96,6 +99,8 @@ export function SensitivityTab({ projectId }: SensitivityTabProps) {
   const [project, setProject] = useState<ProjectRead | null>(null);
   const [scope, setScope] = useState<string>("y1y10");
 
+  const collapse = useCollapseState(projectId, "sensitivity", SENSITIVITY_SECTIONS);
+
   // Load project for saved AI commentary
   useEffect(() => {
     getProject(projectId).then(setProject).catch(() => {});
@@ -145,6 +150,27 @@ export function SensitivityTab({ projectId }: SensitivityTabProps) {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {collapse.allOpen ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={collapse.collapseAll}
+              disabled={loading}
+            >
+              <ChevronsDownUp className="mr-1.5 size-3.5" />
+              Свернуть всё
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={collapse.expandAll}
+              disabled={loading}
+            >
+              <ChevronsUpDown className="mr-1.5 size-3.5" />
+              Развернуть всё
+            </Button>
+          )}
           <Select
             value={scope}
             onValueChange={(v) => {
@@ -185,136 +211,157 @@ export function SensitivityTab({ projectId }: SensitivityTabProps) {
 
       {data !== null && (
         <>
-          {/* Base reference card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Базовые значения</CardTitle>
-              <CardDescription>
-                Точка отсчёта для всех ячеек ниже (базовый сценарий).
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    NPV {SCOPE_OPTIONS.find((o) => o.value === scope)?.label ?? scope}
-                  </p>
-                  <p className="mt-1 text-xl font-semibold">
-                    {data.base_npv_y1y10 === null
-                      ? "—"
-                      : formatMoney(String(data.base_npv_y1y10))}
-                  </p>
+          <CollapsibleSection
+            sectionId="base-values"
+            title="Базовые значения"
+            isOpen={collapse.isOpen("base-values")}
+            onToggle={() => collapse.toggle("base-values")}
+          >
+            <Card>
+              <CardHeader>
+                <CardDescription>
+                  Точка отсчёта для всех ячеек ниже (базовый сценарий).
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      NPV {SCOPE_OPTIONS.find((o) => o.value === scope)?.label ?? scope}
+                    </p>
+                    <p className="mt-1 text-xl font-semibold">
+                      {data.base_npv_y1y10 === null
+                        ? "—"
+                        : formatMoney(String(data.base_npv_y1y10))}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Contribution Margin
+                    </p>
+                    <p className="mt-1 text-xl font-semibold">
+                      {data.base_cm_ratio === null
+                        ? "—"
+                        : formatPercent(String(data.base_cm_ratio))}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Contribution Margin
-                  </p>
-                  <p className="mt-1 text-xl font-semibold">
-                    {data.base_cm_ratio === null
-                      ? "—"
-                      : formatPercent(String(data.base_cm_ratio))}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </CollapsibleSection>
 
           {/* AI interpretation (Phase 7.3) */}
           {baseScenarioId !== null && (
-            <ExplainSensitivityInline
-              projectId={projectId}
-              projectName={project?.name ?? "Проект"}
-              scenarioId={baseScenarioId}
-              savedCommentary={project?.ai_sensitivity_commentary as Record<string, unknown> | null}
-            />
+            <CollapsibleSection
+              sectionId="ai-interpretation"
+              title="AI интерпретация чувствительности"
+              isOpen={collapse.isOpen("ai-interpretation")}
+              onToggle={() => collapse.toggle("ai-interpretation")}
+            >
+              <ExplainSensitivityInline
+                projectId={projectId}
+                projectName={project?.name ?? "Проект"}
+                scenarioId={baseScenarioId}
+                savedCommentary={project?.ai_sensitivity_commentary as Record<string, unknown> | null}
+              />
+            </CollapsibleSection>
           )}
 
-          {/* B-11: Tornado chart */}
-          <TornadoChart data={data} />
+          <CollapsibleSection
+            sectionId="tornado"
+            title="Tornado-диаграмма"
+            isOpen={collapse.isOpen("tornado")}
+            onToggle={() => collapse.toggle("tornado")}
+          >
+            <TornadoChart data={data} />
+          </CollapsibleSection>
 
-          {/* Sensitivity table */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">
-                Матрица 5 × 4 (NPV / CM%)
-              </CardTitle>
-              <CardDescription>
-                Строки = уровни изменения (−20%..+20%). Колонки = параметры.
-                Каждая ячейка: NPV Y1-Y10 (главное) и Contribution Margin
-                (мелким серым).
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Изменение</TableHead>
-                    {PARAM_ORDER.map((p) => (
-                      <TableHead key={p} className="text-right">
-                        {PARAM_LABELS[p]}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.deltas.map((delta) => (
-                    <TableRow
-                      key={delta}
-                      className={delta === 0 ? "bg-muted/30" : ""}
-                    >
-                      <TableCell className="font-medium">
-                        {formatDeltaLabel(delta)}
-                      </TableCell>
-                      {PARAM_ORDER.map((param) => {
-                        const cell = data.cells.find(
-                          (c) =>
-                            c.parameter === param && c.delta === delta,
-                        );
-                        if (cell === undefined) {
+          <CollapsibleSection
+            sectionId="matrix"
+            title="Матрица 5 × 4 (NPV / CM%)"
+            isOpen={collapse.isOpen("matrix")}
+            onToggle={() => collapse.toggle("matrix")}
+          >
+            <Card>
+              <CardHeader>
+                <CardDescription>
+                  Строки = уровни изменения (−20%..+20%). Колонки = параметры.
+                  Каждая ячейка: NPV Y1-Y10 (главное) и Contribution Margin
+                  (мелким серым).
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Изменение</TableHead>
+                      {PARAM_ORDER.map((p) => (
+                        <TableHead key={p} className="text-right">
+                          {PARAM_LABELS[p]}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.deltas.map((delta) => (
+                      <TableRow
+                        key={delta}
+                        className={delta === 0 ? "bg-muted/30" : ""}
+                      >
+                        <TableCell className="font-medium">
+                          {formatDeltaLabel(delta)}
+                        </TableCell>
+                        {PARAM_ORDER.map((param) => {
+                          const cell = data.cells.find(
+                            (c) =>
+                              c.parameter === param && c.delta === delta,
+                          );
+                          if (cell === undefined) {
+                            return (
+                              <TableCell
+                                key={param}
+                                className="text-right text-muted-foreground"
+                              >
+                                —
+                              </TableCell>
+                            );
+                          }
                           return (
-                            <TableCell
-                              key={param}
-                              className="text-right text-muted-foreground"
-                            >
-                              —
+                            <TableCell key={param} className="text-right">
+                              <div
+                                className={`font-semibold ${npvClass(
+                                  cell.npv_y1y10,
+                                  data.base_npv_y1y10,
+                                )}`}
+                              >
+                                {cell.npv_y1y10 === null
+                                  ? "—"
+                                  : formatMoney(String(cell.npv_y1y10))}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                CM:{" "}
+                                {cell.cm_ratio === null
+                                  ? "—"
+                                  : formatPercent(String(cell.cm_ratio))}
+                              </div>
                             </TableCell>
                           );
-                        }
-                        return (
-                          <TableCell key={param} className="text-right">
-                            <div
-                              className={`font-semibold ${npvClass(
-                                cell.npv_y1y10,
-                                data.base_npv_y1y10,
-                              )}`}
-                            >
-                              {cell.npv_y1y10 === null
-                                ? "—"
-                                : formatMoney(String(cell.npv_y1y10))}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              CM:{" "}
-                              {cell.cm_ratio === null
-                                ? "—"
-                                : formatPercent(String(cell.cm_ratio))}
-                            </div>
-                          </TableCell>
-                        );
-                      })}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
-                <span>Раскраска:</span>
-                <span className="text-green-600 font-semibold">NPV выше базового</span>
-                <span>—</span>
-                <span className="text-red-600 font-semibold">NPV ниже базового</span>
-                <span>—</span>
-                <span>Базовый без подсветки</span>
-              </div>
-            </CardContent>
-          </Card>
+                        })}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
+                  <span>Раскраска:</span>
+                  <span className="text-green-600 font-semibold">NPV выше базового</span>
+                  <span>—</span>
+                  <span className="text-red-600 font-semibold">NPV ниже базового</span>
+                  <span>—</span>
+                  <span>Базовый без подсветки</span>
+                </div>
+              </CardContent>
+            </Card>
+          </CollapsibleSection>
         </>
       )}
     </div>
