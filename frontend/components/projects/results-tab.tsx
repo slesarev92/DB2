@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, Loader2 } from "lucide-react";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -10,12 +10,12 @@ import { GoNoGoBadge } from "@/components/go-no-go-badge";
 import { KpiCard } from "@/components/projects/kpi-card";
 import { StalenessBadge } from "@/components/projects/staleness-badge";
 import { Button } from "@/components/ui/button";
+import { CollapsibleSection } from "@/components/ui/collapsible";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import {
@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { RESULTS_SECTIONS } from "@/lib/analysis-sections";
 import { ApiError } from "@/lib/api";
 import { getTaskStatus, recalculateProject } from "@/lib/calculation";
 import {
@@ -34,6 +35,7 @@ import {
 } from "@/lib/export";
 import { formatMoney, formatMoneyPerUnit, formatPercent } from "@/lib/format";
 import { getProject } from "@/lib/projects";
+import { useCollapseState } from "@/lib/use-collapse-state";
 import {
   listProjectScenarios,
   listScenarioResults,
@@ -138,6 +140,8 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
   );
   const exporting = exportingFormat !== null;
   const [exportError, setExportError] = useState<string | null>(null);
+
+  const collapse = useCollapseState(projectId, "results", RESULTS_SECTIONS);
 
   // Загружаем сценарии
   useEffect(() => {
@@ -352,6 +356,27 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
               {recalcStatus === "SUCCESS" && "Обновляем..."}
             </span>
           )}
+          {collapse.allOpen ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={collapse.collapseAll}
+              disabled={exporting || recalculating}
+            >
+              <ChevronsDownUp className="mr-1.5 size-3.5" />
+              Свернуть всё
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={collapse.expandAll}
+              disabled={exporting || recalculating}
+            >
+              <ChevronsUpDown className="mr-1.5 size-3.5" />
+              Развернуть всё
+            </Button>
+          )}
           <Button
             onClick={handleExportXlsx}
             disabled={exporting || recalculating}
@@ -448,51 +473,67 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
             recalculating={recalculating}
           />
 
-          {/* Go/No-Go hero */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-base">
-                    Go/No-Go решение (Y1-Y10)
-                  </CardTitle>
-                  <CardDescription>
-                    NPV ≥ 0 AND Contribution Margin ≥ 25%
-                  </CardDescription>
+          <CollapsibleSection
+            sectionId="go-no-go"
+            title="Go/No-Go решение (Y1-Y10)"
+            isOpen={collapse.isOpen("go-no-go")}
+            onToggle={() => collapse.toggle("go-no-go")}
+          >
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardDescription>
+                      NPV ≥ 0 AND Contribution Margin ≥ 25%
+                    </CardDescription>
+                  </div>
+                  <div className="scale-150 origin-right">
+                    <GoNoGoBadge value={goNoGoY1Y10} />
+                  </div>
                 </div>
-                <div className="scale-150 origin-right">
-                  <GoNoGoBadge value={goNoGoY1Y10} />
-                </div>
-              </div>
-            </CardHeader>
-          </Card>
+              </CardHeader>
+            </Card>
+          </CollapsibleSection>
 
-          {/* AI Explain KPI (Phase 7.2) — под Go/No-Go hero */}
           {selectedScenarioId !== null && (
-            <ExplainKpiInline
-              projectId={projectId}
-              projectName={project?.name ?? "Проект"}
-              scenarioId={selectedScenarioId}
-              scope="y1y5"
-              savedCommentary={project?.ai_kpi_commentary as Record<string, unknown> | null}
-            />
+            <CollapsibleSection
+              sectionId="ai-explain"
+              title="AI комментарий KPI"
+              isOpen={collapse.isOpen("ai-explain")}
+              onToggle={() => collapse.toggle("ai-explain")}
+            >
+              <ExplainKpiInline
+                projectId={projectId}
+                projectName={project?.name ?? "Проект"}
+                scenarioId={selectedScenarioId}
+                scope="y1y5"
+                savedCommentary={project?.ai_kpi_commentary as Record<string, unknown> | null}
+              />
+            </CollapsibleSection>
           )}
 
-          {/* AI Executive Summary (Phase 7.4) */}
-          <ExecutiveSummaryInline
-            projectId={projectId}
-            projectName="Проект"
-            savedSummary={null}
-            onSaved={() => {
-              /* В 7.5 — refresh project data */
-            }}
-          />
+          <CollapsibleSection
+            sectionId="ai-exec-summary"
+            title="AI Executive Summary"
+            isOpen={collapse.isOpen("ai-exec-summary")}
+            onToggle={() => collapse.toggle("ai-exec-summary")}
+          >
+            <ExecutiveSummaryInline
+              projectId={projectId}
+              projectName="Проект"
+              savedSummary={null}
+              onSaved={() => {
+                /* В 7.5 — refresh project data */
+              }}
+            />
+          </CollapsibleSection>
 
-          {/* NPV row */}
-          <div>
-            <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
-              NPV (чистая приведённая стоимость)
-            </h3>
+          <CollapsibleSection
+            sectionId="npv"
+            title="NPV (чистая приведённая стоимость)"
+            isOpen={collapse.isOpen("npv")}
+            onToggle={() => collapse.toggle("npv")}
+          >
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {SCOPE_ORDER.map((scope) => {
                 const r = resultsByScope[scope];
@@ -512,13 +553,14 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
                 );
               })}
             </div>
-          </div>
+          </CollapsibleSection>
 
-          {/* IRR row */}
-          <div>
-            <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
-              IRR (внутренняя норма доходности)
-            </h3>
+          <CollapsibleSection
+            sectionId="irr"
+            title="IRR (внутренняя норма доходности)"
+            isOpen={collapse.isOpen("irr")}
+            onToggle={() => collapse.toggle("irr")}
+          >
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {SCOPE_ORDER.map((scope) => {
                 const r = resultsByScope[scope];
@@ -531,13 +573,14 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
                 );
               })}
             </div>
-          </div>
+          </CollapsibleSection>
 
-          {/* ROI row */}
-          <div>
-            <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
-              ROI (возврат на инвестиции)
-            </h3>
+          <CollapsibleSection
+            sectionId="roi"
+            title="ROI (возврат на инвестиции)"
+            isOpen={collapse.isOpen("roi")}
+            onToggle={() => collapse.toggle("roi")}
+          >
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {SCOPE_ORDER.map((scope) => {
                 const r = resultsByScope[scope];
@@ -550,13 +593,14 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
                 );
               })}
             </div>
-          </div>
+          </CollapsibleSection>
 
-          {/* Payback row */}
-          <div>
-            <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
-              Payback (срок окупаемости, Y1-Y10)
-            </h3>
+          <CollapsibleSection
+            sectionId="payback"
+            title="Payback (срок окупаемости, Y1-Y10)"
+            isOpen={collapse.isOpen("payback")}
+            onToggle={() => collapse.toggle("payback")}
+          >
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <KpiCard
                 label="Простой"
@@ -571,13 +615,14 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
                 )}
               />
             </div>
-          </div>
+          </CollapsibleSection>
 
-          {/* Margins row */}
-          <div>
-            <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
-              Маржинальность (overall)
-            </h3>
+          <CollapsibleSection
+            sectionId="margins"
+            title="Маржинальность (overall)"
+            isOpen={collapse.isOpen("margins")}
+            onToggle={() => collapse.toggle("margins")}
+          >
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <KpiCard
                 label="Contribution Margin"
@@ -591,13 +636,14 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
                 valueClassName={marginClass(ebitdaMargin)}
               />
             </div>
-          </div>
+          </CollapsibleSection>
 
-          {/* Per-unit metrics (Phase 8.3) */}
-          <div>
-            <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
-              Per-unit экономика (средняя за период)
-            </h3>
+          <CollapsibleSection
+            sectionId="per-unit"
+            title="Per-unit экономика (средняя за период)"
+            isOpen={collapse.isOpen("per-unit")}
+            onToggle={() => collapse.toggle("per-unit")}
+          >
             <div className="overflow-x-auto">
               <table className="w-full text-xs border-collapse">
                 <thead>
@@ -651,14 +697,19 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
                 </tbody>
               </table>
             </div>
-          </div>
-          {/* Color legend (Phase 8.6) */}
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <span>Цветовая индикация:</span>
-            <span className="text-green-600 font-semibold">NPV &ge; 0 / маржа &ge; 25%</span>
-            <span className="text-yellow-600 font-semibold">маржа 15-25%</span>
-            <span className="text-red-600 font-semibold">NPV &lt; 0 / маржа &lt; 15%</span>
-          </div>
+          </CollapsibleSection>
+          <CollapsibleSection
+            sectionId="color-legend"
+            title="Цветовая индикация"
+            isOpen={collapse.isOpen("color-legend")}
+            onToggle={() => collapse.toggle("color-legend")}
+          >
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+              <span className="text-green-600 font-semibold">NPV &ge; 0 / маржа &ge; 25%</span>
+              <span className="text-yellow-600 font-semibold">маржа 15-25%</span>
+              <span className="text-red-600 font-semibold">NPV &lt; 0 / маржа &lt; 15%</span>
+            </div>
+          </CollapsibleSection>
         </>
       )}
     </div>
