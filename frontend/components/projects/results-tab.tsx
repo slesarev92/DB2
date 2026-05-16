@@ -8,6 +8,7 @@ import { ExecutiveSummaryInline } from "@/components/ai-panel/executive-summary-
 import { ExplainKpiInline } from "@/components/ai-panel/explain-kpi-inline";
 import { GoNoGoBadge } from "@/components/go-no-go-badge";
 import { KpiCard } from "@/components/projects/kpi-card";
+import { PdfExportDialog } from "@/components/projects/pdf-export-dialog";
 import { StalenessBadge } from "@/components/projects/staleness-badge";
 import { Button } from "@/components/ui/button";
 import { CollapsibleSection } from "@/components/ui/collapsible";
@@ -29,7 +30,6 @@ import { RESULTS_SECTIONS } from "@/lib/analysis-sections";
 import { ApiError } from "@/lib/api";
 import { getTaskStatus, recalculateProject } from "@/lib/calculation";
 import {
-  downloadProjectPdf,
   downloadProjectPptx,
   downloadProjectXlsx,
 } from "@/lib/export";
@@ -140,6 +140,9 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
   );
   const exporting = exportingFormat !== null;
   const [exportError, setExportError] = useState<string | null>(null);
+
+  // PDF dialog state (C #27)
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
 
   const collapse = useCollapseState(projectId, "results", RESULTS_SECTIONS);
 
@@ -282,7 +285,8 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
     void runExport("pptx", downloadProjectPptx, "PPTX");
   }
   function handleExportPdf() {
-    void runExport("pdf", downloadProjectPdf, "PDF");
+    // C #27: open section-selection dialog instead of direct download
+    setPdfDialogOpen(true);
   }
 
   // --- Рендеринг ---
@@ -712,6 +716,13 @@ export function ResultsTab({ projectId }: ResultsTabProps) {
           </CollapsibleSection>
         </>
       )}
+
+      {/* C #27: PDF section selection dialog */}
+      <PdfExportDialog
+        projectId={projectId}
+        open={pdfDialogOpen}
+        onOpenChange={setPdfDialogOpen}
+      />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -529,29 +529,52 @@ async def export_project_pdf_endpoint(
     project_id: int,
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
+    sections: str | None = Query(
+        default=None,
+        description=(
+            "Comma-separated section IDs to include (e.g. 'kpi,pnl'). "
+            "Omit for all 17 sections."
+        ),
+    ),
 ) -> StreamingResponse:
     """Экспорт проекта в PDF (задача 5.3, F-10).
 
-    HTML-шаблон (Jinja2) → WeasyPrint → PDF A4. 12 секций: титул,
+    HTML-шаблон (Jinja2) → WeasyPrint → PDF A4. 17 секций: титул,
     общая информация, концепция, технология, валидация, продуктовый
-    микс (с package images), макро-факторы, KPI, PnL по годам, стакан
-    себестоимости + fin plan, риски + готовность функций, дорожная
-    карта + согласующие, executive summary.
+    микс (с package images), макро-факторы, KPI, PnL по годам, анализ
+    чувствительности, цены, стакан per-unit, стакан себестоимости +
+    fin plan, риски + готовность функций, дорожная карта + согласующие,
+    рынок и поставки, executive summary.
+
+    C #27: опциональный query param sections=kpi,pnl для выбора подмножества
+    секций. Если param опущен → все 17. Filename получает суффикс _partial
+    если выбраны не все секции.
 
     Filename — RFC 5987 Content-Disposition (поддержка кириллицы).
     """
     from io import BytesIO
     from app.export.excel_exporter import ProjectNotFoundForExport
     from app.export.pdf_exporter import generate_project_pdf
+    from app.export.pdf_sections import ALL_SECTIONS, parse_sections
 
     try:
-        pdf_bytes = await generate_project_pdf(session, project_id)
+        active = parse_sections(sections)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        )
+
+    try:
+        pdf_bytes = await generate_project_pdf(session, project_id, sections=active)
     except ProjectNotFoundForExport:
         raise _not_found
 
     project = await project_service.get_project(session, project_id, user=current_user)
+    is_partial = active != set(ALL_SECTIONS)
+    extension = "_partial.pdf" if is_partial else ".pdf"
     content_disposition = _build_export_content_disposition(
-        project, project_id, ".pdf"
+        project, project_id, extension
     )
 
     return StreamingResponse(
