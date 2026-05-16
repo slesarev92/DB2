@@ -11,6 +11,10 @@
 
 Фаза B (MEMO v2.1 — архитектурные изменения). В работе.
 
+### Added (Phase C — C #26)
+
+- **C #26**: BOM-панель получила отдельный sidebar `Сводка BOM` справа от таблицы (grid `md:grid-cols-3`). Sidebar показывает суммы по категориям ингредиентов (Сырьё / Упаковка / Прочее) с количеством позиций и % от итога + общую строку «Итого». Empty state при пустом BOM. Inline-блок категорийных сумм в CardHeader удалён — один источник истины. (MEMO 3.4)
+
 ### Added (Phase C — C #29)
 
 - **C #29**: Валидация вводных (minimum protection). Inline amber-warnings (компонент `FieldWarning` с AlertTriangle) при значении `0` в критических полях: `shelf_price_reg` («Цена полки 0 ₽ — выручка обнулится»), `offtake_target` («Целевой offtake 0 — продаж не будет»), BOM `price_per_unit` («Цена сырья 0 — компонент не попадёт в COGS»), SKU `volume_l` («Объём 0 — расчёты per-unit некорректны»). Warnings не блокируют save — только сигнализируют пользователю. Hook `useFieldValidation` расширен `warn?: { when, message }` правилом (backward-compatible). Backend Pydantic `ge=0` остаётся защитой от отрицательных значений. (MEMO 7.2)
