@@ -130,6 +130,20 @@
   - Plan: `docs/superpowers/plans/2026-05-16-c22-analysis-collapsible.md`
   - Verification: `npx tsc --noEmit` 0 ошибок; manual smoke на всех 5 табах ok.
 
+- **C #19 Тип упаковки → enum (MEMO 1.3 / Блок 3, 2026-05-16).**
+  Свободное поле `SKU.format` (String(100)) преобразовано в строгий
+  enum из 6 значений + NULL: ПЭТ / Стекло / Банка / Сашет / Стик / Пауч.
+  Реализовано через PATTERN-08 (varchar + CHECK constraint) — прецедент
+  `OBPPCEntry.price_tier`. Pydantic Literal type на API уровне (422 на
+  невалидные значения), CHECK на DB уровне (защита от SQL bypass).
+  Migration с fuzzy backfill existing values (Пэт/PET → ПЭТ, Glass →
+  Стекло, etc); несовпадающие → NULL с логом. Расчёты не тронуты —
+  format только для display/AI. Frontend: Select в add-sku-dialog.
+  - Spec: `docs/superpowers/specs/2026-05-16-c19-pack-format-enum-design.md`
+  - Plan: `docs/superpowers/plans/2026-05-16-c19-pack-format-enum.md`
+  - Verification: backend pytest 511 passed (+3 new); tsc 0 errors;
+    alembic upgrade/downgrade cycle clean; manual smoke ok.
+
 ### Changed
 
 - **C #13 Q4 OBPPC — перенос в группу «Основа» (MEMO 1.3, 2026-05-16).**
