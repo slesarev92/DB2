@@ -43,6 +43,6 @@ class ChannelUpdate(BaseModel):
     code: str | None = Field(default=None, min_length=1, max_length=50)
     name: str | None = Field(default=None, min_length=1, max_length=255)
     channel_group: ChannelGroup | None = None
-    source_type: ChannelSourceType | None = None  # patch-able to NULL via explicit "null"
+    source_type: ChannelSourceType | None = None
     region: str | None = Field(default=None, max_length=100)
     universe_outlets: int | None = Field(default=None, ge=0)

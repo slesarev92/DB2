@@ -1,16 +1,19 @@
 """Unit-тесты для backfill-helper _resolve_group из миграции C #16.
 
 Импорт по абсолютному пути к файлу миграции через importlib —
-revision-id не статичный. Можно адаптировать под точное имя файла
-после `alembic revision` (см. Step 5).
+revision-id не статичный. Path resolved через __file__ чтобы быть
+CWD-independent (на случай pytest из repo root).
 """
 import importlib.util
 from pathlib import Path
 
 import pytest
 
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
 MIGRATION_FILE = next(
-    Path("migrations/versions").glob("*_c16_channel_group_source_type.py")
+    (_BACKEND_DIR / "migrations" / "versions").glob(
+        "*_c16_channel_group_source_type.py"
+    )
 )
 spec = importlib.util.spec_from_file_location("c16_migration", MIGRATION_FILE)
 mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
@@ -55,3 +58,23 @@ def test_resolve_group_prefix(code: str, expected: str) -> None:
 )
 def test_resolve_group_fallback_other(code: str) -> None:
     assert mod._resolve_group(code) == "OTHER"
+
+
+def test_seed_data_matches_resolve_group() -> None:
+    """Инвариант: для каждого кода в seed `channel_group` == `_resolve_group(code)`.
+
+    Защита от рассинхрона: если кто-то добавит канал в seed с `channel_group=X`,
+    но забудет добавить правило в EXACT_RULES/PREFIX_RULES — fresh DB через seed
+    даст X, а existing prod после миграции даст OTHER. Тест ловит расхождение.
+    """
+    from scripts.seed_reference_data import CHANNELS_DATA
+
+    mismatches = [
+        (ch["code"], ch["channel_group"], mod._resolve_group(ch["code"]))
+        for ch in CHANNELS_DATA
+        if mod._resolve_group(ch["code"]) != ch["channel_group"]
+    ]
+    assert not mismatches, (
+        f"Seed/migration mismatch: {mismatches}. "
+        "Update EXACT_RULES/PREFIX_RULES or fix channel_group in seed."
+    )

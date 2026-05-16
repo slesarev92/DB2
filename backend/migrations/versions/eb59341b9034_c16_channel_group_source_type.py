@@ -86,16 +86,20 @@ def upgrade() -> None:
         nullable=False,
         server_default="OTHER",
     )
+    # CHECK строится из VALID_* — единый источник внутри миграции.
+    # Naming convention в base.py добавит префикс ck_channels_ → итоговое
+    # имя ck_channels_valid_channel_group_value (см. C #19 для прецедента).
+    _groups_sql = ",".join(f"'{g}'" for g in VALID_GROUPS)
+    _sources_sql = ",".join(f"'{s}'" for s in VALID_SOURCES)
     op.create_check_constraint(
         "valid_channel_group_value",
         "channels",
-        "channel_group IN ('HM','SM','MM','TT','E_COM','HORECA','QSR','OTHER')",
+        f"channel_group IN ({_groups_sql})",
     )
     op.create_check_constraint(
         "valid_channel_source_type_value",
         "channels",
-        "source_type IS NULL OR source_type IN "
-        "('nielsen','tsrpt','gis2','infoline','custom')",
+        f"source_type IS NULL OR source_type IN ({_sources_sql})",
     )
 
 
