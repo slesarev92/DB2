@@ -15,11 +15,12 @@ import { StalenessBadge } from "@/components/projects/staleness-badge";
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
+import { CollapsibleSection } from "@/components/ui/collapsible";
 import { ApiError, apiGet } from "@/lib/api";
 import { listProjectScenarios, listScenarioResults } from "@/lib/scenarios";
+import { VALUE_CHAIN_SECTIONS } from "@/lib/analysis-sections";
+import { useCollapseState } from "@/lib/use-collapse-state";
 
 /* ── Types ── */
 
@@ -124,6 +125,7 @@ export function ValueChainTab({ projectId }: { projectId: number }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isStale, setIsStale] = useState(false);
+  const collapse = useCollapseState(projectId, "value-chain", VALUE_CHAIN_SECTIONS);
 
   // F-02: проверяем is_stale через Base сценария
   useEffect(() => {
@@ -178,16 +180,21 @@ export function ValueChainTab({ projectId }: { projectId: number }) {
         isStale={isStale}
         message="Параметры проекта изменились — unit-экономика может быть неактуальна. Пересчитайте в табе «Результаты»."
       />
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">
+      <CollapsibleSection
+        sectionId="unit-economy"
+        title={
+          <>
             Unit-экономика (&#8381;/шт)
             <span className="ml-2 text-xs font-normal text-muted-foreground">
               НДС {pct(data.vat_rate)} &middot; per-unit экономика на базовый период
             </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
+          </>
+        }
+        isOpen={collapse.isOpen("unit-economy")}
+        onToggle={() => collapse.toggle("unit-economy")}
+      >
+        <Card>
+          <CardContent className="overflow-x-auto pt-6">
           <table className="w-full text-xs border-collapse">
             {/* Header: SKU names spanning channels */}
             <thead>
@@ -274,8 +281,9 @@ export function ValueChainTab({ projectId }: { projectId: number }) {
               })}
             </tbody>
           </table>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </CollapsibleSection>
 
       {/* Legend */}
       <div className="flex items-center gap-4 text-xs text-muted-foreground px-1">

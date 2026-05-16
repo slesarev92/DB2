@@ -13,11 +13,12 @@ import { StalenessBadge } from "@/components/projects/staleness-badge";
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
+import { CollapsibleSection } from "@/components/ui/collapsible";
 import { ApiError, apiGet } from "@/lib/api";
 import { listProjectScenarios, listScenarioResults } from "@/lib/scenarios";
+import { PNL_SECTIONS } from "@/lib/analysis-sections";
+import { useCollapseState } from "@/lib/use-collapse-state";
 
 /* ── Types ── */
 
@@ -146,6 +147,7 @@ export function PnlTab({ projectId }: { projectId: number }) {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<ViewMode>("quarterly");
   const [isStale, setIsStale] = useState(false);
+  const collapse = useCollapseState(projectId, "pnl", PNL_SECTIONS);
 
   useEffect(() => {
     setLoading(true);
@@ -213,13 +215,14 @@ export function PnlTab({ projectId }: { projectId: number }) {
         </span>
       </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">
-            P&L — {MODE_LABELS[mode]}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
+      <CollapsibleSection
+        sectionId="pnl"
+        title={`P&L — ${MODE_LABELS[mode]}`}
+        isOpen={collapse.isOpen("pnl")}
+        onToggle={() => collapse.toggle("pnl")}
+      >
+        <Card>
+          <CardContent className="overflow-x-auto pt-6">
           <table className="text-xs border-collapse">
             <thead>
               <tr className="border-b">
@@ -260,8 +263,9 @@ export function PnlTab({ projectId }: { projectId: number }) {
               ))}
             </tbody>
           </table>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </CollapsibleSection>
     </div>
   );
 }
