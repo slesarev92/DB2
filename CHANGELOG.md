@@ -11,6 +11,14 @@
 
 Фаза B (MEMO v2.1 — архитектурные изменения). В работе.
 
+### Added (Phase C — C #23)
+
+- **C #23**: SKU получил поле `unit_of_measure` (Literal "л" / "кг", default "л"). Везде в UI volume отображается с единицей (`1.5 л` / `0.5 кг`). Per-unit ценовые поля через `formatPerUnit(value, unit)` — `52,30 ₽/л` или `52,30 ₽/кг` в pricing/value-chain. Helpers `formatVolume`, `formatPerUnit`, `formatPieces` в `lib/format.ts`. (MEMO 1.2)
+
+### Migrations (Phase C — C #23)
+
+- `cfc677c109cb_c23_sku_unit_of_measure` — добавлена `skus.unit_of_measure` (NOT NULL, default "л", CHECK 2 значения). Auto-backfill existing SKU в "л" (current implicit поведение, `volume_l` всегда хранил литры).
+
 ### Added (Phase C — C #27)
 
 - **C #27**: PDF экспорт получил диалог выбора секций — 17 чекбоксов (титул, общая инфо, концепция, ..., executive summary). Endpoint расширен query param `?sections=kpi,pnl` для programmatic access. LocalStorage сохраняет выбор юзера. Backward-compat: без параметра — все 17 секций. Filename `_partial.pdf` если выбран subset.
