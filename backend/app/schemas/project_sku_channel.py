@@ -72,7 +72,11 @@ class ProjectSKUChannelDefaults(BaseModel):
     offtake_target: Decimal = Field(..., ge=0)
     channel_margin: Decimal = Field(..., ge=0, le=1)
     promo_discount: Decimal = Field(default=Decimal("0"), ge=0, le=1)
-    promo_share: Decimal = Field(default=Decimal("1"), ge=0, le=1)
+    # Default 0 чтобы поведение bulk совпадало с single-channel
+    # ProjectSKUChannelBase (line 27 в этом файле) — иначе bulk-каналы
+    # стартуют в "100% promo" без явного указания. (План C #16 имел
+    # ошибку — promo_share=1 был исправлен в T2 review.)
+    promo_share: Decimal = Field(default=Decimal("0"), ge=0, le=1)
     shelf_price_reg: Decimal = Field(..., ge=0)
     logistics_cost_per_kg: Decimal = Field(default=Decimal("0"), ge=0)
     ca_m_rate: Decimal = Field(default=Decimal("0"), ge=0, le=1)
