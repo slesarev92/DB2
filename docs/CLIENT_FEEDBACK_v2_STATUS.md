@@ -33,7 +33,7 @@ based_on: tag v2.4.0 (2026-04-15) + main HEAD
 
 | Пункт | Статус | Доказательство / Заметки |
 |---|---|---|
-| Перевести все лейблы на русский | 🟡 | По коммиту `b2a107c` "remaining English strings" — закрыли финальные. Спотовая проверка показывает русские лейблы в `financial-plan-editor`, `periods-tab`, `project-nav-context` (SECTION_LABELS). Возможны остатки в редко открываемых компонентах. |
+| Перевести все лейблы на русский | ✅ | Закрыто C #31 (2026-05-16). Спот-чек прошёл — найдены и зафиксированы 4 остатка: `Bill of Materials` → `Состав (BOM)` (bom-panel.tsx), `Gantt chart` → `Диаграмма Ганта` (gantt-chart.tsx), `Growth opportunity` → `Возможность роста` (content-tab.tsx), `aria-label="Tier override"` → `"Переопределение тира"` (explain-kpi-inline.tsx). AKB Universe/Target/Coverage оставлены как industry-термины Nielsen. |
 | Добавить единицы измерения (шт, л, %, ₽, с/без НДС) | 🟡 | В `financial-plan-editor.tsx` колонки подписаны "CAPEX, ₽"; в `bom-panel`, `pricing-tab` встречаются единицы. Систематической проверки нет — часть полей без "₽/шт/%". |
 | Collapse/expand разделов | ✅ | Закрыто C #22 (2026-05-16). Section-level collapse добавлен на 5 табах группы «Анализ» (Results, Sensitivity, Pricing, Value-chain, P&L) через wrapper `<CollapsibleSection>` поверх `@base-ui/react/collapsible`. Persistence — localStorage по ключу `db2:analysis-collapse:v1` (projectId × tabKey × sectionId). Bulk toggle «Свернуть/Развернуть всё» в табах с >1 секциями (Results 10, Sensitivity 4, Pricing 3). Локальные row-level раскрытия не тронуты. См. spec `docs/superpowers/specs/2026-05-16-c22-analysis-collapsible-design.md`. |
 | Статус проекта = dropdown | ❌ | `Project` модель имеет `gate_stage` (G0..G5), но не общий "статус". В UI `gate-timeline.tsx` рисует фиксированную шкалу — выпадающего списка для смены статуса нет. Цветовые метки на ячейках Гантта по статусу — есть (`gantt-chart.tsx:STATUS_COLORS`). |
@@ -286,5 +286,5 @@ based_on: tag v2.4.0 (2026-04-15) + main HEAD
 26. **Документировать красную подсветку BOM** (3.4, ❓).
 27. **Валидация вводных** (7.2, ❌).
 28. **Источник для бенчмарков заранее** (1.4, 🟡).
-29. **Финальная русификация спот-чек** (1.2, 🟡).
+29. **Финальная русификация спот-чек** (1.2, ✅ — закрыто C #31 2026-05-16).
 30. **Scenario deltas очистка от price/COGS/log** (7.2, 🟡) — если решение "только ND/offtake" финальное.

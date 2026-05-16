@@ -104,7 +104,7 @@ export function GanttChart({ tasks, projectStartDate }: GanttChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Gantt chart</CardTitle>
+        <CardTitle className="text-base">Диаграмма Ганта</CardTitle>
         <CardDescription>
           Визуализация roadmap: зелёный = выполнено, синий = в работе,
           серый = запланировано, красный = заблокировано.

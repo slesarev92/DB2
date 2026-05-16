@@ -577,7 +577,7 @@ export function BomPanel({ projectId, pskId }: BomPanelProps) {
         <CardHeader>
           <div className="flex items-start justify-between gap-2">
             <div>
-              <CardTitle className="text-base">Bill of Materials</CardTitle>
+              <CardTitle className="text-base">Состав (BOM)</CardTitle>
               <CardDescription>
                 Σ (количество × цена × (1 + потери)) на единицу продукции.
               </CardDescription>

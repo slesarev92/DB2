@@ -131,7 +131,7 @@ export function ExplainKpiInline({
           {/* Tier toggle */}
           <div
             role="group"
-            aria-label="Tier override"
+            aria-label="Переопределение тира"
             className="flex overflow-hidden rounded-md border"
           >
             <button

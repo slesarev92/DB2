@@ -496,7 +496,7 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
         </CardHeader>
         {!collapsed.has(2) && <CardContent className="space-y-4">
           <div className="space-y-1">
-            <FieldLabel field="growth_opportunity" projectId={projectId} onApply={handleAIApply}>Growth opportunity</FieldLabel>
+            <FieldLabel field="growth_opportunity" projectId={projectId} onApply={handleAIApply}>Возможность роста</FieldLabel>
             <Textarea
               id="growth_opportunity"
               rows={2}

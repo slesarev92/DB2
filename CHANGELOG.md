@@ -149,6 +149,17 @@
     обнулены с логом — если нужно сохранить, дополнить MAPPING_RULES
     перед выкаткой. См. spec §5.4.
 
+- **C #31 Финальная русификация спот-чек (MEMO 1.2, 2026-05-16).**
+  Спот-проверка UI на остатки английских лейблов. Найдены и
+  зафиксированы 4 случая:
+  - `bom-panel.tsx:580` — `Bill of Materials` → `Состав (BOM)`
+  - `gantt-chart.tsx:107` — `Gantt chart` → `Диаграмма Ганта`
+  - `content-tab.tsx:499` — `Growth opportunity` → `Возможность роста`
+  - `explain-kpi-inline.tsx:134` — `aria-label="Tier override"` →
+    `"Переопределение тира"`
+  AKB-плейсхолдеры (Universe / Target / Coverage / шт / %) — оставлены
+  как индустриальные термины Nielsen. tsc 0 ошибок.
+
 - **C #30 nielsen_benchmarks.source_type — prep для #16 (MEMO 1.4, 2026-05-16).**
   Добавлена Pydantic-модель `NielsenBenchmarkItem` (в `backend/app/schemas/
   project.py`) для элементов JSONB-списка `Project.nielsen_benchmarks` —
