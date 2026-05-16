@@ -24,6 +24,21 @@ interface BomSummarySidebarProps {
   items: BOMItemRead[];
 }
 
+/** Русский плюрал: 1 позиция / 2-4 позиции / 5+ позиций (учёт 11-14). */
+function pluralPositions(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return "позиция";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20))
+    return "позиции";
+  return "позиций";
+}
+
+function formatPct(num: number, total: number): string {
+  if (total === 0) return "—";
+  return `${((num / total) * 100).toFixed(1)}%`;
+}
+
 /**
  * Сводка BOM справа от таблицы: разбивка по категориям ингредиентов
  * (Сырьё / Упаковка / Прочее) с суммой ₽, кол-вом позиций, % от итога.
@@ -47,13 +62,17 @@ export function BomSummarySidebar({ items }: BomSummarySidebarProps) {
       if (!Number.isNaN(cost)) {
         slot.sum += cost;
         total += cost;
+        slot.count += 1;
       }
-      slot.count += 1;
     }
-    return { byCat, total, totalCount: items.length };
+    const totalCount = CATEGORY_ORDER.reduce(
+      (acc, c) => acc + byCat[c].count,
+      0,
+    );
+    return { byCat, total, totalCount };
   }, [items]);
 
-  if (items.length === 0) {
+  if (totalCount === 0) {
     return (
       <Card>
         <CardHeader>
@@ -68,11 +87,6 @@ export function BomSummarySidebar({ items }: BomSummarySidebarProps) {
     );
   }
 
-  function pct(sum: number): string {
-    if (total === 0) return "—";
-    return `${((sum / total) * 100).toFixed(1)}%`;
-  }
-
   return (
     <Card>
       <CardHeader>
@@ -84,11 +98,16 @@ export function BomSummarySidebar({ items }: BomSummarySidebarProps) {
             const entry = byCat[cat];
             const empty = entry.count === 0;
             return (
-              <div key={cat} className="flex items-baseline justify-between gap-2 text-sm">
+              <div
+                key={cat}
+                className="flex items-baseline justify-between gap-2 text-sm"
+              >
                 <div>
                   <div className="font-medium">{CATEGORY_LABELS[cat]}</div>
                   <div className="text-xs text-muted-foreground">
-                    {empty ? "0 позиций" : `${entry.count} поз., ${pct(entry.sum)}`}
+                    {empty
+                      ? "0 позиций"
+                      : `${entry.count} поз., ${formatPct(entry.sum, total)}`}
                   </div>
                 </div>
                 <div className="text-right font-medium tabular-nums">
@@ -106,7 +125,7 @@ export function BomSummarySidebar({ items }: BomSummarySidebarProps) {
           <div>
             <div>Итого</div>
             <div className="text-xs font-normal text-muted-foreground">
-              {totalCount} {totalCount === 1 ? "позиция" : "позиций"}
+              {totalCount} {pluralPositions(totalCount)}
             </div>
           </div>
           <div className="tabular-nums">{formatMoney(String(total))}</div>

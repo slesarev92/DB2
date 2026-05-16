@@ -35,7 +35,18 @@ test.skip(
   },
 );
 
-test.skip("C #26 — BOM из 3 категорий показывает разбивку + Итого", async ({ page }) => {
-  // TODO: требует seed-данных (3 ингредиента с разными ingredient_category)
-  await login(page);
-});
+test.skip(
+  "C #26 — BOM из 3 категорий показывает разбивку + Итого",
+  async ({ page }) => {
+    // TODO: требует seed-данных (3 ингредиента с разными
+    // ingredient_category: raw_material/packaging/other).
+    // Ожидаемые assertions при наличии seed:
+    //   await expect(page.getByText("Сводка BOM")).toBeVisible();
+    //   await expect(page.getByText("Сырьё")).toBeVisible();
+    //   await expect(page.getByText("Упаковка")).toBeVisible();
+    //   await expect(page.getByText("Прочее")).toBeVisible();
+    //   await expect(page.getByText(/Итого/)).toBeVisible();
+    //   // Проверка процентов: каждая категория > 0%, сумма ≈ 100%.
+    await login(page);
+  },
+);
