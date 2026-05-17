@@ -12,11 +12,19 @@
 import { useEffect, useState } from "react";
 
 import { StalenessBadge } from "@/components/projects/staleness-badge";
+import { WaterfallChart, type WaterfallStep } from "@/components/projects/waterfall-chart";
 import {
   Card,
   CardContent,
 } from "@/components/ui/card";
 import { CollapsibleSection } from "@/components/ui/collapsible";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ApiError, apiGet } from "@/lib/api";
 import { listProjectScenarios, listScenarioResults } from "@/lib/scenarios";
 import { VALUE_CHAIN_SECTIONS } from "@/lib/analysis-sections";
@@ -87,7 +95,41 @@ function marginColor(val: string | number): string {
   return "text-red-600 font-semibold";
 }
 
-/* ── Waterfall row definitions ── */
+/* ── Waterfall chart step builder ── */
+
+function buildWaterfallSteps(cell: ValueChainCell, vatRate: number): WaterfallStep[] {
+  const shelfReg = Number(cell.shelf_price_reg);
+  const shelfWeighted = Number(cell.shelf_price_weighted);
+  const exFactory = Number(cell.ex_factory);
+  const cogsMat = Number(cell.cogs_material);
+  const cogsProd = Number(cell.cogs_production);
+  const logistics = Number(cell.logistics);
+  const caM = Number(cell.ca_m);
+  const marketing = Number(cell.marketing);
+
+  const promoLoss = shelfReg - shelfWeighted;
+  const shelfExclVat = shelfWeighted / (1 + vatRate);
+  const vatAmount = shelfWeighted - shelfExclVat;
+  const channelMargin = shelfExclVat - exFactory;
+
+  return [
+    { name: "Цена полки", delta: shelfReg },
+    { name: "Промо", delta: -promoLoss },
+    { name: "НДС", delta: -vatAmount },
+    { name: "Маржа канала", delta: -channelMargin },
+    { name: "Ex-factory", isTotal: true, delta: 0 },
+    { name: "COGS сырьё", delta: -cogsMat },
+    { name: "COGS произв.", delta: -cogsProd },
+    { name: "Gross Profit", isTotal: true, delta: 0 },
+    { name: "Логистика", delta: -logistics },
+    { name: "Contribution", isTotal: true, delta: 0 },
+    { name: "CA&M", delta: -caM },
+    { name: "Маркетинг", delta: -marketing },
+    { name: "EBITDA", isTotal: true, delta: 0 },
+  ];
+}
+
+/* ── Waterfall row definitions (table) ── */
 
 interface WaterfallRow {
   key: string;
@@ -129,6 +171,8 @@ export function ValueChainTab({ projectId }: { projectId: number }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isStale, setIsStale] = useState(false);
+  const [selectedSkuIdx, setSelectedSkuIdx] = useState(0);
+  const [selectedChannelIdx, setSelectedChannelIdx] = useState(0);
   const collapse = useCollapseState(projectId, "value-chain", VALUE_CHAIN_SECTIONS);
 
   // F-02: проверяем is_stale через Base сценария
@@ -156,6 +200,11 @@ export function ValueChainTab({ projectId }: { projectId: number }) {
       .finally(() => setLoading(false));
   }, [projectId]);
 
+  // Reset channel selection when SKU changes
+  useEffect(() => {
+    setSelectedChannelIdx(0);
+  }, [selectedSkuIdx]);
+
   if (loading) return <p className="text-sm text-muted-foreground">Загрузка...</p>;
   if (error) return <p className="text-sm text-destructive">{error}</p>;
   if (!data || data.skus.length === 0) {
@@ -178,12 +227,70 @@ export function ValueChainTab({ projectId }: { projectId: number }) {
   // Total number of data columns = SKUs × channels
   const totalCols = data.skus.length * channelCodes.length;
 
+  // Waterfall selector derived values
+  const vatRate = Number(data.vat_rate);
+  const selectedSku = data.skus[selectedSkuIdx] ?? data.skus[0];
+  const selectedCell = selectedSku?.channels[selectedChannelIdx] ?? null;
+
   return (
     <div className="space-y-6">
       <StalenessBadge
         isStale={isStale}
         message="Параметры проекта изменились — unit-экономика может быть неактуальна. Пересчитайте в табе «Результаты»."
       />
+      <CollapsibleSection
+        sectionId="waterfall"
+        title="Waterfall: разбивка unit-экономики"
+        isOpen={collapse.isOpen("waterfall")}
+        onToggle={() => collapse.toggle("waterfall")}
+      >
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <Select
+                value={String(selectedSkuIdx)}
+                onValueChange={(v) => setSelectedSkuIdx(Number(v))}
+              >
+                <SelectTrigger className="w-64">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {data.skus.map((sku, i) => (
+                    <SelectItem key={i} value={String(i)}>
+                      {sku.sku_brand} / {sku.sku_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={String(selectedChannelIdx)}
+                onValueChange={(v) => setSelectedChannelIdx(Number(v))}
+              >
+                <SelectTrigger className="w-64">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(selectedSku?.channels ?? []).map((ch, i) => (
+                    <SelectItem key={i} value={String(i)}>
+                      {ch.channel_code} — {ch.channel_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedCell ? (
+              <WaterfallChart
+                steps={buildWaterfallSteps(selectedCell, vatRate)}
+                unit={`₽/${selectedSku.sku_unit_of_measure}`}
+                height={400}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">Выберите SKU и канал.</p>
+            )}
+          </CardContent>
+        </Card>
+      </CollapsibleSection>
+
       <CollapsibleSection
         sectionId="unit-economy"
         title={

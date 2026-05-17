@@ -35,6 +35,6 @@ export const PRICING_SECTIONS = [
   "costs-margins",
 ] as const;
 
-export const VALUE_CHAIN_SECTIONS = ["unit-economy"] as const;
+export const VALUE_CHAIN_SECTIONS = ["waterfall", "unit-economy"] as const;
 
 export const PNL_SECTIONS = ["pnl"] as const;
