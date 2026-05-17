@@ -1,13 +1,72 @@
 """Service для AKB — план дистрибуции (B-12).
 
 CRUD для akb_entries per project.
+C #17: compute_auto_entries — read-only АКБ из nd_target × ОКБ канала.
 """
+from decimal import Decimal
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models import AKBEntry
-from app.schemas.akb import AKBCreate, AKBUpdate
+from app.models.entities import Channel, ProjectSKU, ProjectSKUChannel, SKU
+from app.schemas.akb import AKBAutoEntry, AKBCreate, AKBUpdate
+
+# C #17: порядок сортировки групп каналов (по логике приоритетности в модели)
+_CHANNEL_GROUP_ORDER = ("HM", "SM", "MM", "TT", "E_COM", "HORECA", "QSR", "OTHER")
+_GROUP_RANK = {g: i for i, g in enumerate(_CHANNEL_GROUP_ORDER)}
+
+
+async def compute_auto_entries(
+    session: AsyncSession,
+    project_id: int,
+) -> list[AKBAutoEntry]:
+    """C #17: compute target outlets per (PSK × Channel) from nd_target × universe_outlets.
+
+    Read-only, не персистится. Сортировка: channel_group order → channel.code → sku.brand/name.
+    """
+    stmt = (
+        select(ProjectSKUChannel, ProjectSKU, SKU, Channel)
+        .join(ProjectSKU, ProjectSKUChannel.project_sku_id == ProjectSKU.id)
+        .join(SKU, ProjectSKU.sku_id == SKU.id)
+        .join(Channel, ProjectSKUChannel.channel_id == Channel.id)
+        .where(ProjectSKU.project_id == project_id)
+    )
+    rows = (await session.execute(stmt)).all()
+
+    entries: list[AKBAutoEntry] = []
+    for psc, psk, sku, channel in rows:
+        if channel.universe_outlets is not None:
+            target: int | None = int(round(float(psc.nd_target) * channel.universe_outlets))
+        else:
+            target = None
+        entries.append(
+            AKBAutoEntry(
+                psk_id=psk.id,
+                sku_id=sku.id,
+                sku_brand=sku.brand,
+                sku_name=sku.name,
+                channel_id=channel.id,
+                channel_code=channel.code,
+                channel_name=channel.name,
+                channel_group=channel.channel_group,
+                universe_outlets=channel.universe_outlets,
+                nd_target=psc.nd_target,
+                target_outlets=target,
+            )
+        )
+
+    # Sort: group rank → channel code → sku brand → sku name
+    entries.sort(
+        key=lambda e: (
+            _GROUP_RANK.get(e.channel_group, 99),
+            e.channel_code,
+            e.sku_brand,
+            e.sku_name,
+        )
+    )
+    return entries
 
 
 async def list_entries(

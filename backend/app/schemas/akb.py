@@ -4,6 +4,8 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.channel import ChannelGroup
+
 
 class AKBCreate(BaseModel):
     """POST /api/projects/{id}/akb."""
@@ -32,6 +34,25 @@ class ChannelBrief(BaseModel):
     id: int
     code: str
     name: str
+
+
+class AKBAutoEntry(BaseModel):
+    """Computed entry: nd_target × channel.universe_outlets per (PSK × Channel).
+
+    Read-only view, не персистится. Live-computed при каждом GET.
+    """
+
+    psk_id: int
+    sku_id: int
+    sku_brand: str
+    sku_name: str
+    channel_id: int
+    channel_code: str
+    channel_name: str
+    channel_group: ChannelGroup
+    universe_outlets: int | None  # ОКБ из Channel (может быть None)
+    nd_target: Decimal  # численная дистрибуция (0..1)
+    target_outlets: int | None  # round(nd_target * universe_outlets) | None если universe is None
 
 
 class AKBRead(BaseModel):
