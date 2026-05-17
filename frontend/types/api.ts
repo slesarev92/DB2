@@ -1127,6 +1127,25 @@ export interface AIGeneratedImageRead {
 // AKB — distribution plan (B-12)
 // ============================================================
 
+/**
+ * C #17: авто-расчёт АКБ = nd_target × universe_outlets канала.
+ * GET /api/projects/{project_id}/akb/auto.
+ * nd_target приходит как строка (Pydantic Decimal → JSON string).
+ */
+export interface AKBAutoEntry {
+  psk_id: number;
+  sku_id: number;
+  sku_brand: string;
+  sku_name: string;
+  channel_id: number;
+  channel_code: string;
+  channel_name: string;
+  channel_group: ChannelGroup;
+  universe_outlets: number | null;
+  nd_target: string; // Decimal as string
+  target_outlets: number | null;
+}
+
 export interface AKBRead {
   id: number;
   project_id: number;
