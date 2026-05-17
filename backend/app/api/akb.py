@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, require_owned_project
 from app.db import get_db
 from app.models import User
-from app.schemas.akb import AKBCreate, AKBRead, AKBUpdate
+from app.schemas.akb import AKBAutoEntry, AKBCreate, AKBRead, AKBUpdate
 from app.services import akb_service
 
 router = APIRouter(
@@ -46,6 +46,17 @@ async def create_akb_endpoint(
     await session.commit()
     refreshed = await akb_service.get_entry(session, entry.id)
     return AKBRead.model_validate(refreshed)
+
+
+@router.get("/auto", response_model=list[AKBAutoEntry])
+async def list_akb_auto_endpoint(
+    project_id: int,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> list[AKBAutoEntry]:
+    """C #17: автоматический расчёт АКБ из nd_target × ОКБ канала."""
+    entries = await akb_service.compute_auto_entries(session, project_id)
+    return entries
 
 
 @router.get("/{akb_id}", response_model=AKBRead)
