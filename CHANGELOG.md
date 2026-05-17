@@ -11,6 +11,10 @@
 
 Фаза B (MEMO v2.1 — архитектурные изменения). В работе.
 
+### Added (Phase C — C #17)
+
+- **C #17**: АКБ автоматический расчёт. Новый read-only endpoint `GET /api/projects/{id}/akb/auto` вычисляет план активной клиентской базы как `nd_target × channel.universe_outlets` per `(ProjectSKU × Channel)` — без миграций. На вкладке АКБ добавлена секция «Авто-расчёт АКБ (nd × ОКБ)» с двумя view-режимами: по SKU × каналу и aggregate по `channel_group` (Σ ОКБ / avg ND / Σ план АКБ). Существующие manual `AKBEntry` записи сохранены как «Ручные записи АКБ (legacy)» под автоматической таблицей. (MEMO 4.3 / BL-#17, use C #16 channel_group)
+
 ### Added (Phase C — C #21)
 
 - **C #21**: Project.status — lifecycle статус проекта (`draft`/`active`/`paused`/`cancelled`/`completed`/`archived`, default `active`). Бейдж со статусом + dropdown в header страницы проекта; click → PATCH `/api/projects/{id}`. Цветовая маркировка (`PROJECT_STATUS_COLORS`). (MEMO 1.4 / BL-#21)
