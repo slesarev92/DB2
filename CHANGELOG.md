@@ -11,6 +11,10 @@
 
 Фаза B (MEMO v2.1 — архитектурные изменения). В работе.
 
+### Added (Phase C — C #15)
+
+- **C #15**: P&L Pivot Excel — новый лист `P&L Pivot` в существующем XLSX экспорте с **per-line breakdown** (1 строка на каждую комбинацию `SKU × Channel × Period`, 26 колонок: brand/name/format/volume/unit, channel code/name/group/source_type, period meta, volume_units/liters, NR, COGS material/production/total, GP, logistics, contribution, CA&M, marketing, EBITDA). Юзер строит свои pivot tables в Excel нативно — backend pivot endpoint и кастомные сводки в UI вынесены в YAGNI. (MEMO 1.4 / BL-#15 — финальный эпик Фазы C, закрывает 18/19)
+
 ### Added (Phase C — C #18)
 
 - **C #18**: Waterfall-диаграмма в Unit-эконмике. На вкладке «Value Chain / Стакан» добавлена секция «Waterfall: разбивка unit-экономики» с selectors SKU + Канал → recharts BarChart с 12 ступенями: Цена полки → Промо → НДС → Маржа канала → **Ex-factory** → COGS сырьё → COGS произв. → **Gross Profit** → Логистика → **Contribution** → CA&M → Маркетинг → **EBITDA**. Цвета: зелёный = доход/start, красный = расход, синий = промежуточный итог. Единица оси Y из `SKU.unit_of_measure` (₽/л или ₽/кг — enabler из C #23). (MEMO 6.3 / BL-#18)
