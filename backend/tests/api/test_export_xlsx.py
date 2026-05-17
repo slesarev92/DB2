@@ -40,8 +40,8 @@ class TestGenerateProjectXlsx:
         assert isinstance(result, bytes)
         assert len(result) > 0
 
-    async def test_has_three_sheets(self, db_session: AsyncSession):
-        """XLSX содержит 3 листа: Вводные / PnL / KPI."""
+    async def test_has_four_sheets(self, db_session: AsyncSession):
+        """XLSX содержит 4 листа: Вводные / PnL / KPI / P&L Pivot (C #15)."""
         project_id, _, _, _ = await _seed_minimal_project(db_session)
         result = await generate_project_xlsx(db_session, project_id)
 
@@ -49,6 +49,7 @@ class TestGenerateProjectXlsx:
         assert "Вводные" in wb.sheetnames
         assert "PnL по периодам" in wb.sheetnames
         assert "KPI" in wb.sheetnames
+        assert "P&L Pivot" in wb.sheetnames
 
     async def test_inputs_sheet_has_project_params(
         self, db_session: AsyncSession
@@ -197,6 +198,49 @@ class TestGenerateProjectXlsx:
         with pytest.raises(ProjectNotFoundForExport):
             await generate_project_xlsx(db_session, 999999)
 
+    # ----------------------------------------------------------
+    # C #15: P&L Pivot sheet tests
+    # ----------------------------------------------------------
+
+    async def test_pnl_pivot_sheet_exists(self, db_session: AsyncSession):
+        """C #15: XLSX содержит лист «P&L Pivot»."""
+        project_id, _, _, _ = await _seed_minimal_project(db_session)
+        result = await generate_project_xlsx(db_session, project_id)
+
+        wb = load_workbook(BytesIO(result), data_only=False)
+        assert "P&L Pivot" in wb.sheetnames
+
+    async def test_pnl_pivot_sheet_has_per_line_rows(
+        self, db_session: AsyncSession
+    ):
+        """C #15: лист «P&L Pivot» содержит header + per-line rows.
+
+        1 PSC × 43 periods = 43 data rows + 1 header row = 44 строки минимум.
+        26 колонок (PNL_PIVOT_HEADERS).
+        """
+        from app.export.excel_exporter import PNL_PIVOT_HEADERS
+
+        project_id, _, _, _ = await _seed_minimal_project(db_session)
+        result = await generate_project_xlsx(db_session, project_id)
+
+        wb = load_workbook(BytesIO(result), data_only=False)
+        pivot = wb["P&L Pivot"]
+
+        # Header присутствует
+        assert pivot.cell(row=1, column=1).value == PNL_PIVOT_HEADERS[0]
+        assert pivot.max_column >= len(PNL_PIVOT_HEADERS)
+
+        # 43 data rows + 1 header = 44 строки минимум
+        assert pivot.max_row >= 44
+
+        # Первая data row: SKU-поля не пустые
+        assert pivot.cell(row=2, column=1).value == "Gorji"   # brand
+        assert pivot.cell(row=2, column=2).value == "Calc test SKU"  # name
+        # Период: первый период = M1
+        assert pivot.cell(row=2, column=10).value == "M1"     # Период
+        assert pivot.cell(row=2, column=11).value == "monthly"  # Тип периода
+        assert pivot.cell(row=2, column=12).value == 1         # Год
+
 
 # ============================================================
 # Endpoint tests
@@ -224,7 +268,7 @@ class TestExportXlsxEndpoint:
         auth_client: AsyncClient,
         db_session: AsyncSession,
     ):
-        """Body open-able через openpyxl, 3 листа."""
+        """Body open-able через openpyxl, 4 листа (Вводные/PnL/KPI/P&L Pivot)."""
         project_id, _, _, _ = await _seed_minimal_project(db_session)
         await db_session.commit()
 
@@ -234,7 +278,7 @@ class TestExportXlsxEndpoint:
         assert resp.status_code == 200
 
         wb = load_workbook(BytesIO(resp.content), data_only=False)
-        assert len(wb.sheetnames) == 3
+        assert len(wb.sheetnames) == 4  # C #15: added P&L Pivot sheet
         assert "Вводные" in wb.sheetnames
 
     async def test_filename_in_content_disposition(

@@ -4,6 +4,8 @@
 - Лист "Вводные": параметры проекта + таблица SKU + таблица каналов
 - Лист "PnL по периодам": все per-period финансовые показатели Base сценария
 - Лист "KPI": NPV/IRR/ROI/Payback × 3 сценария × 3 scope
+- Лист "P&L Pivot": per-line breakdown (1 строка = SKU × Channel × Period)
+  для пользовательских сводных таблиц в Excel (C #15)
 
 Реализация через openpyxl (Apache 2.0). Pure Python, без pandas.
 Возвращает `bytes` (in-memory XLSX), endpoint оборачивает в StreamingResponse.
@@ -27,7 +29,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.engine.pipeline import run_project_pipeline
+from app.engine.context import PipelineContext, PipelineInput
+from app.engine.pipeline import run_line_pipeline, run_project_pipeline
 from app.models import (
     BOMItem,
     Period,
@@ -88,6 +91,37 @@ def _autosize_columns(ws: Worksheet, max_width: int = 40) -> None:
             if length > max_len:
                 max_len = length
         ws.column_dimensions[col_letter].width = min(max_len + 2, max_width)
+
+
+# C #15: column headers for the P&L Pivot sheet (26 columns)
+PNL_PIVOT_HEADERS: list[str] = [
+    "Бренд",               # sku.brand
+    "SKU",                 # sku.name
+    "Формат",              # sku.format
+    "Объём",               # sku.volume_l (numeric)
+    "Единица",             # sku.unit_of_measure ("л" / "кг")
+    "Код канала",          # channel.code
+    "Канал",               # channel.name
+    "Группа канала",       # channel.channel_group (C #16)
+    "Источник",            # channel.source_type (C #16, nullable)
+    "Период",              # "M1" / "Y4" / etc
+    "Тип периода",         # "monthly" / "annual"
+    "Год",                 # 1..10
+    "Месяц",               # 1..12 / None
+    "Квартал",             # 1..4 / None
+    "Объём, ед",           # volume_units
+    "Объём, л/кг",         # volume_liters
+    "Чистая выручка, ₽",  # net_revenue
+    "COGS сырьё, ₽",      # cogs_material
+    "COGS произв., ₽",    # cogs_production
+    "COGS итого, ₽",      # cogs_total
+    "Gross Profit, ₽",    # gross_profit
+    "Логистика, ₽",       # logistics_cost
+    "Contribution, ₽",    # contribution
+    "CA&M, ₽",            # ca_m_cost
+    "Маркетинг, ₽",       # marketing_cost
+    "EBITDA, ₽",          # ebitda
+]
 
 
 # ============================================================
@@ -487,6 +521,108 @@ def _build_kpi_sheet(
 
 
 # ============================================================
+# C #15: P&L Pivot sheet
+# ============================================================
+
+
+def _build_pnl_pivot_sheet(
+    wb: Workbook,
+    sorted_periods: list[Period],
+    line_pairs: list[tuple[PipelineInput, PipelineContext]],
+    psc_by_id: dict[int, ProjectSKUChannel],
+    psk_by_id: dict[int, ProjectSKU],
+) -> None:
+    """C #15: Лист «P&L Pivot» — per-line breakdown для сводных таблиц.
+
+    Каждая строка = (SKU × Channel × Period). Пользователь строит
+    сводные таблицы в Excel нативно.
+
+    Args:
+        sorted_periods: 43 периода в порядке period_number (M1..M36, Y4..Y10).
+        line_pairs: список (PipelineInput, PipelineContext) — по одной паре
+            на каждую (PSK × Channel) линию, уже прогнанную через s01..s09.
+        psc_by_id: {psc_id: ProjectSKUChannel} с подгруженным .channel.
+        psk_by_id: {psk_id: ProjectSKU} с подгруженным .sku.
+    """
+    ws = wb.create_sheet("P&L Pivot")
+
+    # Header row
+    _set_header(ws, 1, PNL_PIVOT_HEADERS)
+
+    row_idx = 2
+
+    def _val_at(series: list[float], t: int) -> float | None:
+        """Return rounded value at index t, or None if series is empty/short."""
+        if not series or t >= len(series):
+            return None
+        return round(series[t], 2)
+
+    for inp, ctx in line_pairs:
+        psc = psc_by_id.get(inp.project_sku_channel_id)
+        if psc is None:
+            # Агрегатный инпут (project_sku_channel_id == 0) — пропускаем.
+            continue
+
+        psk = psk_by_id.get(psc.project_sku_id)
+        if psk is None:
+            continue
+
+        sku = psk.sku
+        channel = psc.channel
+
+        # Quarter derived from month_num (1..12 → Q1..Q4)
+        for period_idx, period in enumerate(sorted_periods):
+            if period_idx >= inp.period_count:
+                break
+
+            month_num = period.month_num  # int | None
+            quarter: int | None = None
+            if month_num is not None:
+                quarter = (month_num - 1) // 3 + 1
+
+            period_label = _period_label(period)
+            period_type = period.type.value  # "monthly" or "annual"
+            t = period_idx
+
+            row_data = [
+                sku.brand,
+                sku.name,
+                sku.format,
+                float(sku.volume_l) if sku.volume_l is not None else None,
+                sku.unit_of_measure,
+                channel.code,
+                channel.name,
+                channel.channel_group,
+                channel.source_type,
+                period_label,
+                period_type,
+                period.model_year,
+                month_num,
+                quarter,
+                _val_at(ctx.volume_units, t),
+                _val_at(ctx.volume_liters, t),
+                _val_at(ctx.net_revenue, t),
+                _val_at(ctx.cogs_material, t),
+                _val_at(ctx.cogs_production, t),
+                _val_at(ctx.cogs_total, t),
+                _val_at(ctx.gross_profit, t),
+                _val_at(ctx.logistics_cost, t),
+                _val_at(ctx.contribution, t),
+                _val_at(ctx.ca_m_cost, t),
+                _val_at(ctx.marketing_cost, t),
+                _val_at(ctx.ebitda, t),
+            ]
+
+            for col_idx, value in enumerate(row_data, start=1):
+                ws.cell(row=row_idx, column=col_idx, value=value)
+
+            row_idx += 1
+
+    # Auto-size: use existing helper for consistent look
+    _autosize_columns(ws, max_width=25)
+
+
+# ============================================================
 # Public entry point
 # ============================================================
 
@@ -555,6 +691,8 @@ async def generate_project_xlsx(
         (s for s in scenarios if s.type == ScenarioType.BASE), None
     )
     base_aggregate = None
+    # C #15: per-line (PipelineInput, PipelineContext) pairs for pivot sheet.
+    line_pairs: list[tuple[PipelineInput, PipelineContext]] = []
     if base_scenario is not None and skus_with_bom and psk_channels:
         try:
             line_inputs = await build_line_inputs(
@@ -563,13 +701,40 @@ async def generate_project_xlsx(
             capex, opex = await _load_project_financial_plan(
                 session, project_id, sorted_periods
             )
-            base_aggregate = run_project_pipeline(
-                line_inputs, project_capex=capex, project_opex=opex
+            # C #15: run per-line pipeline explicitly to capture individual
+            # PipelineContext objects needed for the pivot sheet.
+            # Then aggregate + run s10..s12 manually (same as run_project_pipeline).
+            line_contexts = [run_line_pipeline(inp) for inp in line_inputs]
+            line_pairs = list(zip(line_inputs, line_contexts))
+
+            from app.engine.aggregator import aggregate_lines
+
+            agg = aggregate_lines(
+                line_contexts, project_capex=capex, project_opex=opex
             )
+            # Apply project-level OPEX/CAPEX adjustments (mirrors run_project_pipeline)
+            n = agg.input.period_count
+            if opex:
+                for t in range(n):
+                    agg.contribution[t] -= opex[t]
+                    agg.operating_cash_flow[t] -= opex[t]
+                    agg.free_cash_flow[t] -= opex[t]
+            if capex:
+                for t in range(n):
+                    agg.investing_cash_flow[t] -= capex[t]
+                    agg.free_cash_flow[t] -= capex[t]
+
+            from app.engine.steps import s10_discount, s11_kpi, s12_gonogo
+
+            s10_discount.step(agg)
+            s11_kpi.step(agg)
+            s12_gonogo.step(agg)
+            base_aggregate = agg
         except Exception:  # noqa: BLE001
             # Если pipeline падает (например, нет данных) — экспорт всё
             # равно генерирует листы Вводные/KPI, PnL пропускается.
             base_aggregate = None
+            line_pairs = []
 
     # Build workbook
     wb = Workbook()
@@ -600,6 +765,27 @@ async def generate_project_xlsx(
         )
 
     _build_kpi_sheet(wb, list(scenarios), results_by_scenario)
+
+    # C #15: P&L Pivot sheet — per-line breakdown for pivot tables in Excel.
+    # Build lookup maps from already-loaded ORM objects (no extra DB queries).
+    psc_by_id: dict[int, ProjectSKUChannel] = {psc.id: psc for psc in psk_channels}
+    psk_by_id: dict[int, ProjectSKU] = {psk.id: psk for psk, _ in skus_with_bom}
+    if line_pairs:
+        _build_pnl_pivot_sheet(
+            wb,
+            sorted_periods,
+            line_pairs,
+            psc_by_id,
+            psk_by_id,
+        )
+    else:
+        # No pipeline data — placeholder sheet so the tab always exists.
+        ws_pivot = wb.create_sheet("P&L Pivot")
+        ws_pivot.cell(
+            row=1,
+            column=1,
+            value="Расчёт не выполнен. Запустите POST /api/projects/{id}/recalculate.",
+        )
 
     # Сериализация
     buffer = BytesIO()
