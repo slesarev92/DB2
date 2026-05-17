@@ -11,6 +11,15 @@
 
 Фаза B (MEMO v2.1 — архитектурные изменения). В работе.
 
+### Added (Phase C — C #21)
+
+- **C #21**: Project.status — lifecycle статус проекта (`draft`/`active`/`paused`/`cancelled`/`completed`/`archived`, default `active`). Бейдж со статусом + dropdown в header страницы проекта; click → PATCH `/api/projects/{id}`. Цветовая маркировка (`PROJECT_STATUS_COLORS`). (MEMO 1.4 / BL-#21)
+- **C #21**: Manual color override на задачах Gantt — optional `color` field на каждом item `roadmap_tasks` JSONB (без миграции для JSON-расширения). UI: native `<input type="color">` + кнопка очистки рядом со status select в редакторе roadmap. `gantt-chart.tsx` resolution: `entry.color || statusColor(entry.status)`.
+
+### Migrations (Phase C — C #21)
+
+- `1cf4e0350bce_c21_project_status` — добавлена `projects.status` (NOT NULL, default `active`, CHECK 6 значений). Auto-backfill existing projects в `active`.
+
 ### Added (Phase C — C #20)
 
 - **C #20**: Настраиваемые пороги раскраски таблицы чувствительности NPV и tornado-диаграммы. В header вкладки «Чувствительность» появились два input — «Зелёный ≥ %» и «Красный ≤ −%» (default 5%/5%), регулирующие порог отклонения от базового NPV для подсветки ячеек. Между порогами — нейтральный (серый/без подсветки). Tornado-bars меняют цвет по той же логике (зелёный/красный/серый). Пороги сохраняются в `localStorage` (`sensitivity-thresholds-v1`), кнопка «Сбросить» возвращает 5/5. Edge case base NPV = 0 → нейтральный. Pre-existing bug в фильтре tornado-bars (`!npv_y1y10` пропускал значение 0) тоже исправлен. Backend не трогался. (MEMO 6.2)

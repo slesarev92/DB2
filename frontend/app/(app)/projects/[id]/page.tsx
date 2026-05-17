@@ -28,9 +28,23 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useAIPanel } from "@/components/ai-panel/ai-panel-context";
+import { toast } from "sonner";
+
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ApiError } from "@/lib/api";
 import { formatDate } from "@/lib/format";
-import { getProject } from "@/lib/projects";
+import { getProject, updateProject } from "@/lib/projects";
+import {
+  PROJECT_STATUS_COLORS,
+  PROJECT_STATUS_LABELS,
+  PROJECT_STATUS_ORDER,
+} from "@/lib/project-status";
 import {
   TAB_ORDER,
   useProjectNavRegistry,
@@ -40,7 +54,7 @@ import { useProjectProgress } from "@/lib/use-project-progress";
 import { useKeyboardShortcuts } from "@/lib/use-keyboard-shortcuts";
 import { useUnsavedChanges } from "@/lib/use-unsaved-changes";
 
-import type { ProjectRead } from "@/types/api";
+import type { ProjectRead, ProjectStatus } from "@/types/api";
 
 /** Validate a query param as a valid tab value. */
 function parseTabParam(value: string | null): TabValue {
@@ -145,6 +159,25 @@ export default function ProjectDetailPage() {
 
   useKeyboardShortcuts(shortcuts, project !== null);
 
+  // C #21: PATCH project status from header badge dropdown
+  const updateProjectStatus = useCallback(
+    async (status: ProjectStatus) => {
+      if (!project) return;
+      try {
+        const updated = await updateProject(projectId, { status });
+        setProject(updated);
+        toast.success(`Статус изменён: ${PROJECT_STATUS_LABELS[status]}`);
+      } catch (err) {
+        const msg =
+          err instanceof ApiError
+            ? err.detail ?? err.message
+            : "Ошибка сохранения статуса";
+        toast.error(msg);
+      }
+    },
+    [project, projectId],
+  );
+
   // Phase 7.5: sync AI panel with current project for usage/budget fetch
   useEffect(() => {
     if (!Number.isNaN(projectId)) setProjectId(projectId);
@@ -199,7 +232,28 @@ export default function ProjectDetailPage() {
     <div className="space-y-6" ref={containerRef}>
       {/* Project header */}
       <div>
-        <h1 className="text-2xl font-semibold">{project.name}</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold">{project.name}</h1>
+          {/* C #21: статус проекта — кликабельный badge-dropdown */}
+          <Select
+            value={project.status}
+            onValueChange={(v) => updateProjectStatus(v as ProjectStatus)}
+          >
+            <SelectTrigger
+              size="sm"
+              className={`h-7 w-auto px-2 text-xs border-0 font-medium ${PROJECT_STATUS_COLORS[project.status]}`}
+            >
+              <SelectValue>{PROJECT_STATUS_LABELS[project.status]}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {PROJECT_STATUS_ORDER.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {PROJECT_STATUS_LABELS[s]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <p className="text-sm text-muted-foreground">
           Старт: {formatDate(project.start_date)} · {project.horizon_years} лет
         </p>

@@ -91,6 +91,7 @@ class RefSeasonality(Base, TimestampMixin):
 
 
 SkuUnitOfMeasure = Literal["л", "кг"]
+ProjectStatus = Literal["draft", "active", "paused", "cancelled", "completed", "archived"]
 
 
 class SKU(Base, TimestampMixin):
@@ -244,6 +245,14 @@ class Project(Base, TimestampMixin):
     gate_stage: Mapped[str | None] = mapped_column(
         String(10), nullable=True
     )  # G0..G5, CHECK constraint в __table_args__
+    # C #21: lifecycle статус проекта. NOT NULL, default "active".
+    # Все существующие проекты бэкфилятся в "active" при миграции.
+    # CHECK constraint "valid_project_status_value" в __table_args__.
+    status: Mapped[ProjectStatus] = mapped_column(
+        String(20),
+        nullable=False,
+        server_default="active",
+    )
     passport_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     project_owner: Mapped[str | None] = mapped_column(String(200), nullable=True)
     project_goal: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -350,6 +359,11 @@ class Project(Base, TimestampMixin):
         CheckConstraint(
             "gate_stage IS NULL OR gate_stage IN ('G0', 'G1', 'G2', 'G3', 'G4', 'G5')",
             name="ck_projects_gate_stage",
+        ),
+        # C #21: lifecycle статус
+        CheckConstraint(
+            "status IN ('draft', 'active', 'paused', 'cancelled', 'completed', 'archived')",
+            name="valid_project_status_value",
         ),
     )
 

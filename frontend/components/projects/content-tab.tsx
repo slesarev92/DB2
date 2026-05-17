@@ -838,7 +838,7 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
                 <div>
                   <Label>Начало</Label>
                   <Input
@@ -888,6 +888,40 @@ export function ContentTab({ projectId, onProjectUpdate }: ContentTabProps) {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                {/* C #21: цвет полосы Gantt (manual override) */}
+                <div>
+                  <Label>Цвет Gantt</Label>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="color"
+                      value={task.color ?? "#94a3b8"}
+                      onChange={(e) => {
+                        const color = e.target.value;
+                        setRoadmapTasks((prev) =>
+                          prev.map((t, i) => (i === idx ? { ...t, color } : t)),
+                        );
+                      }}
+                      className="h-8 w-10 cursor-pointer rounded border"
+                      title="Цвет полосы Gantt (пусто = по статусу)"
+                    />
+                    {task.color && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setRoadmapTasks((prev) =>
+                            prev.map((t, i) =>
+                              i === idx ? { ...t, color: null } : t,
+                            ),
+                          )
+                        }
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                        title="Сбросить цвет (использовать по статусу)"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
               <div>
