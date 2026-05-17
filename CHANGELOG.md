@@ -11,6 +11,10 @@
 
 Фаза B (MEMO v2.1 — архитектурные изменения). В работе.
 
+### Added (Phase C — C #18)
+
+- **C #18**: Waterfall-диаграмма в Unit-эконмике. На вкладке «Value Chain / Стакан» добавлена секция «Waterfall: разбивка unit-экономики» с selectors SKU + Канал → recharts BarChart с 12 ступенями: Цена полки → Промо → НДС → Маржа канала → **Ex-factory** → COGS сырьё → COGS произв. → **Gross Profit** → Логистика → **Contribution** → CA&M → Маркетинг → **EBITDA**. Цвета: зелёный = доход/start, красный = расход, синий = промежуточный итог. Единица оси Y из `SKU.unit_of_measure` (₽/л или ₽/кг — enabler из C #23). (MEMO 6.3 / BL-#18)
+
 ### Added (Phase C — C #17)
 
 - **C #17**: АКБ автоматический расчёт. Новый read-only endpoint `GET /api/projects/{id}/akb/auto` вычисляет план активной клиентской базы как `nd_target × channel.universe_outlets` per `(ProjectSKU × Channel)` — без миграций. На вкладке АКБ добавлена секция «Авто-расчёт АКБ (nd × ОКБ)» с двумя view-режимами: по SKU × каналу и aggregate по `channel_group` (Σ ОКБ / avg ND / Σ план АКБ). Существующие manual `AKBEntry` записи сохранены как «Ручные записи АКБ (legacy)» под автоматической таблицей. (MEMO 4.3 / BL-#17, use C #16 channel_group)
