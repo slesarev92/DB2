@@ -724,3 +724,46 @@ async def test_patch_project_sku_with_package_image_id(
     )
     assert clear_resp.status_code == 200
     assert clear_resp.json()["package_image_id"] is None
+
+
+# ============================================================
+# C #21 — Project.status lifecycle field
+# ============================================================
+
+
+async def test_project_status_default_active(auth_client: AsyncClient) -> None:
+    """C #21: POST /api/projects без status → 'active'."""
+    resp = await auth_client.post("/api/projects", json={
+        "name": "Test", "start_date": "2025-01-01",
+    })
+    assert resp.status_code == 201
+    assert resp.json()["status"] == "active"
+
+
+async def test_project_status_create_draft(auth_client: AsyncClient) -> None:
+    """C #21: POST с status='draft' сохраняет значение."""
+    resp = await auth_client.post("/api/projects", json={
+        "name": "Draft P", "start_date": "2025-01-01", "status": "draft",
+    })
+    assert resp.status_code == 201
+    assert resp.json()["status"] == "draft"
+
+
+async def test_project_status_patch(auth_client: AsyncClient) -> None:
+    """C #21: PATCH меняет status на другое валидное значение."""
+    create = await auth_client.post("/api/projects", json={
+        "name": "P", "start_date": "2025-01-01",
+    })
+    assert create.status_code == 201
+    pid = create.json()["id"]
+    resp = await auth_client.patch(f"/api/projects/{pid}", json={"status": "completed"})
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "completed"
+
+
+async def test_project_status_invalid_422(auth_client: AsyncClient) -> None:
+    """C #21: Pydantic Literal отвергает неизвестный status → 422."""
+    resp = await auth_client.post("/api/projects", json={
+        "name": "P", "start_date": "2025-01-01", "status": "xyz",
+    })
+    assert resp.status_code == 422

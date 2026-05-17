@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 # ============================================================
 
 GateStage = Literal["G0", "G1", "G2", "G3", "G4", "G5"]
+ProjectStatus = Literal["draft", "active", "paused", "cancelled", "completed", "archived"]
 
 
 # C #30: типизированный элемент списка nielsen_benchmarks.
@@ -71,6 +72,9 @@ class ProjectBase(BaseModel):
 
     currency: str = Field(default="RUB", min_length=3, max_length=3)
     inflation_profile_id: int | None = None
+
+    # C #21: lifecycle статус проекта.
+    status: ProjectStatus = "active"
 
     # 4.5.1: контент паспорта (16 scalar полей, все Optional)
     description: str | None = None
@@ -134,6 +138,9 @@ class ProjectUpdate(BaseModel):
     tax_loss_carryforward: bool | None = None
     currency: str | None = Field(default=None, min_length=3, max_length=3)
     inflation_profile_id: int | None = None
+
+    # C #21: lifecycle статус проекта (optional в PATCH).
+    status: ProjectStatus | None = None
 
     # 4.5.1: контент паспорта (PATCH с любым подмножеством полей)
     description: str | None = None
