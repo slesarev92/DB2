@@ -26,6 +26,15 @@ export interface UserMe {
 // Project
 // ============================================================
 
+/** Жизненный цикл проекта (синхронизировано с backend ProjectStatus). */
+export type ProjectStatus =
+  | "draft"
+  | "active"
+  | "paused"
+  | "cancelled"
+  | "completed"
+  | "archived";
+
 /** Gate-стадия процесса Stage-Gate (синхронизировано с backend CHECK). */
 export type GateStage = "G0" | "G1" | "G2" | "G3" | "G4" | "G5";
 
@@ -82,6 +91,8 @@ export interface RoadmapTask {
   end_date?: string;
   status?: string;
   owner?: string;
+  /** C #21: опциональный цвет полосы Gantt (hex). null = авто по статусу. */
+  color?: string | null;
 }
 
 /** Элемент approvers[]. */
@@ -189,6 +200,8 @@ export interface ProjectUpdate extends ProjectContentFields {
   tax_loss_carryforward?: boolean;
   currency?: string;
   inflation_profile_id?: number | null;
+  /** C #21: жизненный цикл проекта. */
+  status?: ProjectStatus;
 }
 
 /**
@@ -204,6 +217,8 @@ export type ProjectRead = Omit<ProjectBase, keyof ProjectContentFields> &
     created_at: string;
     updated_at: string | null;
     created_by: number | null;
+    /** C #21: жизненный цикл проекта (backend default "active"). */
+    status: ProjectStatus;
   };
 
 export interface ProjectListItem extends ProjectRead {

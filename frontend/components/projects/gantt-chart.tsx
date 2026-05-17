@@ -94,6 +94,8 @@ export function GanttChart({ tasks, projectStartDate }: GanttChartProps) {
       owner: task.owner ?? "",
       startDate: task.start_date!,
       endDate: task.end_date!,
+      // C #21: manual color override; null = fallback to statusColor
+      color: task.color ?? null,
     };
   });
 
@@ -148,7 +150,8 @@ export function GanttChart({ tasks, projectStartDate }: GanttChartProps) {
             {/* Visible duration bar */}
             <Bar dataKey="duration" stackId="a" radius={[0, 4, 4, 0]}>
               {chartData.map((entry, i) => (
-                <Cell key={i} fill={statusColor(entry.status)} />
+                // C #21: manual color override takes priority over status color
+                <Cell key={i} fill={entry.color || statusColor(entry.status)} />
               ))}
             </Bar>
           </BarChart>
